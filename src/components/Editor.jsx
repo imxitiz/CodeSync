@@ -42,7 +42,7 @@ const Editor = ({ socketRef, roomId, onCodeChange, editable }) => {
   return (
     <CodeMirror
       value={code}
-      height="90vh"
+      height="100%"
       theme={dracula}
       extensions={extensions}
       onChange={handleChange}
