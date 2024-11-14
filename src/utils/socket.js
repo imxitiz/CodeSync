@@ -7,7 +7,9 @@ export const initSocket = async () => {
     timeout: 10000,
     transports: ['websocket'],
   };
-
-  const backendApiUrl = import.meta.env.VITE_BACKEND_API_URL;
+  // RENDER_EXTERNAL_URL	The Render URL for a web service or static site; of the form https://foobar.onrender.com. Empty for all other service types.
+  // RENDER_EXTERNAL_HOSTNAME	The Render host for a web service or static site. Of the form foobar.onrender.com. Empty for all other service types.
+  const backendApiUrl =
+      process.env.RENDER_EXTERNAL_URL
   return io(backendApiUrl, options);
 };
