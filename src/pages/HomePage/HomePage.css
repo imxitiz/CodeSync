@@ -1,3 +1,7 @@
+body{
+    margin: 0px !important;
+}
+
 .homepagewrapper {
     display: flex;
     flex-direction: column;

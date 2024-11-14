@@ -59,6 +59,19 @@
     font-size: 16px;
     color: #1c1e29;
     margin-bottom: 3px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+}
+
+.right{
+    position: fixed;
+    right: 0;
+    top: 0;
+    z-index: 1000;
+    margin-right: 10px;
+
 }
 
 .copybtn:hover,

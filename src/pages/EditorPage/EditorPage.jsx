@@ -6,6 +6,8 @@ import { initSocket } from '../../utils/socket';
 import { ACTIONS } from '../../utils/constant';
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { FaCopy } from "react-icons/fa";
+import { FiLogOut } from 'react-icons/fi';
 
 function EditorPage() {
   const [clients, setClients] = useState([]);
@@ -130,18 +132,15 @@ function EditorPage() {
           {editable ? 'Set to Read-Only' : 'Set to Editable'}
         </button>
 
-        <button className="btn copybtn" onClick={copyCode}>
-          Copy code
-        </button>
-
         <button className="btn copybtn" onClick={copyRoomId}>
           Copy Room Id
         </button>
         <button className="btn leavebtn" onClick={leaveRoom}>
-          Leave
+          <FiLogOut /> Leave
         </button>
       </div>
       <div className="editorWrap">
+          <FaCopy size={30} className="right" onClick={copyCode} />
         <Editor
           socketRef={socketRef}
           roomId={id}
