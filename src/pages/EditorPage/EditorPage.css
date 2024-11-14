@@ -31,7 +31,7 @@
     display: flex;
     align-items: flex-start;
     flex-wrap: wrap;
-    gap: 20px;
+    gap: 35px;
 }
 
 .client {

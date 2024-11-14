@@ -27,9 +27,12 @@ function HomePage() {
       setUserName(name);
     }
 
-    navigate(`/editor/${roomId}`, {
-      state: { userName },
-    });
+    // Use a callback to ensure userName has been updated before navigating
+    if (userName !== '') {
+      navigate(`/editor/${roomId}`, {
+        state: { userName },
+      });
+    }
   };
 
   const handelkeyenter = (e) => {
