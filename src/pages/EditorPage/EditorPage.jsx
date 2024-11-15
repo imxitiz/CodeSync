@@ -11,7 +11,7 @@ import { FiLogOut } from 'react-icons/fi';
 
 function EditorPage() {
   const [clients, setClients] = useState([]);
-  const [editable, setEditable] = useState(true);
+  const [currentEditor, setCurrentEditor] = useState('');
   const socketRef = useRef(null);
   const codeRef = useRef(null);
   const location = useLocation();
@@ -38,14 +38,24 @@ function EditorPage() {
   };
 
   const toggleEditable = () => {
-    const newEditableState = !editable;
-    socketRef.current.emit(ACTIONS.TOGGLE_EDITABLE, {
-      roomId: id,
-      editable: newEditableState,
-      userName,
-    });
-    setEditable(newEditableState);
-    toast.success(`Editor is now ${newEditableState ? 'editable' : 'read-only'}`);
+    // Check if the current user is already the editor
+    if (currentEditor === userName) {
+      // If the current user is the editor, release control
+      setCurrentEditor('');
+      toast.success("Editor is now read-only");
+      socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+        roomId: id,
+        currenteditor: '',
+      });
+    } else {
+      // If the current user is not the editor, take control
+      setCurrentEditor(userName);
+      toast.success("Editor is now editable");
+      socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+        roomId: id,
+        currenteditor: userName,
+      });
+    }
   };
 
   useEffect(() => {
@@ -58,33 +68,40 @@ function EditorPage() {
       socketRef.current.emit(ACTIONS.JOIN, {
         roomId: id,
         userName,
-        editable,
       });
 
-      socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId, editable }) => {
+      socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId }) => {
         setClients(clients);
-        setEditable(editable);
         if (username !== userName) {
           toast.success(`${username} joined the room`);
-        }
         if (codeRef.current) {
           socketRef.current.emit(ACTIONS.SYNC_CODE, {
-            code: codeRef.current,
             socketId,
+            code: codeRef.current,
+            currenteditor: currentEditor,
           });
         }
+      }
       });
 
       socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
         toast.success(`${username} left the room`);
         setClients((prev) => prev.filter((client) => client.socketId !== socketId));
+        if (currentEditor === username) {
+          setCurrentEditor('');
+          socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+            roomId: id,
+            currenteditor: '',
+          });
+        }
       });
 
-      socketRef.current.on(ACTIONS.SET_EDITABLE, ({ editable, username }) => {
-        setEditable(editable);
-        if (username !== userName) {
-          toast.success(`Editor is now ${editable ? 'editable' : 'read-only'}`);
-        }
+      socketRef.current.on(ACTIONS.SET_CURRENT_EDITOR, ({ roomId, currenteditor }) => {
+        console.log('got: SET_CURRENT_EDITOR', currenteditor);
+        setCurrentEditor(currenteditor);
+        return () => {
+          socketRef.current.off(ACTIONS.SET_CURRENT_EDITOR);
+        };
       });
     };
 
@@ -94,7 +111,7 @@ function EditorPage() {
       if (socketRef.current) {
         socketRef.current.off(ACTIONS.JOINED);
         socketRef.current.off(ACTIONS.DISCONNECTED);
-        socketRef.current.off(ACTIONS.SET_EDITABLE);
+        socketRef.current.off(ACTIONS.SET_CURRENT_EDITOR);
         socketRef.current.disconnect();
       }
     };
@@ -121,15 +138,25 @@ function EditorPage() {
           <div className="logo">
             <img src="/mainlogo.png" alt="logoImage" className="logoimage" />
           </div>
-          <h3>Connected</h3>
+          <h4>Room Id: {id} <br />
+          Welcome {userName}</h4>
+          <h3>{currentEditor ? `Editor: ${currentEditor}` : ''}</h3>
+          <hr />
           <div className="clientslist">
             {clients?.map(({ socketId, username }) => (
               <Client username={username} key={socketId} />
             ))}
           </div>
         </div>
-        <button className={`btn togglebtn copybtn`} onClick={toggleEditable}>
-          {editable ? 'Set to Read-Only' : 'Set to Editable'}
+        <button className={`btn togglebtn copybtn`}
+          onClick={toggleEditable}
+          disabled={!(currentEditor === '' || currentEditor === userName)}
+        >
+          {currentEditor === userName ?
+            'Set to Editable for others' :
+            currentEditor === ''
+            ? 'Set to Read-Only for others'
+            : `On Readonly mode by ${currentEditor}`}
         </button>
 
         <button className="btn copybtn" onClick={copyRoomId}>
@@ -148,7 +175,9 @@ function EditorPage() {
             codeRef.current = code;
           }}
           copyCode={copyCode}
-          editable={editable}
+          editable={userName === currentEditor || currentEditor === ''}
+          currentEditor={currentEditor}
+          setCurrentEditor={setCurrentEditor}
         />
       </div>
     </div>

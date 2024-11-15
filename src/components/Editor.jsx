@@ -3,9 +3,9 @@ import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { okaidia } from '@uiw/codemirror-theme-okaidia';
 import { dracula } from '@uiw/codemirror-theme-dracula';
-import { ACTIONS } from '../utils/constant';
+import { ACTIONS } from '../../action';
 
-const Editor = ({ socketRef, roomId, onCodeChange, editable }) => {
+const Editor = ({ socketRef, roomId, onCodeChange, editable, currentEditor, setCurrentEditor }) => {
   const [code, setCode] = useState('');
   const extensions = [javascript({ jsx: true })];
 
@@ -18,17 +18,19 @@ const Editor = ({ socketRef, roomId, onCodeChange, editable }) => {
       socketRef.current.emit(ACTIONS.CODE_CHANGE, {
         roomId,
         code: value,
+        currenteditor: currentEditor,
       });
     }
   };
 
   useEffect(() => {
     if (socketRef.current) {
-      const handleCodeChange = ({ code: newCode }) => {
+      const handleCodeChange = ({ code: newCode, currenteditor: currenteditor }) => {
         if (newCode !== null && newCode !== code) {
           setCode(newCode);
           onCodeChange(newCode);
         }
+        setCurrentEditor(currenteditor);
       };
 
       socketRef.current.on(ACTIONS.CODE_CHANGE, handleCodeChange);

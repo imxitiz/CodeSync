@@ -37,40 +37,49 @@ const getAllconnectedClients = (roomId) => {
 };
 
 io.on('connection', (socket) => {
-  socket.on(ACTIONS.JOIN, ({ roomId, userName, editable }) => {
+  socket.on(ACTIONS.JOIN, ({ roomId, userName }) => {
     userSocketMap.set(socket.id, userName);
 
     socket.join(roomId);
 
     const clients = getAllconnectedClients(roomId);
-
+    if (
+        clients.length > 1 &&
+        clients.filter((client) => client.username === userName).length > 1
+    ) {
+      userSocketMap.delete(socket.id);
+      socket.leave(roomId);
+      socket.disconnect();
+      socket.emit(ACTIONS.DISCONNECTED, {
+        socketId: socket.id,
+        username: userName,
+      });
+      return;
+    }
+    
     // Broadcast editable state to all clients in the room
     clients.forEach(({ socketId }) => {
       io.to(socketId).emit(ACTIONS.JOINED, {
         clients,
         username: userName,
         socketId: socket.id,
-        editable,
       });
     });
   });
 
-  socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code }) => {
-    socket.in(roomId).emit(ACTIONS.CODE_CHANGE, { code });
+  socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code, currenteditor }) => {
+    socket.in(roomId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor });
   });
 
-  socket.on(ACTIONS.SYNC_CODE, ({ socketId, code }) => {
-    io.to(socketId).emit(ACTIONS.CODE_CHANGE, { code });
+  socket.on(ACTIONS.SYNC_CODE, ({ socketId, code, currenteditor }) => {
+    io.to(socketId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor: currenteditor, });
   });
 
-  socket.on(ACTIONS.TOGGLE_EDITABLE, ({ roomId, editable, userName }) => {
-    const clients = getAllconnectedClients(roomId);
-    clients.forEach(({ socketId }) => {
-      io.to(socketId).emit(ACTIONS.SET_EDITABLE, { editable, username: userName });
-    });
+  socket.on(ACTIONS.SET_CURRENT_EDITOR, ({ roomId, currenteditor }) => {
+      socket.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
   });
 
-  socket.on('disconnecting', () => {
+  socket.on("disconnecting", () => {
     const rooms = [...socket.rooms];
     rooms.forEach((roomId) => {
       socket.in(roomId).emit(ACTIONS.DISCONNECTED, {
