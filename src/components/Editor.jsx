@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
-import { okaidia } from '@uiw/codemirror-theme-okaidia';
 import { dracula } from '@uiw/codemirror-theme-dracula';
 import { ACTIONS } from '../../action';
 

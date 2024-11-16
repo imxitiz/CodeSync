@@ -48,12 +48,12 @@ io.on('connection', (socket) => {
         clients.filter((client) => client.username === userName).length > 1
     ) {
       userSocketMap.delete(socket.id);
-      socket.leave(roomId);
-      socket.disconnect();
-      socket.emit(ACTIONS.DISCONNECTED, {
+      socket.emit(ACTIONS.DUPLICATE_USER, {
         socketId: socket.id,
         username: userName,
       });
+      socket.leave(roomId);
+      socket.disconnect();
       return;
     }
     

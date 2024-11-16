@@ -12,6 +12,7 @@ import { FiLogOut } from 'react-icons/fi';
 function EditorPage() {
   const [clients, setClients] = useState([]);
   const [currentEditor, setCurrentEditor] = useState('');
+  const currentEditorRef = useRef(currentEditor);
   const socketRef = useRef(null);
   const codeRef = useRef(null);
   const location = useLocation();
@@ -58,6 +59,11 @@ function EditorPage() {
     }
   };
 
+    // Update currentEditorRef whenever currentEditor changes
+  useEffect(() => {
+    currentEditorRef.current = currentEditor;
+  }, [currentEditor]);
+
   useEffect(() => {
     const init = async () => {
       socketRef.current = await initSocket();
@@ -78,10 +84,15 @@ function EditorPage() {
           socketRef.current.emit(ACTIONS.SYNC_CODE, {
             socketId,
             code: codeRef.current,
-            currenteditor: currentEditor,
+            currenteditor: currentEditorRef.current,
           });
         }
       }
+      });
+
+      socketRef.current.on(ACTIONS.DUPLICATE_USER, ({ socketId, username }) => {
+        toast.error(`${username} is already in the room`);
+        navigate('/');
       });
 
       socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
