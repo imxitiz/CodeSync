@@ -41,9 +41,28 @@
     font-weight: bold;
 }
 
+.sb-avatar__text > div > span {
+    padding-top: 5px;
+}
+
+.usernamediv {
+    display: flex; 
+    align-items: center; 
+    gap: 5px; 
+}
+
 .username {
-    width: 14px;
-    margin-top: 8px;
+    max-width: 60px;
+    margin-top: 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.crown {
+    color: goldenrod;
+    line-height: 1;
+    margin-top: 5px;
 }
 
 .logo {

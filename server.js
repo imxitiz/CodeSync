@@ -26,6 +26,7 @@ app.use((req, res) => {
 });
 
 const userSocketMap = new Map();
+const roomCreatorMap = new Map();
 
 const getAllconnectedClients = (roomId) => {
   return [...io.sockets.adapter.rooms.get(roomId)].map((socketId) => {
@@ -41,6 +42,13 @@ io.on('connection', (socket) => {
     userSocketMap.set(socket.id, userName);
 
     socket.join(roomId);
+    let roomCreator = null;
+    if (!roomCreatorMap.has(roomId)) {
+      roomCreatorMap.set(roomId, userName);
+      roomCreator = userName;
+    } else {
+      roomCreator = roomCreatorMap.get(roomId);
+    }
 
     const clients = getAllconnectedClients(roomId);
     if (
@@ -63,6 +71,7 @@ io.on('connection', (socket) => {
         clients,
         username: userName,
         socketId: socket.id,
+        roomcreator: roomCreator,
       });
     });
   });
@@ -86,6 +95,13 @@ io.on('connection', (socket) => {
         socketId: socket.id,
         username: userSocketMap.get(socket.id),
       });
+
+      // Check if the room is empty after the user leaves
+      setTimeout(() => {
+        if (io.sockets.adapter.rooms.get(roomId) === undefined) {
+          roomCreatorMap.delete(roomId);
+        }
+      }, 500);
     });
     userSocketMap.delete(socket.id);
     socket.leave();

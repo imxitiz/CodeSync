@@ -13,12 +13,13 @@ function EditorPage() {
   const [clients, setClients] = useState([]);
   const [currentEditor, setCurrentEditor] = useState('');
   const currentEditorRef = useRef(currentEditor);
+  const [roomCreator, setRoomCreator] = useState(null);
   const socketRef = useRef(null);
   const codeRef = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams();
-  const userName = location.state?.userName || 'Guest';
+  const userName = location.state?.userName || 'User';
 
   const handleErrors = (err) => {
     toast.error('Connection failed, please try again');
@@ -49,6 +50,11 @@ function EditorPage() {
         currenteditor: '',
       });
     } else {
+      if (roomCreator !== userName) {
+        return toast.error('Only the room creator can change the editable state');
+      }
+      // if (roomCreator === userName && currentEditor !== '') {
+        
       // If the current user is not the editor, take control
       setCurrentEditor(userName);
       toast.success("Editor is now editable");
@@ -76,23 +82,26 @@ function EditorPage() {
         userName,
       });
 
-      socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId }) => {
+      socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId, roomcreator }) => {
         setClients(clients);
+        setRoomCreator(roomcreator);
         if (username !== userName) {
-          toast.success(`${username} joined the room`);
-        if (codeRef.current) {
-          socketRef.current.emit(ACTIONS.SYNC_CODE, {
-            socketId,
-            code: codeRef.current,
-            currenteditor: currentEditorRef.current,
-          });
+            toast.success(`${username} joined the room`);
+          if (codeRef.current) {
+            socketRef.current.emit(ACTIONS.SYNC_CODE, {
+              socketId,
+              code: codeRef.current,
+              currenteditor: currentEditorRef.current,
+            });
+          }
         }
-      }
       });
 
       socketRef.current.on(ACTIONS.DUPLICATE_USER, ({ socketId, username }) => {
-        toast.error(`${username} is already in the room`);
-        navigate('/');
+        toast.error(`${username} is already in the ${id} room.\nPlease try another UserName!`);
+        navigate(`/`, {
+          state: { id },
+        });
       });
 
       socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
@@ -108,7 +117,12 @@ function EditorPage() {
       });
 
       socketRef.current.on(ACTIONS.SET_CURRENT_EDITOR, ({ roomId, currenteditor }) => {
-        console.log('got: SET_CURRENT_EDITOR', currenteditor);
+        if (currenteditor === userName) {
+          toast.success('You are now the editor');
+        }
+        if (currenteditor === '' && userName === roomCreator) {
+          toast.success(`${currentEditorRef.current} have released the control`);
+        }
         setCurrentEditor(currenteditor);
         return () => {
           socketRef.current.off(ACTIONS.SET_CURRENT_EDITOR);
@@ -128,9 +142,17 @@ function EditorPage() {
     };
   }, []);
 
-  if (!location.state) {
-    return <Navigate to="/" />;
-  }
+  useEffect(() => {
+    if (!location.state) {
+      if (id) {
+        navigate(`/`, {
+          state: { id },
+        });
+      } else {
+        navigate(`/`);
+      }
+    }
+  }, [location.state, id, navigate]);
 
   const copyCode = async () => {
     try {
@@ -142,6 +164,15 @@ function EditorPage() {
     }
   };
 
+  const handleUserDoubleClick = (username) => {
+    setCurrentEditor(username);
+    toast.success(`${username} can now edit the code`);
+    socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+      roomId: id,
+      currenteditor: username,
+    });
+  };
+
   return (
     <div className="mainWrap">
       <div className="aside">
@@ -150,26 +181,35 @@ function EditorPage() {
             <img src="/mainlogo.png" alt="logoImage" className="logoimage" />
           </div>
           <h4>Room Id: {id} <br />
-          Welcome {userName}</h4>
+          Welcome, {userName}</h4>
           <h3>{currentEditor ? `Editor: ${currentEditor}` : ''}</h3>
           <hr />
           <div className="clientslist">
-            {clients?.map(({ socketId, username }) => (
-              <Client username={username} key={socketId} />
-            ))}
+            {clients
+              ?.sort((a, b) => (a.username === roomCreator ? -1 : b.username === roomCreator ? 1 : 0))
+              .map(({ socketId, username }) => (
+                <div key={socketId}
+                  onDoubleClick={roomCreator === userName ? () => handleUserDoubleClick(username) : undefined}
+                >
+                  <Client username={username} roomcreator={roomCreator} />
+                </div>
+              ))}
           </div>
         </div>
-        <button className={`btn togglebtn copybtn`}
-          onClick={toggleEditable}
-          disabled={!(currentEditor === '' || currentEditor === userName)}
-        >
-          {currentEditor === userName ?
-            'Set to Editable for others' :
-            currentEditor === ''
-            ? 'Set to Read-Only for others'
-            : `On Readonly mode by ${currentEditor}`}
-        </button>
-
+        {(currentEditor === userName || roomCreator === userName && currentEditor !== '') && (
+          <button className={`btn togglebtn copybtn`}
+            onClick={toggleEditable}
+            disabled={!(currentEditor === userName || roomCreator === userName)}
+          >
+            {
+              currentEditor === userName ?
+                'Release Control' :
+                roomCreator === userName ?
+                  'Take Control' :
+                  'Set to Read-Only'
+            }
+          </button>
+        )}
         <button className="btn copybtn" onClick={copyRoomId}>
           Copy Room Id
         </button>
@@ -178,7 +218,7 @@ function EditorPage() {
         </button>
       </div>
       <div className="editorWrap">
-          <FaCopy size={30} className="right" onClick={copyCode} />
+        <FaCopy size={30} className="right" onClick={copyCode} />
         <Editor
           socketRef={socketRef}
           roomId={id}
@@ -186,7 +226,7 @@ function EditorPage() {
             codeRef.current = code;
           }}
           copyCode={copyCode}
-          editable={userName === currentEditor || currentEditor === ''}
+          editable={userName === currentEditor || roomCreator === userName}
           currentEditor={currentEditor}
           setCurrentEditor={setCurrentEditor}
         />

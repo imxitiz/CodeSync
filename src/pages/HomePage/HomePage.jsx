@@ -1,13 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './HomePage.css';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 function HomePage() {
   const [roomId, setRoomId] = useState('');
   const [userName, setUserName] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const id = location.state?.id || null;
+    if (id) {
+      setRoomId(id);
+    }
+  }, [location.state]);
 
   const createnewroom = (e) => {
     e.preventDefault();
@@ -23,7 +31,7 @@ function HomePage() {
       return;
     }
     if (userName === '') {
-      const name = 'Guest' + Math.floor(Math.random() * 1000);
+      const name = 'User' + Math.floor(Math.random() * 1000);
       setUserName(name);
     }
 
@@ -61,7 +69,8 @@ function HomePage() {
             placeholder="UserName"
             value={userName}
             onChange={(e) => setUserName(e.target.value)}
-            onDoubleClick={() => setUserName('Guest' + Math.floor(Math.random() * 1000))}
+            onDoubleClick={() => setUserName('User' + Math.floor(Math.random() * 1000))}
+            onKeyUp={handelkeyenter}
           />
           <button className="btn joinbtn" onClick={joinRoom}>
             Join
