@@ -23,6 +23,7 @@ function EditorPage() {
 
   const handleErrors = (err) => {
     toast.error('Connection failed, please try again');
+    sessionStorage.setItem("admin", userName);
     navigate('/');
   };
 
@@ -36,6 +37,9 @@ function EditorPage() {
   };
 
   const leaveRoom = () => {
+    if (sessionStorage.getItem("admin") === roomCreator) {
+      sessionStorage.removeItem("admin");
+    }
     navigate('/');
   };
 
@@ -71,6 +75,8 @@ function EditorPage() {
   }, [currentEditor]);
 
   useEffect(() => {
+    document.title = `${id} - CodeSync`;
+
     const init = async () => {
       socketRef.current = await initSocket();
 
@@ -85,6 +91,17 @@ function EditorPage() {
       socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId, roomcreator }) => {
         setClients(clients);
         setRoomCreator(roomcreator);
+        if (username === userName && roomcreator === username) {
+          if (sessionStorage.getItem('admin') !== roomcreator && clients.length !== 1) {
+            toast.error(`${username} is already in the ${id} room.\nPlease try another UserName!`);
+            navigate(`/`, {
+              state: { id },
+            });
+          }
+        }
+        if (roomCreator === username || clients.length === 1) {
+          sessionStorage.setItem('admin', username);
+        }
         if (username !== userName) {
             toast.success(`${username} joined the room`);
           if (codeRef.current) {
@@ -97,7 +114,7 @@ function EditorPage() {
         }
       });
 
-      socketRef.current.on(ACTIONS.DUPLICATE_USER, ({ socketId, username }) => {
+      socketRef.current.on(ACTIONS.DUPLICATE_USER, ({ username }) => {
         toast.error(`${username} is already in the ${id} room.\nPlease try another UserName!`);
         navigate(`/`, {
           state: { id },

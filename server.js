@@ -57,7 +57,6 @@ io.on('connection', (socket) => {
     ) {
       userSocketMap.delete(socket.id);
       socket.emit(ACTIONS.DUPLICATE_USER, {
-        socketId: socket.id,
         username: userName,
       });
       socket.leave(roomId);
