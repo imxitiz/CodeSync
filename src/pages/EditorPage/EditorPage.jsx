@@ -8,6 +8,8 @@ import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast';
 import { FaCopy } from "react-icons/fa";
 import { FiLogOut } from 'react-icons/fi';
+import { RiSidebarFoldFill, RiSidebarUnfoldFill } from 'react-icons/ri';
+import { MdTextDecrease, MdTextIncrease } from 'react-icons/md';
 
 function EditorPage() {
   const [clients, setClients] = useState([]);
@@ -20,6 +22,7 @@ function EditorPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const userName = location.state?.userName || 'User';
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   const handleErrors = (err) => {
     toast.error('Connection failed, please try again');
@@ -36,12 +39,26 @@ function EditorPage() {
     }
   };
 
+  const toggleSidebarVisibility = () => {
+    setIsSidebarVisible(!isSidebarVisible);
+  };
+
   const leaveRoom = () => {
     if (sessionStorage.getItem("admin") === roomCreator) {
       sessionStorage.removeItem("admin");
     }
     navigate('/');
   };
+
+  const fontSizeChange = (change) => {
+    const root = document.documentElement;
+    const currentSize = parseInt(
+      getComputedStyle(root).getPropertyValue("--editor-font-size") || 16
+    );
+    const newSize = Math.max(8, Math.min(currentSize + change, 36)); 
+    root.style.setProperty("--editor-font-size", `${newSize}px`);
+  };
+
 
   const toggleEditable = () => {
     // Check if the current user is already the editor
@@ -191,15 +208,15 @@ function EditorPage() {
   };
 
   return (
-    <div className="mainWrap">
-      <div className="aside">
+    <div className={`mainWrap ${isSidebarVisible ? '' : 'collapsed'}`}>
+      <div className={`aside ${isSidebarVisible ? '' : 'hidden'}`}>
         <div className="asideInner">
           <div className="logo">
             <img src="/mainlogo.png" alt="logoImage" className="logoimage" />
           </div>
           <h4>Room Id: {id} <br />
-          Welcome, {userName}</h4>
-          <h3>{currentEditor ? `Editor: ${currentEditor}` : ''}</h3>
+            Welcome, {userName}</h4>
+          {currentEditor && <h3>Editor: {currentEditor}</h3>}
           <hr />
           <div className="clientslist">
             {clients
@@ -213,29 +230,43 @@ function EditorPage() {
               ))}
           </div>
         </div>
-        {(currentEditor === userName || roomCreator === userName && currentEditor !== '') && (
-          <button className={`btn togglebtn copybtn`}
-            onClick={toggleEditable}
-            disabled={!(currentEditor === userName || roomCreator === userName)}
-          >
-            {
-              currentEditor === userName ?
-                'Release Control' :
-                roomCreator === userName ?
-                  'Take Control' :
-                  'Set to Read-Only'
-            }
+        <hr />
+        <div className="accessibilitybuttons">
+          <MdTextIncrease className='btn copybtn' size={20} onClick={()=>fontSizeChange(2)}/>
+          <MdTextDecrease className='btn copybtn' size={20} onClick={()=>fontSizeChange(-2)}/>
+        </div>
+        <hr />
+        <div className="controlbuttons">
+          {(currentEditor === userName || roomCreator === userName && currentEditor !== '') && (
+            <button className={`btn togglebtn copybtn ${currentEditor === userName && 'leavebtn'}`}
+              onClick={toggleEditable}
+              disabled={!(currentEditor === userName || roomCreator === userName)}
+            >
+              {
+                currentEditor === userName ?
+                  'Release Control' :
+                  roomCreator === userName ?
+                    'Take Control' :
+                    'Set to Read-Only'
+              }
+            </button>
+          )}
+          <button className="btn copybtn" onClick={copyRoomId}>
+            Copy Room Id
           </button>
-        )}
-        <button className="btn copybtn" onClick={copyRoomId}>
-          Copy Room Id
-        </button>
-        <button className="btn leavebtn" onClick={leaveRoom}>
-          <FiLogOut /> Leave
-        </button>
+          <button className="btn leavebtn" onClick={leaveRoom}>
+            <FiLogOut /> Leave
+          </button>
+        </div>
       </div>
       <div className="editorWrap">
         <FaCopy size={30} className="right" onClick={copyCode} />
+        <div className="sidebarToggler" onClick={toggleSidebarVisibility}>
+          {isSidebarVisible ? 
+            <RiSidebarFoldFill size={30}/> :
+            <RiSidebarUnfoldFill size={30}/>
+          }
+        </div>
         <Editor
           socketRef={socketRef}
           roomId={id}
