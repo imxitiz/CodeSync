@@ -17,6 +17,7 @@ function EditorPage() {
   const [firstTimesentCode, setFirstTimesentCode] = useState('');
   const currentEditorRef = useRef(currentEditor);
   const [roomCreator, setRoomCreator] = useState(null);
+  const [roomCodeIds, setRoomCodeIds] = useState(null);
   const socketRef = useRef(null);
   const codeRef = useRef(null);
   const location = useLocation();
@@ -115,17 +116,8 @@ function EditorPage() {
           code && setFirstTimesentCode(code);
 
           // onCodeChange(code);
-          if (username === userName && roomcreator === username) {
-            if (sessionStorage.getItem('admin') !== roomcreator && clients.length !== 1) {
-              toast.error(
-                `${username} is already in the ${id} room.\nPlease try another UserName!`
-              );
-              navigate(`/`, {
-                state: { id },
-              });
-            }
-          }
           if (roomCreator === username || clients.length === 1) {
+            setRoomCodeIds(roomCodeId);
             sessionStorage.setItem('roomId', roomCodeId);
             sessionStorage.setItem('admin', username);
           }
@@ -228,7 +220,8 @@ function EditorPage() {
           </div>
           <h4>
             Room Id: {id} <br />
-            Welcome, {userName}
+            Welcome, {userName} <br />
+            RoomCodeId: {roomCodeIds}
           </h4>
           {currentEditor && <h3>Editor: {currentEditor}</h3>}
           <hr />

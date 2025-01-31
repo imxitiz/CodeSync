@@ -76,38 +76,50 @@ io.on('connection', (socket) => {
     let roomCodeId;
     try {
       if (!roomCreatorMap.has(roomId)) {
-        console.log('Chalyo admin ho');
+        console.log("Chalyo admin ho");
         roomCreatorMap.set(roomId, userName);
         roomCreator = userName;
         if (await prisma.code.findUnique({ where: { roomId } })) {
           roomCodeId = roomId;
           const Getcode = await getCodeFromDatabase(roomId);
-          console.log('-------------------', Getcode);
           roomCodeMap.set(roomId, Getcode);
           initialCode = Getcode;
         } else {
           roomCodeId = uuidv4();
-          roomCodeMap.set(roomId, '');
+          roomCodeMap.set(roomId, "");
+          initialCode = "";
         }
-        // await createOrUpdateRoomCode(roomCodeId, '');
+        await createOrUpdateRoomCode(roomCodeId, initialCode);
         // Save code content to database every 2 minutes
         const intervalId = setInterval(async () => {
-          const code = roomCodeMap.get(roomId) || '';
+          const code = roomCodeMap.get(roomId) || "";
           await createOrUpdateRoomCode(roomCodeId, code);
         }, 10000); // 120000 ms = 2 minutes
 
         roomIntervalMap.set(roomId, intervalId);
       } else {
-        console.log('haina ma admin');
+        console.log("haina ma admin");
         roomCreator = roomCreatorMap.get(roomId);
+        if (roomCreator == userName) {
+          console.log("'Chalyo admin ho");
+          roomCodeId = roomId;
+          const Getcode = await getCodeFromDatabase(roomId);
+          roomCodeMap.set(roomId, Getcode);
+          initialCode = Getcode;
+        }
       }
     } catch (error) {
-      console.error('Error during JOIN:', error);
-      return socket.emit(ACTIONS.ERROR, { message: 'Error during join process.' });
+      console.error("Error during JOIN:", error);
+      return socket.emit(ACTIONS.ERROR, {
+        message: "Error during join process.",
+      });
     }
 
     const clients = getAllconnectedClients(roomId);
-    if (clients.length > 1 && clients.filter((client) => client.username === userName).length > 1) {
+    if (
+      clients.length > 1 &&
+      clients.filter((client) => client.username === userName).length > 1
+    ) {
       userSocketMap.delete(socket.id);
       socket.emit(ACTIONS.DUPLICATE_USER, {
         username: userName,
@@ -128,12 +140,6 @@ io.on('connection', (socket) => {
         roomCodeId: roomCreator === userName ? roomCodeId : null,
       });
     });
-
-    // Send initial code only to the user that just joined
-    // socket.emit(ACTIONS.SYNC_CODE, {
-    //   code: initialCode,
-    //   currenteditor: '',
-    // });
   });
 
   socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code, currenteditor }) => {
