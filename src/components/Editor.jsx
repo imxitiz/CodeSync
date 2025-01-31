@@ -49,11 +49,12 @@ const Editor = ({
   }, [code, onCodeChange, socketRef]);
 
   useEffect(() => {
+    console.log('yep');
     if (firstTimesentCode) {
       setCode(firstTimesentCode);
       onCodeChange(firstTimesentCode);
     }
-  }, []);
+  }, [firstTimesentCode]);
 
   return (
     <CodeMirror
