@@ -4,7 +4,15 @@ import { javascript } from '@codemirror/lang-javascript';
 import { dracula } from '@uiw/codemirror-theme-dracula';
 import { ACTIONS } from '../../action';
 
-const Editor = ({ socketRef, roomId, onCodeChange, editable, currentEditor, setCurrentEditor }) => {
+const Editor = ({
+  socketRef,
+  roomId,
+  onCodeChange,
+  editable,
+  currentEditor,
+  setCurrentEditor,
+  firstTimesentCode,
+}) => {
   const [code, setCode] = useState('');
   const extensions = [javascript({ jsx: true })];
 
@@ -39,6 +47,13 @@ const Editor = ({ socketRef, roomId, onCodeChange, editable, currentEditor, setC
       };
     }
   }, [code, onCodeChange, socketRef]);
+
+  useEffect(() => {
+    if (firstTimesentCode) {
+      setCode(firstTimesentCode);
+      onCodeChange(firstTimesentCode);
+    }
+  }, []);
 
   return (
     <CodeMirror

@@ -45,20 +45,11 @@ const getAllconnectedClients = (roomId) => {
 
 async function createOrUpdateRoomCode(roomId, code) {
   try {
-    const existingCode = await prisma.code.findUnique({ where: { roomId } });
-    if (existingCode) {
-      await prisma.code.update({
-        where: { roomId },
-        data: { content: code },
-      });
-    } else {
-      await prisma.code.create({
-        data: {
-          roomId,
-          content: code,
-        },
-      });
-    }
+    await prisma.code.upsert({
+      where: { roomId },
+      update: { content: code },
+      create: { roomId, content: code },
+    });
   } catch (error) {
     console.error('Error creating or updating room code:', error);
   }
@@ -75,35 +66,41 @@ async function getCodeFromDatabase(roomId) {
 }
 
 io.on('connection', (socket) => {
-  console.log('A user connected', socket.id);
   socket.on(ACTIONS.JOIN, async ({ roomId, userName }) => {
+    userName = userName.trim();
+    roomId = roomId.trim();
     userSocketMap.set(socket.id, userName);
     socket.join(roomId);
     let roomCreator = null;
     let initialCode = '';
-
+    let roomCodeId;
     try {
       if (!roomCreatorMap.has(roomId)) {
         console.log('Chalyo admin ho');
         roomCreatorMap.set(roomId, userName);
         roomCreator = userName;
-        const roomCodeId = uuidv4(); // Generate a random ID
-        roomCodeMap.set(roomId, '');
-        await createOrUpdateRoomCode(roomCodeId, '');
+        if (await prisma.code.findUnique({ where: { roomId } })) {
+          roomCodeId = roomId;
+          const Getcode = await getCodeFromDatabase(roomId);
+          console.log('-------------------', Getcode);
+          roomCodeMap.set(roomId, Getcode);
+          initialCode = Getcode;
+        } else {
+          roomCodeId = uuidv4();
+          roomCodeMap.set(roomId, '');
+        }
+        // await createOrUpdateRoomCode(roomCodeId, '');
         // Save code content to database every 2 minutes
         const intervalId = setInterval(async () => {
           const code = roomCodeMap.get(roomId) || '';
           await createOrUpdateRoomCode(roomCodeId, code);
-        }, 120000); // 120000 ms = 2 minutes
+        }, 10000); // 120000 ms = 2 minutes
 
         roomIntervalMap.set(roomId, intervalId);
       } else {
         console.log('haina ma admin');
         roomCreator = roomCreatorMap.get(roomId);
       }
-
-      // Fetch Initial code from database
-      initialCode = await getCodeFromDatabase(roomId);
     } catch (error) {
       console.error('Error during JOIN:', error);
       return socket.emit(ACTIONS.ERROR, { message: 'Error during join process.' });
@@ -127,14 +124,16 @@ io.on('connection', (socket) => {
         username: userName,
         socketId: socket.id,
         roomcreator: roomCreator,
-        code: initialCode, // Send initial code to the user
+        code: initialCode && initialCode,
+        roomCodeId: roomCreator === userName ? roomCodeId : null,
       });
     });
+
     // Send initial code only to the user that just joined
-    socket.emit(ACTIONS.SYNC_CODE, {
-      code: initialCode,
-      currenteditor: '',
-    });
+    // socket.emit(ACTIONS.SYNC_CODE, {
+    //   code: initialCode,
+    //   currenteditor: '',
+    // });
   });
 
   socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code, currenteditor }) => {

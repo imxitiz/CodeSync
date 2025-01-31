@@ -5,8 +5,8 @@ import toast from 'react-hot-toast';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 function HomePage() {
-  const [roomId, setRoomId] = useState('');
-  const [userName, setUserName] = useState('');
+  const [roomId, setRoomId] = useState('test');
+  const [userName, setUserName] = useState('Sachin Thapa');
   const navigate = useNavigate();
   const location = useLocation();
 
