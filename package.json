@@ -1,19 +1,19 @@
 {
-  "name": "codesync-socketio-",
+  "name": "codesync-socketio",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev:front": "vite",
-    "dev": "npm run build && npm run server:prod ",
-    "build": "vite build",
+    "dev": "npm run build && npm run server:prod",
+    "build": "vite-react-ssg build",
+    "build:ssg": "vite-react-ssg build",
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "nodemon server.js",
     "server:prod": "node server.js"
   },
   "dependencies": {
-    "vite": "^5.4.10",
     "@codemirror/lang-javascript": "^6.2.2",
     "@uiw/codemirror-theme-dracula": "^4.23.6",
     "@uiw/codemirror-theme-okaidia": "^4.23.6",
@@ -30,7 +30,8 @@
     "react-router-dom": "^6.28.0",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
-    "uuid": "^11.0.3"
+    "uuid": "^11.0.3",
+    "vite": "^5.4.10"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
@@ -42,6 +43,8 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
-    "nodemon": "^3.1.7"
+    "nodemon": "^3.1.7",
+    "vite-plugin-pwa": "^1.0.3",
+    "vite-react-ssg": "^0.8.9"
   }
 }
