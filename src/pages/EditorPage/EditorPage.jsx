@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Client from '../../components/Client';
 import './EditorPage.css';
-import Editor from '../../components/Editor';
+import EditorWrapper from '../../components/EditorWrapper';
 import { initSocket } from '../../utils/socket';
 import { ACTIONS } from '../../utils/constant';
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -295,7 +295,7 @@ function EditorPage() {
             <RiSidebarUnfoldFill size={30}/>
           }
         </div>
-        <Editor
+        <EditorWrapper
           socketRef={socketRef}
           roomId={id}
           onCodeChange={(code) => {
