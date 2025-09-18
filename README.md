@@ -16,3 +16,80 @@ CodeSync is a real-time collaborative code editor that allows multiple users to 
 - **Backend**: Node.js, Express.js, Socket.io
 - **Styling**: CSS
 - **Utilities**: RandomColor, React Avatar
+
+## Deployment
+
+This application is designed to be deployed with separate frontend and backend services:
+
+### Frontend Deployment (Vercel/Netlify)
+
+1. **Build the frontend:**
+
+   ```bash
+   npm run build
+   ```
+
+2. **Set environment variables:**
+   - `VITE_BACKEND_API_URL`: Your backend server URL (e.g., `https://your-app.onrender.com`)
+
+3. **Deploy the `dist` folder** to your preferred hosting service.
+
+### Backend Deployment (Render/Railway/Heroku)
+
+1. **Set environment variables:**
+   - `CORS_ORIGIN`: Your frontend URL (e.g., `https://your-app.vercel.app`)
+   - `PORT`: Server port (default: 3000)
+
+2. **Deploy the backend** with the following files:
+   - `server.js`
+   - `action.js`
+   - `package.json`
+
+3. **The backend provides these endpoints:**
+   - `GET /api/health` - Health check endpoint
+   - `GET /api/info` - Server information
+   - Socket.io endpoint for real-time communication
+
+### Local Development
+
+1. **Install dependencies:**
+
+   ```bash
+   npm install
+   ```
+
+2. **Create `.env` file** (copy from `.env.example`):
+
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Start the backend:**
+
+   ```bash
+   npm run server
+   ```
+
+4. **Start the frontend (in another terminal):**
+
+   ```bash
+   npm run dev
+   ```
+
+### Environment Variables
+
+- **Frontend (`.env`):**
+  - `VITE_BACKEND_API_URL`: Backend server URL
+
+- **Backend (environment variables):**
+  - `CORS_ORIGIN`: Allowed frontend origins (comma-separated)
+  - `PORT`: Server port (default: 3000)
+
+## Health Check & Server Wake-up
+
+The application includes automatic server wake-up functionality:
+
+- **Health Check**: Frontend checks server health before connecting
+- **Auto Wake-up**: Server is pinged when user focuses on input fields
+- **Retry Logic**: Automatic retry with user feedback during connection
+- **Smooth UX**: Users can enter details while server wakes up

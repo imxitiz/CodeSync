@@ -9,3 +9,5 @@ export const ACTIONS = {
     clear_current_editor: "clear_current_editor",
     DUPLICATE_USER: "duplicate-user",
 };
+
+export const BACKEND_API_URL = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:3000';

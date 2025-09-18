@@ -23,11 +23,13 @@ function EditorPage() {
   const { id } = useParams();
   const userName = location.state?.userName || 'User';
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [serverStatus, setServerStatus] = useState('connecting'); // 'connecting', 'connected', 'disconnected'
+  const [connectionMessage, setConnectionMessage] = useState('Connecting to server...');
 
   const handleErrors = (err) => {
-    toast.error('Connection failed, please try again');
-    sessionStorage.setItem("admin", userName);
-    navigate('/');
+    setServerStatus('disconnected');
+    setConnectionMessage('Connection lost - Reconnecting...');
+    // Don't navigate away immediately, try to reconnect
   };
 
   const copyRoomId = async () => {
@@ -95,17 +97,30 @@ function EditorPage() {
     document.title = `${id} - CodeSync`;
 
     const init = async () => {
-      socketRef.current = await initSocket();
+      try {
+        setServerStatus('connecting');
+        setConnectionMessage('Connecting to server...');
+        
+        socketRef.current = await initSocket();
+        
+        socketRef.current.on('connect', () => {
+          setServerStatus('connected');
+          setConnectionMessage('Connected!');
+        });
 
-      socketRef.current.on('connect_error', handleErrors);
-      socketRef.current.on('connect_failed', handleErrors);
+        socketRef.current.on('connect_error', handleErrors);
+        socketRef.current.on('connect_failed', handleErrors);
+        socketRef.current.on('disconnect', () => {
+          setServerStatus('disconnected');
+          setConnectionMessage('Connection lost - Reconnecting...');
+        });
 
-      socketRef.current.emit(ACTIONS.JOIN, {
-        roomId: id,
-        userName,
-      });
+        socketRef.current.emit(ACTIONS.JOIN, {
+          roomId: id,
+          userName,
+        });
 
-      socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId, roomcreator }) => {
+        socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId, roomcreator }) => {
         setClients(clients);
         setRoomCreator(roomcreator);
         if (username === userName && roomcreator === username) {
@@ -162,6 +177,14 @@ function EditorPage() {
           socketRef.current.off(ACTIONS.SET_CURRENT_EDITOR);
         };
       });
+      } catch (error) {
+        setServerStatus('disconnected');
+        setConnectionMessage('Failed to connect to server');
+        toast.error('Failed to connect to server. Please check your connection.');
+        setTimeout(() => {
+          navigate('/');
+        }, 3000);
+      }
     };
 
     init();
@@ -217,6 +240,11 @@ function EditorPage() {
           <h4>Room Id: {id} <br />
             Welcome, {userName}</h4>
           {currentEditor && <h3>Editor: {currentEditor}</h3>}
+          {serverStatus !== 'connected' && (
+            <div className={`server-status ${serverStatus}`}>
+              <p>{connectionMessage}</p>
+            </div>
+          )}
           <hr />
           <div className="clientslist">
             {clients

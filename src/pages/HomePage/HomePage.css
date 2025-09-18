@@ -36,6 +36,18 @@ footer a {
     flex-direction: column;
 }
 
+.server-status-message {
+    background: #ffa726;
+    color: #1c1e29;
+    padding: 8px 12px;
+    border-radius: 5px;
+    margin: 10px 0;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 500;
+    border: 1px solid #ff9800;
+}
+
 .mainlabel {
     margin-bottom: 20px;
     margin-top: 0;
@@ -116,4 +128,58 @@ label input[type="checkbox"] {
 /* Optional hover effect for label */
 label:hover {
     color: #2b824c;
+}
+
+/* Footer improvements */
+.home-footer {
+    position: fixed;
+    bottom: 12px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    pointer-events: none; /* allow clicks to pass through empty areas */
+}
+
+.home-footer-inner {
+    pointer-events: auto; /* enable clicks on links */
+    background: rgba(40, 42, 54, 0.9);
+    padding: 8px 14px;
+    border-radius: 999px;
+    display: inline-flex;
+    gap: 10px;
+    align-items: center;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+}
+
+.home-footer .home-footer-inner a {
+    color: #4aee88;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.home-footer .footer-sep {
+    color: #9aa0b4;
+    font-weight: 600;
+}
+
+.home-footer .footer-created,
+.home-footer .footer-maintained {
+    color: #cfeed1;
+    font-size: 13px;
+}
+
+.home-footer .footer-maintainer {
+    color: #9aa0b4; /* subtler color */
+    font-size: 13px;
+}
+
+.home-footer .maintainer-name {
+    color: #cfeed1; /* slightly lighter for the name */
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.home-footer .maintainer-name:hover {
+    color: #bff2c9; /* gentle hover color */
 }

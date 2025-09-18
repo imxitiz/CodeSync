@@ -55,9 +55,23 @@ app.use(
   })
 );
 
-app.use(express.static('dist'));
-app.use((req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+// Health check endpoint to wake up server
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Server is healthy',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// API endpoint for general server info (optional)
+app.get('/api/info', (req, res) => {
+  res.json({
+    name: 'CodeSync Server',
+    version: '1.0.0',
+    status: 'running',
+    timestamp: new Date().toISOString()
+  });
 });
 
 const userSocketMap = new Map();
@@ -140,6 +154,11 @@ io.on('connection', (socket) => {
     userSocketMap.delete(socket.id);
     socket.leave();
   });
+});
+
+app.use(express.static('dist'));
+app.use((req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 const PORT = 3000;

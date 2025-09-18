@@ -190,6 +190,32 @@ hr {
     gap: 15px;
 }
 
+/* Server status styles */
+.server-status {
+    padding: 10px;
+    border-radius: 5px;
+    margin: 10px 0;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.server-status.connecting {
+    background: #ffa726;
+    color: #1c1e29;
+    border: 1px solid #ff9800;
+}
+
+.server-status.disconnected {
+    background: #ef5350;
+    color: #fff;
+    border: 1px solid #e53935;
+}
+
+.server-status p {
+    margin: 0;
+}
+
 ::-webkit-scrollbar {
     width: 5px;
 }
