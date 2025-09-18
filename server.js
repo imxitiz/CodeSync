@@ -11,11 +11,46 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
+const normalize = (origin) => origin.replace(/\/$/, '');
 
-const io = new Server(server);
+const defaultOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+
+const envOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const allowAll = envOrigins.length === 1 && envOrigins[0] === '*';
+
+const allowedOrigins = new Set(
+  [
+    ...defaultOrigins,
+    ...envOrigins.filter((o) => o !== '*'),
+  ].map(normalize)
+);
+
+// allow requests with no origin (like mobile apps, curl, or server-to-server)
+const corsOrigin = (origin, callback) => {
+  if (!origin) return callback(null, true);
+  if (allowAll) return callback(null, true);
+  if (allowedOrigins.has(normalize(origin))) return callback(null, true);
+  return callback(new Error('CORS policy: This origin is not allowed'), false);
+};
+
+const io = new Server(server, {
+  cors: {
+    origin: corsOrigin,
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
+
 app.use(
   cors({
-    origin: 'http://localhost:5137',
+    origin: corsOrigin,
     credentials: true,
   })
 );

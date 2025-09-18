@@ -9,7 +9,7 @@ export const initSocket = async () => {
   };
   // RENDER_EXTERNAL_URL	The Render URL for a web service or static site; of the form https://foobar.onrender.com. Empty for all other service types.
   // RENDER_EXTERNAL_HOSTNAME	The Render host for a web service or static site. Of the form foobar.onrender.com. Empty for all other service types.
-  console.log('process.env.RENDER_EXTERNAL_URL', process.env.RENDER_EXTERNAL_URL);
-  const backendApiUrl = process.env.RENDER_EXTERNAL_URL;
+  console.log('process.env.VITE_BACKEND_API_URL', process.env.VITE_BACKEND_API_URL);
+  const backendApiUrl = process.env.VITE_BACKEND_API_URL || 'http://localhost:3000';
   return io(backendApiUrl, options);
 };
