@@ -128,7 +128,7 @@ function HomePage() {
         <div className="home-footer-inner">
           <span className="footer-created">Created by <a href="https://github.com/sachinthapa572" target="_blank" rel="noreferrer">Sachin Thapa</a></span>
           <span className="footer-sep">·</span>
-          <span className="footer-maintainer">Maintainer: <a className="maintainer-name" href="https://github.com/imxitiz" target="_blank" rel="noreferrer">Kshitiz</a></span>
+          <span className="footer-maintainer">Maintainers: <a className="maintainer-name" href="https://github.com/imxitiz" target="_blank" rel="noreferrer">Kshitiz</a></span>
         </div>
       </footer>
     </div>

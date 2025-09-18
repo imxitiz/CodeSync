@@ -34,6 +34,8 @@ This application is designed to be deployed with separate frontend and backend s
 
 3. **Deploy the `dist` folder** to your preferred hosting service.
 
+Note for Vercel users: If you deploy a single-page app (SPA) on Vercel and navigate directly to nested routes like `/editor/test`, Vercel may return a 404 if it doesn't serve `index.html` for that path. This repo includes a `vercel.json` rewrite rule that maps all non-API routes to `index.html` so client-side routing works correctly.
+
 ### Backend Deployment (Render/Railway/Heroku)
 
 1. **Set environment variables:**
