@@ -16,6 +16,7 @@ const normalize = (origin) => origin.replace(/\/$/, '');
 const defaultOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://127.0.0.1:5500'
 ];
 
 const envOrigins = (process.env.CORS_ORIGIN || '')

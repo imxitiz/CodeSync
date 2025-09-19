@@ -12,10 +12,31 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,jpg,jpeg}'],
+        globPatterns: [
+          '**/*.{js,css,ico,png,svg,webp,jpg,jpeg}',
+          'assets/**/*.{js,css,woff2,woff,ttf}',
+          // Specifically handle HTML with version hash
+          'index.html'
+        ],
         // Exclude API routes and socket.io from caching
         navigateFallbackDenylist: [/^\/api\/.*/, /^\/socket\.io\/.*/],
+        // Add better cache busting for dynamic imports
+        cleanupOutdatedCaches: true,
+        // Improve navigation fallback for SPAs
+        navigateFallback: 'index.html',
         runtimeCaching: [
+          // Special handling for HTML documents to avoid hydration issues
+          {
+            urlPattern: /\.html$/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-cache',
+              networkTimeoutSeconds: 1,
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\//,
             handler: 'StaleWhileRevalidate',
@@ -50,6 +71,9 @@ export default defineConfig({
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'static-resources',
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
             },
           },
           // Explicitly exclude API routes from any caching
@@ -58,7 +82,7 @@ export default defineConfig({
             handler: 'NetworkOnly',
           },
         ],
-        // Skip waiting and claim clients immediately
+        // Skip waiting and claim clients immediately for faster updates
         skipWaiting: true,
         clientsClaim: true,
       },
@@ -110,7 +134,7 @@ export default defineConfig({
         ],
       },
       devOptions: {
-        enabled: true, // Enable PWA in development
+        enabled: false, // Disable PWA in development to avoid conflicts
       },
     }),
   ],
