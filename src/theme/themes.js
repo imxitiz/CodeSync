@@ -21,12 +21,12 @@ const presetModules = import.meta.glob("./presets/*.js", {
 
 /**
  * Create a key for the theme using file name or theme name+mode.
- * Keeps "system-light" / "system-dark" stable for the default pair.
+ * Keeps "system" stable for the consolidated system theme.
  */
 function keyFromTheme(filePath, theme) {
   const fileBase = filePath.split("/").pop().replace(/\.js$/, "");
-  if (theme?.name?.toLowerCase().includes("system") && theme?.mode) {
-    return `system-${theme.mode}`;
+  if (fileBase === "system") {
+    return "system";
   }
   const base = theme?.name ? slugify(theme.name) : slugify(fileBase);
   return theme?.mode ? `${base}-${theme.mode}` : base;
@@ -44,19 +44,23 @@ function buildPresetThemes() {
 
 export const presetThemes = buildPresetThemes();
 
-// Apply tokens to documentElement, toggling dark class based on theme.mode
-export function applyTheme(theme) {
+// Apply theme with specific mode
+export function applyTheme(theme, mode = null) {
   if (!theme) return;
   const root = document.documentElement;
 
+  // Determine which mode to use
+  const activeMode = mode || theme.defaultMode || "dark";
+
   // Toggle dark mode class for Tailwind variant utilities
-  if (theme.mode === "dark") {
+  if (activeMode === "dark") {
     root.classList.add("dark");
   } else {
     root.classList.remove("dark");
   }
 
-  const tokens = theme.tokens ?? {};
+  // Get tokens for the active mode
+  const tokens = theme.modes?.[activeMode] || theme.tokens || {};
 
   Object.entries(tokens).forEach(([key, value]) => {
     root.style.setProperty(`--${key}`, value);
@@ -135,22 +139,57 @@ export function parseCssVariables(cssText) {
   return { lightTokens, darkTokens };
 }
 
-// Build themes from tweakcn CSS string
-// If includeDark is true and dark tokens exist, emit two themes: `${baseName}-light`, `${baseName}-dark`
-export function createThemesFromCss(baseName, cssText, includeDark = true) {
+// Build single theme from tweakcn CSS string with both light and dark modes
+export function createThemeFromCss(baseName, cssText) {
   const { lightTokens, darkTokens } = parseCssVariables(cssText);
+  const safe = (s) =>
+    String(s || "custom").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+
+  const modes = {};
+
+  if (Object.keys(lightTokens).length) {
+    modes.light = lightTokens;
+  }
+
+  if (Object.keys(darkTokens).length) {
+    modes.dark = darkTokens;
+  }
+
+  // If only one mode exists, duplicate it to the other
+  if (modes.light && !modes.dark) {
+    modes.dark = { ...modes.light };
+  } else if (modes.dark && !modes.light) {
+    modes.light = { ...modes.dark };
+  }
+
+  return {
+    name: baseName,
+    modes,
+    defaultMode: modes.dark ? "dark" : "light"
+  };
+}
+
+// Legacy function for backward compatibility - creates separate themes
+export function createThemesFromCss(baseName, cssText, includeDark = true) {
+  const theme = createThemeFromCss(baseName, cssText);
   const themes = {};
   const safe = (s) =>
     String(s || "custom").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
 
-  const lightKey = `${safe(baseName)}-light`;
-  if (Object.keys(lightTokens).length) {
-    themes[lightKey] = { name: `${baseName} Light`, mode: "light", tokens: lightTokens };
+  if (theme.modes.light) {
+    themes[`${safe(baseName)}-light`] = {
+      name: `${baseName} Light`,
+      mode: "light",
+      tokens: theme.modes.light
+    };
   }
 
-  if (includeDark && Object.keys(darkTokens).length) {
-    const darkKey = `${safe(baseName)}-dark`;
-    themes[darkKey] = { name: `${baseName} Dark`, mode: "dark", tokens: darkTokens };
+  if (includeDark && theme.modes.dark) {
+    themes[`${safe(baseName)}-dark`] = {
+      name: `${baseName} Dark`,
+      mode: "dark",
+      tokens: theme.modes.dark
+    };
   }
 
   return themes;

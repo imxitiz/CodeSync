@@ -12,7 +12,9 @@ import {
 // React Context for theme
 const ThemeContext = createContext({
   themeKey: "system-auto",
+  currentMode: "auto",
   setThemeKey: (_key) => {},
+  setCurrentMode: (_mode) => {},
   themes: {},
   addCustomTheme: (_key, _theme) => {},
   removeCustomTheme: (_key) => {},
@@ -26,6 +28,10 @@ export function ThemeProvider({ children }) {
   // If nothing stored, default to system-auto
   const stored = getStoredThemeKey();
   const [themeKey, setThemeKeyState] = useState(stored || "system-auto");
+  const [currentMode, setCurrentMode] = useState(() => {
+    const storedMode = localStorage.getItem("codesync.themeMode");
+    return storedMode || "auto";
+  });
   const [customThemes, setCustomThemes] = useState(() => loadCustomThemes());
   const mediaRef = useRef(null);
 
@@ -35,36 +41,49 @@ export function ThemeProvider({ children }) {
     return { ...getAllThemes(), ...customThemes };
   }, [customThemes]);
 
-  // Apply theme whenever themeKey or themes change
+  // Apply theme whenever themeKey, currentMode, or themes change
   useEffect(() => {
     const apply = () => {
       if (themeKey === "system-auto") {
-        const mode = getSystemMode();
-        const sysKey = mode === "dark" ? "system-dark" : "system-light";
-        const theme = themes[sysKey] || themes["system-dark"];
-        applyTheme(theme);
+        const systemMode = getSystemMode();
+        const theme = themes["system"];
+        applyTheme(theme, currentMode === "auto" ? systemMode : currentMode);
       } else {
-        const theme = themes[themeKey] || themes["system-dark"];
-        applyTheme(theme);
+        const theme = themes[themeKey];
+        if (theme) {
+          // For new format themes with modes
+          if (theme.modes) {
+            const modeToUse = currentMode === "auto" ? getSystemMode() : currentMode;
+            applyTheme(theme, modeToUse);
+          } else {
+            // Legacy format - use theme.mode
+            applyTheme(theme);
+          }
+        }
       }
     };
 
     apply();
 
-    // Manage media query listener for system-auto
-    if (themeKey === "system-auto" && typeof window !== "undefined" && window.matchMedia) {
+    // Manage media query listener for system-auto or auto mode
+    if ((themeKey === "system-auto" || currentMode === "auto") && typeof window !== "undefined" && window.matchMedia) {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
       mediaRef.current = mq;
       const onChange = () => apply();
       mq.addEventListener?.("change", onChange);
       return () => mq.removeEventListener?.("change", onChange);
     }
-  }, [themeKey, themes]);
+  }, [themeKey, currentMode, themes]);
 
   const setThemeKey = (key) => {
     setThemeKeyState(key);
     // Persist the choice; allow clearing when system-auto to reflect that behavior
     setStoredThemeKey(key);
+  };
+
+  const updateCurrentMode = (mode) => {
+    setCurrentMode(mode);
+    localStorage.setItem("codesync.themeMode", mode);
   };
 
   // Allow adding/removing custom themes
@@ -87,7 +106,15 @@ export function ThemeProvider({ children }) {
 
   return (
     <ThemeContext.Provider
-      value={{ themeKey, setThemeKey, themes, addCustomTheme, removeCustomTheme }}
+      value={{
+        themeKey,
+        currentMode,
+        setThemeKey,
+        setCurrentMode: updateCurrentMode,
+        themes,
+        addCustomTheme,
+        removeCustomTheme
+      }}
     >
       {children}
     </ThemeContext.Provider>

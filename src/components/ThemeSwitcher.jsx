@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/theme/ThemeProvider.jsx";
-import { createThemesFromCss, getSystemMode, applyTheme, presetThemes } from "@/theme/themes.js";
+import { createThemesFromCss, createThemeFromCss, getSystemMode, applyTheme, presetThemes } from "@/theme/themes.js";
 import {
   Select,
   SelectGroup,
@@ -25,13 +25,14 @@ function slugify(name) {
 }
 
 export function ThemeSwitcher({ className }) {
-  const { themeKey, setThemeKey, themes, addCustomTheme, removeCustomTheme } = useTheme();
+  const { themeKey, currentMode, setThemeKey, setCurrentMode, themes, addCustomTheme, removeCustomTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [prevThemeKey, setPrevThemeKey] = useState(themeKey);
   const [previewMode, setPreviewMode] = useState("dark"); // 'dark' | 'light' for preview/import default
   const [siteMode, setSiteMode] = useState(() => document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+  const [selectOpen, setSelectOpen] = useState(false); // Track if select dropdown is open
   const fileInputRef = useRef(null);
 
   // Sync siteMode with actual class
@@ -50,15 +51,31 @@ export function ThemeSwitcher({ className }) {
   };
 
   const items = useMemo(() => {
-    const base = Object.entries(themes).map(([key, t]) => ({
-      key,
-      name: t?.name || key,
-      mode: t?.mode || "light",
-      isCustom: !presetThemes[key],
-    }));
+    const base = Object.entries(themes).map(([key, t]) => {
+      // Handle new theme format with modes
+      if (t?.modes) {
+        const availableModes = Object.keys(t.modes);
+        const currentThemeMode = currentMode === "auto" ? (t.defaultMode || "dark") : currentMode;
+        return {
+          key,
+          name: t.name || key,
+          mode: currentThemeMode,
+          availableModes,
+          isCustom: !presetThemes[key],
+        };
+      }
+      // Legacy format
+      return {
+        key,
+        name: t?.name || key,
+        mode: t?.mode || "light",
+        availableModes: [t?.mode || "light"],
+        isCustom: !presetThemes[key],
+      };
+    });
     // Prepend System (auto)
-    return [{ key: "system-auto", name: "System (auto)", mode: getSystemMode(), isCustom: false }, ...base];
-  }, [themes]);
+    return [{ key: "system-auto", name: "System (auto)", mode: getSystemMode(), availableModes: ["light", "dark"], isCustom: false }, ...base];
+  }, [themes, currentMode]);
 
   const onFilePick = async (e) => {
     const file = e.target.files && e.target.files[0];
@@ -87,22 +104,36 @@ export function ThemeSwitcher({ className }) {
               const baseName = data.name || "custom";
               const themeTokens = data.cssVars.theme || {};
               const created = {};
+              const modes = {};
+
               if (data.cssVars.light) {
-                const key = `${slugify(baseName)}-light`;
-                created[key] = { name: `${baseName} Light`, mode: "light", tokens: { ...themeTokens, ...data.cssVars.light } };
+                modes.light = { ...themeTokens, ...data.cssVars.light };
               }
               if (data.cssVars.dark) {
-                const key = `${slugify(baseName)}-dark`;
-                created[key] = { name: `${baseName} Dark`, mode: "dark", tokens: { ...themeTokens, ...data.cssVars.dark } };
+                modes.dark = { ...themeTokens, ...data.cssVars.dark };
               }
-              const addCount = Object.keys(created).length;
-              if (customCount + addCount > 10) {
+
+              // If only one mode exists, duplicate it
+              if (modes.light && !modes.dark) {
+                modes.dark = { ...modes.light };
+              } else if (modes.dark && !modes.light) {
+                modes.light = { ...modes.dark };
+              }
+
+              const key = slugify(baseName);
+              const theme = {
+                name: baseName,
+                modes,
+                defaultMode: previewMode === "dark" ? "dark" : "light"
+              };
+
+              if (customCount >= 10) {
                 alert("Theme limit reached (max 10 custom themes). Delete some before adding new ones.");
                 return;
               }
-              Object.entries(created).forEach(([k, v]) => addCustomTheme(k, v));
-              const preferred = previewMode === "dark" ? `${slugify(baseName)}-dark` : `${slugify(baseName)}-light`;
-              setThemeKey(created[preferred] ? preferred : Object.keys(created)[0]);
+
+              addCustomTheme(key, theme);
+              setThemeKey(key);
               setOpen(false);
               setText("");
               if (fileInputRef.current) fileInputRef.current.value = "";
@@ -130,16 +161,17 @@ export function ThemeSwitcher({ className }) {
       if (looksCss) {
         const baseName =
           prompt("Name your theme base (used for light/dark pair):", "custom") || "custom";
-        const created = createThemesFromCss(baseName, raw, true);
-        const keys = Object.keys(created);
-        if (keys.length === 0) throw new Error("No CSS variables found.");
-        if (customCount + keys.length > 10) {
+        const theme = createThemeFromCss(baseName, raw);
+        if (!theme.modes || Object.keys(theme.modes).length === 0) throw new Error("No CSS variables found.");
+
+        const key = slugify(baseName);
+        if (customCount >= 10) {
           alert("Theme limit reached (max 10 custom themes). Delete some before adding new ones.");
           return;
         }
-        keys.forEach((k) => addCustomTheme(k, created[k]));
-        const preferred = previewMode === "dark" ? `${slugify(baseName)}-dark` : `${slugify(baseName)}-light`;
-        if (created[preferred]) setThemeKey(preferred);
+
+        addCustomTheme(key, theme);
+        setThemeKey(key);
         setOpen(false);
         setText("");
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -155,23 +187,36 @@ export function ThemeSwitcher({ className }) {
         const baseName = parsed.name || "custom";
         const created = {};
         const themeTokens = parsed.cssVars.theme || {};
+        const modes = {};
+
         if (parsed.cssVars.light) {
-          const key = `${slugify(baseName)}-light`;
-          created[key] = { name: `${baseName} Light`, mode: "light", tokens: { ...themeTokens, ...parsed.cssVars.light } };
+          modes.light = { ...themeTokens, ...parsed.cssVars.light };
         }
         if (parsed.cssVars.dark) {
-          const key = `${slugify(baseName)}-dark`;
-          created[key] = { name: `${baseName} Dark`, mode: "dark", tokens: { ...themeTokens, ...parsed.cssVars.dark } };
+          modes.dark = { ...themeTokens, ...parsed.cssVars.dark };
         }
-        const addCount = Object.keys(created).length;
-        if (addCount === 0) throw new Error("No tokens found in cssVars.");
-        if (customCount + addCount > 10) {
+
+        // If only one mode exists, duplicate it
+        if (modes.light && !modes.dark) {
+          modes.dark = { ...modes.light };
+        } else if (modes.dark && !modes.light) {
+          modes.light = { ...modes.dark };
+        }
+
+        const key = slugify(baseName);
+        const theme = {
+          name: baseName,
+          modes,
+          defaultMode: previewMode === "dark" ? "dark" : "light"
+        };
+
+        if (customCount >= 10) {
           alert("Theme limit reached (max 10 custom themes). Delete some before adding new ones.");
           return;
         }
-        Object.entries(created).forEach(([k, v]) => addCustomTheme(k, v));
-        const preferred = previewMode === "dark" ? `${slugify(baseName)}-dark` : `${slugify(baseName)}-light`;
-        setThemeKey(created[preferred] ? preferred : Object.keys(created)[0]);
+
+        addCustomTheme(key, theme);
+        setThemeKey(key);
       } else if ("name" in parsed && "mode" in parsed && "tokens" in parsed) {
         const { name, mode, tokens } = parsed;
         if (!name || !tokens || (mode !== "light" && mode !== "dark")) {
@@ -196,22 +241,21 @@ export function ThemeSwitcher({ className }) {
     }
   };
 
+  // Get current theme info
+  const currentTheme = themes[themeKey] || themes["system"];
+  const availableModes = currentTheme?.modes ? Object.keys(currentTheme.modes) : [currentTheme?.mode || "light"];
+  const canSwitchModes = availableModes.length > 1;
+
   return (
     <div className={cn("relative flex items-center gap-2 shrink-0 min-w-0", className)}>
-      <button
-        type="button"
-        onClick={toggleSiteMode}
-        className="rounded border px-2 py-1 text-xs hover:bg-accent cursor-pointer"
-        title={`Switch to ${siteMode === 'dark' ? 'light' : 'dark'} mode`}
-      >
-        {siteMode === 'dark' ? '🌙 Dark' : '☀️ Light'}
-      </button>
       <Select
         value={themeKey || "system-auto"}
         onValueChange={(val) => {
           if (val === "__import__") setOpen(true);
           else setThemeKey(val);
         }}
+        open={selectOpen}
+        onOpenChange={setSelectOpen}
       >
         <SelectTrigger className="min-w-[180px] w-[220px] max-w-[60vw] whitespace-nowrap truncate cursor-pointer" aria-label="Select theme">
           <SelectValue placeholder="Select theme" />
@@ -220,15 +264,15 @@ export function ThemeSwitcher({ className }) {
           <SelectViewport>
             <SelectGroup>
               {items.map(({ key, name, mode, isCustom }) => (
-                <SelectItem key={key} value={key}>
-                  <div className="flex w-full items-center justify-between gap-2">
+                <SelectItem key={key} value={key} className="cursor-pointer">
+                  <div className="flex w-full items-center justify-between gap-2 group">
                     <span className={cn("truncate", (themeKey || "system-auto") === key ? "font-semibold text-foreground" : "")}>
                       {name} ({mode})
                     </span>
-                    {isCustom ? (
+                    {isCustom && (selectOpen || true) ? ( // Always show for now, can refine later
                       <button
                         type="button"
-                        className="text-xs rounded border px-1.5 py-0.5 hover:bg-destructive/10 cursor-pointer"
+                        className="text-xs rounded border px-1.5 py-0.5 hover:bg-destructive/10 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
                         onMouseDown={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
@@ -251,6 +295,47 @@ export function ThemeSwitcher({ className }) {
           </SelectViewport>
         </SelectContent>
       </Select>
+
+      {/* Mode Toggle Buttons */}
+      {canSwitchModes && (
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setCurrentMode("light")}
+            className={cn(
+              "rounded px-2 py-1 text-xs border transition-colors cursor-pointer",
+              currentMode === "light" ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+            )}
+            disabled={!availableModes.includes("light")}
+            title="Light mode"
+          >
+            ☀️ Light
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentMode("dark")}
+            className={cn(
+              "rounded px-2 py-1 text-xs border transition-colors cursor-pointer",
+              currentMode === "dark" ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+            )}
+            disabled={!availableModes.includes("dark")}
+            title="Dark mode"
+          >
+            🌙 Dark
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentMode("auto")}
+            className={cn(
+              "rounded px-2 py-1 text-xs border transition-colors cursor-pointer",
+              currentMode === "auto" ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+            )}
+            title="Auto mode (follows system)"
+          >
+            🔄 Auto
+          </button>
+        </div>
+      )}
 
       {open && (
         <div
@@ -378,17 +463,10 @@ export function ThemeSwitcher({ className }) {
                         raw.includes("--background:");
                       if (looksCss) {
                         const baseName = "Preview";
-                        const created = createThemesFromCss(baseName, raw, true);
-                        const preferred =
-                          previewMode === "dark"
-                            ? `${slugify(baseName)}-dark`
-                            : `${slugify(baseName)}-light`;
-                        const toApply =
-                          created[preferred] || Object.values(created)[0];
-                        if (toApply) {
-                          applyTheme(toApply);
-                          setIsPreviewing(true);
-                        }
+                        const theme = createThemeFromCss(baseName, raw);
+                        const modeToUse = previewMode === "dark" ? "dark" : "light";
+                        applyTheme(theme, modeToUse);
+                        setIsPreviewing(true);
                         return;
                       }
                       // JSON preview
@@ -402,26 +480,31 @@ export function ThemeSwitcher({ className }) {
                         if (parsed.cssVars && (parsed.cssVars.light || parsed.cssVars.dark)) {
                           const baseName = parsed.name || "Preview";
                           const themeTokens = parsed.cssVars.theme || {};
-                          const created = {};
+                          const modes = {};
+
                           if (parsed.cssVars.light) {
-                            created[`${slugify(baseName)}-light`] = {
-                              name: `${baseName} Light`, mode: "light", tokens: { ...themeTokens, ...parsed.cssVars.light }
-                            };
+                            modes.light = { ...themeTokens, ...parsed.cssVars.light };
                           }
                           if (parsed.cssVars.dark) {
-                            created[`${slugify(baseName)}-dark`] = {
-                              name: `${baseName} Dark`, mode: "dark", tokens: { ...themeTokens, ...parsed.cssVars.dark }
-                            };
+                            modes.dark = { ...themeTokens, ...parsed.cssVars.dark };
                           }
-                          const preferred =
-                            previewMode === "dark"
-                              ? `${slugify(baseName)}-dark`
-                              : `${slugify(baseName)}-light`;
-                          const toApply = created[preferred] || Object.values(created)[0];
-                          if (toApply) {
-                            applyTheme(toApply);
-                            setIsPreviewing(true);
+
+                          // If only one mode exists, duplicate it
+                          if (modes.light && !modes.dark) {
+                            modes.dark = { ...modes.light };
+                          } else if (modes.dark && !modes.light) {
+                            modes.light = { ...modes.dark };
                           }
+
+                          const theme = {
+                            name: baseName,
+                            modes,
+                            defaultMode: previewMode === "dark" ? "dark" : "light"
+                          };
+
+                          const modeToUse = previewMode === "dark" ? "dark" : "light";
+                          applyTheme(theme, modeToUse);
+                          setIsPreviewing(true);
                           return;
                         }
                       }
