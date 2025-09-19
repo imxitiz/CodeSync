@@ -65,9 +65,13 @@ const EditorWrapper = (props) => {
   }
 
   return (
-    <Suspense fallback={<EditorLoading />}>
-      <Editor {...props} />
-    </Suspense>
+    <div style={{ height: '100%', width: '100%', minHeight: 0, minWidth: 0 }}>
+      <Suspense fallback={<EditorLoading />}>
+        <div style={{ height: '100%', width: '100%', minHeight: 0, minWidth: 0 }}>
+          <Editor {...props} />
+        </div>
+      </Suspense>
+    </div>
   );
 };
 

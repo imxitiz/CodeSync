@@ -1,15 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import tailwindcss from '@tailwindcss/vite'
+import path from 'node:path'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,jpg,jpeg}'],
+        // Exclude API routes and socket.io from caching
+        navigateFallbackDenylist: [/^\/api\/.*/, /^\/socket\.io\/.*/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\//,
@@ -47,12 +52,17 @@ export default defineConfig({
               cacheName: 'static-resources',
             },
           },
+          // Explicitly exclude API routes from any caching
+          {
+            urlPattern: /^.*\/api\/.*$/,
+            handler: 'NetworkOnly',
+          },
         ],
         // Skip waiting and claim clients immediately
         skipWaiting: true,
         clientsClaim: true,
       },
-      includeAssets: ['logo.ico', 'logo.png', 'mainlogo.png', 'vite.svg'],
+      includeAssets: ['logo.ico', 'logo.png', 'mainlogo.png'],
       manifest: {
         name: 'CodeSync - Real-time Code Collaboration',
         short_name: 'CodeSync',
@@ -108,5 +118,10 @@ export default defineConfig({
   ssgOptions: {
     script: 'async',
     formatting: 'minify',
+  },
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
   },
 })
