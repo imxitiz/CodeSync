@@ -44,9 +44,24 @@ function buildPresetThemes() {
 
 export const presetThemes = buildPresetThemes();
 
-// Apply theme with specific mode
+// Apply theme with specific mode - enhanced for service worker compatibility
 export function applyTheme(theme, mode = null) {
-  if (!theme || typeof window === "undefined" || !document?.documentElement) return;
+  // Enhanced checks for service worker cached content
+  if (!theme) return;
+  if (typeof window === "undefined") return;
+  
+  // Ensure DOM is ready and document is available
+  if (!document || !document.documentElement) {
+    // If document is not ready, try again after DOM loads
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => applyTheme(theme, mode));
+      return;
+    }
+    // Last resort - wait for next tick
+    setTimeout(() => applyTheme(theme, mode), 0);
+    return;
+  }
+  
   const root = document.documentElement;
 
   // Determine which mode to use
@@ -70,22 +85,31 @@ export function applyTheme(theme, mode = null) {
 // Load custom themes saved in localStorage
 export function loadCustomThemes() {
   if (typeof window === "undefined") return {};
+  
+  // Ensure localStorage is available (can be null in some SW contexts)
+  if (!window.localStorage) return {};
+  
   try {
-    const raw = localStorage.getItem(CUSTOM_THEMES_STORAGE_KEY);
+    const raw = window.localStorage.getItem(CUSTOM_THEMES_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     return typeof parsed === "object" && parsed ? parsed : {};
-  } catch {
+  } catch (error) {
+    console.warn('Failed to load custom themes:', error);
     return {};
   }
 }
 
 export function saveCustomThemes(customThemes) {
   if (typeof window === "undefined") return;
+  
+  // Ensure localStorage is available
+  if (!window.localStorage) return;
+  
   try {
-    localStorage.setItem(CUSTOM_THEMES_STORAGE_KEY, JSON.stringify(customThemes));
-  } catch {
-    // ignore
+    window.localStorage.setItem(CUSTOM_THEMES_STORAGE_KEY, JSON.stringify(customThemes));
+  } catch (error) {
+    console.warn('Failed to save custom themes:', error);
   }
 }
 
@@ -97,15 +121,32 @@ export function getAllThemes() {
 export function getStoredThemeKey() {
   // return null if not set to allow system preference default via ThemeProvider (system-auto)
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(THEME_STORAGE_KEY) || null;
+  
+  // Ensure localStorage is available
+  if (!window.localStorage) return null;
+  
+  try {
+    return window.localStorage.getItem(THEME_STORAGE_KEY) || null;
+  } catch (error) {
+    console.warn('Failed to get stored theme key:', error);
+    return null;
+  }
 }
 
 export function setStoredThemeKey(key) {
   if (typeof window === "undefined") return;
+  
+  // Ensure localStorage is available
+  if (!window.localStorage) return;
+  
   try {
-    localStorage.setItem(THEME_STORAGE_KEY, key);
-  } catch {
-    // ignore
+    if (key === null || key === "system-auto") {
+      window.localStorage.removeItem(THEME_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(THEME_STORAGE_KEY, key);
+    }
+  } catch (error) {
+    console.warn('Failed to set stored theme key:', error);
   }
 }
 
