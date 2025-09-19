@@ -12,7 +12,7 @@ import {
   SelectItem,
   SelectSeparator,
 } from "@/components/ui/select.jsx";
-import { X } from "lucide-react";
+import { X, Monitor } from "lucide-react";
 
 function slugify(name) {
   return (
@@ -33,7 +33,83 @@ export function ThemeSwitcher({ className }) {
   const [previewMode, setPreviewMode] = useState("dark"); // 'dark' | 'light' for preview/import default
   const [siteMode, setSiteMode] = useState(() => document.documentElement.classList.contains('dark') ? 'dark' : 'light');
   const [selectOpen, setSelectOpen] = useState(false); // Track if select dropdown is open
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
+  const trackRef = useRef(null);
+
+  // Handle drag functionality
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging || !trackRef.current) return;
+    
+    const rect = trackRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    
+    if (percentage < 0.33) {
+      if (availableModes.includes("light")) setCurrentMode("light");
+    } else if (percentage < 0.67) {
+      setCurrentMode("auto");
+    } else {
+      if (availableModes.includes("dark")) setCurrentMode("dark");
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Touch events for mobile
+  const handleTouchStart = (e) => {
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging || !trackRef.current) return;
+    
+    const touch = e.touches[0];
+    const rect = trackRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const percentage = x / rect.width;
+    
+    if (percentage < 0.33) {
+      if (availableModes.includes("light")) setCurrentMode("light");
+    } else if (percentage < 0.67) {
+      setCurrentMode("auto");
+    } else {
+      if (availableModes.includes("dark")) setCurrentMode("dark");
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  // Get current theme info
+  const currentTheme = themes[themeKey] || themes["system"];
+  const availableModes = currentTheme?.modes ? Object.keys(currentTheme.modes) : [currentTheme?.mode || "light"];
+  const canSwitchModes = availableModes.length > 1;
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleTouchMove);
+      document.addEventListener('touchend', handleTouchEnd);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+      };
+    }
+  }, [isDragging]);
 
   // Sync siteMode with actual class
   useEffect(() => {
@@ -241,11 +317,6 @@ export function ThemeSwitcher({ className }) {
     }
   };
 
-  // Get current theme info
-  const currentTheme = themes[themeKey] || themes["system"];
-  const availableModes = currentTheme?.modes ? Object.keys(currentTheme.modes) : [currentTheme?.mode || "light"];
-  const canSwitchModes = availableModes.length > 1;
-
   return (
     <div className={cn("relative flex items-center gap-2 shrink-0 min-w-0", className)}>
       <Select
@@ -296,44 +367,72 @@ export function ThemeSwitcher({ className }) {
         </SelectContent>
       </Select>
 
-      {/* Mode Toggle Buttons */}
+      {/* Modern Theme Mode Toggle */}
       {canSwitchModes && (
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setCurrentMode("light")}
-            className={cn(
-              "rounded px-2 py-1 text-xs border transition-colors cursor-pointer",
-              currentMode === "light" ? "bg-primary text-primary-foreground" : "hover:bg-accent"
-            )}
-            disabled={!availableModes.includes("light")}
-            title="Light mode"
+        <div className="relative select-none">
+          {/* Toggle Track with better visibility */}
+          <div 
+            ref={trackRef}
+            className="relative w-20 h-8 bg-primary/20 rounded-full border border-primary/30 shadow-inner cursor-pointer"
+            onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
           >
-            ☀️ Light
-          </button>
-          <button
-            type="button"
-            onClick={() => setCurrentMode("dark")}
-            className={cn(
-              "rounded px-2 py-1 text-xs border transition-colors cursor-pointer",
-              currentMode === "dark" ? "bg-primary text-primary-foreground" : "hover:bg-accent"
-            )}
-            disabled={!availableModes.includes("dark")}
-            title="Dark mode"
-          >
-            🌙 Dark
-          </button>
-          <button
-            type="button"
-            onClick={() => setCurrentMode("auto")}
-            className={cn(
-              "rounded px-2 py-1 text-xs border transition-colors cursor-pointer",
-              currentMode === "auto" ? "bg-primary text-primary-foreground" : "hover:bg-accent"
-            )}
-            title="Auto mode (follows system)"
-          >
-            🔄 Auto
-          </button>
+            {/* Position Dots - More visible with theme colors */}
+            <div className="absolute top-1/2 left-2.5 w-1 h-1 bg-foreground/60 rounded-full transform -translate-y-1/2" />
+            <div className="absolute top-1/2 left-1/2 w-1 h-1 bg-foreground/60 rounded-full transform -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute top-1/2 right-2.5 w-1 h-1 bg-foreground/60 rounded-full transform -translate-y-1/2" />
+            
+            {/* Sliding Knob - Draggable */}
+            <div 
+              className={cn(
+                "absolute top-0.5 w-7 h-7 bg-card rounded-full shadow-lg border border-primary/40 z-10 flex items-center justify-center transition-transform duration-150 ease-out",
+                "cursor-grab active:cursor-grabbing select-none",
+                isDragging && "shadow-xl scale-105",
+                currentMode === "light" && "left-0.5",
+                currentMode === "auto" && "left-[26px]", 
+                currentMode === "dark" && "left-[45px]"
+              )}
+            >
+              {/* Knob Icon */}
+              {currentMode === "light" && <span className="text-yellow-500 text-xs pointer-events-none">☀️</span>}
+              {currentMode === "auto" && <Monitor className="w-3 h-3 text-primary pointer-events-none" />}
+              {currentMode === "dark" && <span className="text-blue-400 text-xs pointer-events-none">🌙</span>}
+            </div>
+            
+            {/* Large Click Areas for easier interaction */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentMode("light");
+              }}
+              disabled={!availableModes.includes("light")}
+              className="absolute left-0 top-0 w-7 h-8 cursor-pointer bg-transparent hover:bg-primary/10 rounded-l-full"
+              title="Light mode"
+              aria-label="Switch to light mode"
+            />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentMode("auto");
+              }}
+              className="absolute left-[26px] top-0 w-7 h-8 cursor-pointer bg-transparent hover:bg-primary/10"
+              title="Auto mode (follows system)"
+              aria-label="Switch to auto mode"
+            />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentMode("dark");
+              }}
+              disabled={!availableModes.includes("dark")}
+              className="absolute right-0 top-0 w-7 h-8 cursor-pointer bg-transparent hover:bg-primary/10 rounded-r-full"
+              title="Dark mode"
+              aria-label="Switch to dark mode"
+            />
+          </div>
         </div>
       )}
 
