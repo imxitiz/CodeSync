@@ -55,7 +55,7 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
       },
-      includeAssets: ['logo.ico', 'logo.png', 'mainlogo.png', 'vite.svg'],
+      includeAssets: ['logo.ico', 'logo.png', 'mainlogo.png'],
       manifest: {
         name: 'CodeSync - Real-time Code Collaboration',
         short_name: 'CodeSync',
