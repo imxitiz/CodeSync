@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/theme/ThemeProvider.jsx";
 import { createThemesFromCss, getSystemMode, applyTheme, presetThemes } from "@/theme/themes.js";
@@ -25,13 +25,29 @@ function slugify(name) {
 }
 
 export function ThemeSwitcher({ className }) {
-  const { themeKey, setThemeKey, themes, addCustomTheme } = useTheme();
+  const { themeKey, setThemeKey, themes, addCustomTheme, removeCustomTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [prevThemeKey, setPrevThemeKey] = useState(themeKey);
   const [previewMode, setPreviewMode] = useState("dark"); // 'dark' | 'light' for preview/import default
+  const [siteMode, setSiteMode] = useState(() => document.documentElement.classList.contains('dark') ? 'dark' : 'light');
   const fileInputRef = useRef(null);
+
+  // Sync siteMode with actual class
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setSiteMode(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
+  const toggleSiteMode = () => {
+    const root = document.documentElement;
+    root.classList.toggle('dark');
+    setSiteMode(root.classList.contains('dark') ? 'dark' : 'light');
+  };
 
   const items = useMemo(() => {
     const base = Object.entries(themes).map(([key, t]) => ({
@@ -56,6 +72,54 @@ export function ThemeSwitcher({ className }) {
       const raw = text.trim();
       const customCount = Object.keys(themes).filter((k) => !presetThemes[k]).length;
 
+      // Check if it's a tweakcn URL
+      if (raw.startsWith("https://tweakcn.com/r/themes/") && raw.endsWith(".json")) {
+        // Try direct fetch first (might work in some environments)
+        fetch(raw)
+          .then(res => {
+            if (!res.ok) {
+              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+            return res.json();
+          })
+          .then(data => {
+            if (data.cssVars && (data.cssVars.light || data.cssVars.dark)) {
+              const baseName = data.name || "custom";
+              const themeTokens = data.cssVars.theme || {};
+              const created = {};
+              if (data.cssVars.light) {
+                const key = `${slugify(baseName)}-light`;
+                created[key] = { name: `${baseName} Light`, mode: "light", tokens: { ...themeTokens, ...data.cssVars.light } };
+              }
+              if (data.cssVars.dark) {
+                const key = `${slugify(baseName)}-dark`;
+                created[key] = { name: `${baseName} Dark`, mode: "dark", tokens: { ...themeTokens, ...data.cssVars.dark } };
+              }
+              const addCount = Object.keys(created).length;
+              if (customCount + addCount > 10) {
+                alert("Theme limit reached (max 10 custom themes). Delete some before adding new ones.");
+                return;
+              }
+              Object.entries(created).forEach(([k, v]) => addCustomTheme(k, v));
+              const preferred = previewMode === "dark" ? `${slugify(baseName)}-dark` : `${slugify(baseName)}-light`;
+              setThemeKey(created[preferred] ? preferred : Object.keys(created)[0]);
+              setOpen(false);
+              setText("");
+              if (fileInputRef.current) fileInputRef.current.value = "";
+            } else {
+              throw new Error("Invalid theme format - missing cssVars.light or cssVars.dark");
+            }
+          })
+          .catch(err => {
+            if (err.message.includes('CORS') || err.message.includes('fetch')) {
+              alert(`CORS error: Open ${raw} in a new tab, copy the JSON content, and paste it here instead.`);
+            } else {
+              alert(`Failed to fetch theme: ${err.message}`);
+            }
+          });
+        return;
+      }
+
       // If input looks like CSS from tweakcn
       const looksCss =
         raw.startsWith(":root") ||
@@ -69,12 +133,12 @@ export function ThemeSwitcher({ className }) {
         const created = createThemesFromCss(baseName, raw, true);
         const keys = Object.keys(created);
         if (keys.length === 0) throw new Error("No CSS variables found.");
+        if (customCount + keys.length > 10) {
+          alert("Theme limit reached (max 10 custom themes). Delete some before adding new ones.");
+          return;
+        }
         keys.forEach((k) => addCustomTheme(k, created[k]));
-        // Pick preferred mode based on system
-        const preferred =
-          previewMode === "dark"
-            ? `${slugify(baseName)}-dark`
-            : `${slugify(baseName)}-light`;
+        const preferred = previewMode === "dark" ? `${slugify(baseName)}-dark` : `${slugify(baseName)}-light`;
         if (created[preferred]) setThemeKey(preferred);
         setOpen(false);
         setText("");
@@ -86,27 +150,18 @@ export function ThemeSwitcher({ className }) {
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object") throw new Error("Invalid JSON");
 
-      // Accept two formats:
-      // 1) { name, mode, tokens }
-      // 2) shadcn registry-like { cssVars: { light: {...}, dark: {...} } }
-      if ("name" in parsed && "mode" in parsed && "tokens" in parsed) {
-        const { name, mode, tokens } = parsed;
-        if (!name || !tokens || (mode !== "light" && mode !== "dark")) {
-          throw new Error("Theme must include: name (string), mode ('light'|'dark'), tokens (object)");
-        }
-        const key = slugify(name);
-        addCustomTheme(key, { name, mode, tokens });
-        setThemeKey(key);
-      } else if (parsed.cssVars && (parsed.cssVars.light || parsed.cssVars.dark)) {
+      // Accept tweakcn registry format
+      if (parsed.cssVars && (parsed.cssVars.light || parsed.cssVars.dark)) {
         const baseName = parsed.name || "custom";
         const created = {};
+        const themeTokens = parsed.cssVars.theme || {};
         if (parsed.cssVars.light) {
           const key = `${slugify(baseName)}-light`;
-          created[key] = { name: `${baseName} Light`, mode: "light", tokens: parsed.cssVars.light };
+          created[key] = { name: `${baseName} Light`, mode: "light", tokens: { ...themeTokens, ...parsed.cssVars.light } };
         }
         if (parsed.cssVars.dark) {
           const key = `${slugify(baseName)}-dark`;
-          created[key] = { name: `${baseName} Dark`, mode: "dark", tokens: parsed.cssVars.dark };
+          created[key] = { name: `${baseName} Dark`, mode: "dark", tokens: { ...themeTokens, ...parsed.cssVars.dark } };
         }
         const addCount = Object.keys(created).length;
         if (addCount === 0) throw new Error("No tokens found in cssVars.");
@@ -115,13 +170,22 @@ export function ThemeSwitcher({ className }) {
           return;
         }
         Object.entries(created).forEach(([k, v]) => addCustomTheme(k, v));
-        const preferred =
-          previewMode === "dark"
-            ? `${slugify(baseName)}-dark`
-            : `${slugify(baseName)}-light`;
+        const preferred = previewMode === "dark" ? `${slugify(baseName)}-dark` : `${slugify(baseName)}-light`;
         setThemeKey(created[preferred] ? preferred : Object.keys(created)[0]);
+      } else if ("name" in parsed && "mode" in parsed && "tokens" in parsed) {
+        const { name, mode, tokens } = parsed;
+        if (!name || !tokens || (mode !== "light" && mode !== "dark")) {
+          throw new Error("Theme must include: name (string), mode ('light'|'dark'), tokens (object)");
+        }
+        if (customCount >= 10) {
+          alert("Theme limit reached (max 10 custom themes). Delete some before adding new ones.");
+          return;
+        }
+        const key = slugify(name);
+        addCustomTheme(key, { name, mode, tokens });
+        setThemeKey(key);
       } else {
-        throw new Error("Unsupported JSON format. Provide {name,mode,tokens} or shadcn registry-like cssVars.");
+        throw new Error("Unsupported JSON format. Provide tweakcn registry format or {name,mode,tokens}.");
       }
 
       setOpen(false);
@@ -134,6 +198,14 @@ export function ThemeSwitcher({ className }) {
 
   return (
     <div className={cn("relative flex items-center gap-2 shrink-0 min-w-0", className)}>
+      <button
+        type="button"
+        onClick={toggleSiteMode}
+        className="rounded border px-2 py-1 text-xs hover:bg-accent cursor-pointer"
+        title={`Switch to ${siteMode === 'dark' ? 'light' : 'dark'} mode`}
+      >
+        {siteMode === 'dark' ? '🌙 Dark' : '☀️ Light'}
+      </button>
       <Select
         value={themeKey || "system-auto"}
         onValueChange={(val) => {
@@ -157,8 +229,9 @@ export function ThemeSwitcher({ className }) {
                       <button
                         type="button"
                         className="text-xs rounded border px-1.5 py-0.5 hover:bg-destructive/10 cursor-pointer"
-                        onClick={(e) => {
+                        onMouseDown={(e) => {
                           e.stopPropagation();
+                          e.preventDefault();
                           if ((themeKey || "system-auto") === key) {
                             setThemeKey("system-auto");
                           }
@@ -217,10 +290,10 @@ export function ThemeSwitcher({ className }) {
               </div>
               <div className="space-y-3 p-4">
                 <p className="text-sm text-muted-foreground">
-                  Paste a JSON theme or the CSS variables from tweakcn, or pick a file below.
+                  Paste a tweakcn URL (https://tweakcn.com/r/themes/name.json), JSON theme, or CSS variables, or pick a file below. If CORS blocks the URL, open it in a new tab and paste the JSON content directly.
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Import tips: choose “Preview as” Dark or Light below. The chosen side is used for preview and which side opens by default after Save. Default is Dark.
+                  Import tips: choose "Preview as" Dark or Light below. The chosen side is used for preview and which side opens by default after Save. Default is Dark. Both Light and Dark variants are always imported when available.
                 </p>
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="text-muted-foreground">Preview as:</span>
@@ -277,7 +350,7 @@ export function ThemeSwitcher({ className }) {
                 spellCheck="false"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="Paste JSON theme or CSS vars (:root { ... } .dark { ... })"
+                placeholder="Paste tweakcn URL, JSON theme, or CSS vars (:root { ... } .dark { ... })"
                 className="min-h-40 w-full rounded-md border bg-background p-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
             </div>
@@ -328,15 +401,16 @@ export function ThemeSwitcher({ className }) {
                         }
                         if (parsed.cssVars && (parsed.cssVars.light || parsed.cssVars.dark)) {
                           const baseName = parsed.name || "Preview";
+                          const themeTokens = parsed.cssVars.theme || {};
                           const created = {};
                           if (parsed.cssVars.light) {
                             created[`${slugify(baseName)}-light`] = {
-                              name: `${baseName} Light`, mode: "light", tokens: parsed.cssVars.light
+                              name: `${baseName} Light`, mode: "light", tokens: { ...themeTokens, ...parsed.cssVars.light }
                             };
                           }
                           if (parsed.cssVars.dark) {
                             created[`${slugify(baseName)}-dark`] = {
-                              name: `${baseName} Dark`, mode: "dark", tokens: parsed.cssVars.dark
+                              name: `${baseName} Dark`, mode: "dark", tokens: { ...themeTokens, ...parsed.cssVars.dark }
                             };
                           }
                           const preferred =
