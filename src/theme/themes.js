@@ -46,7 +46,7 @@ export const presetThemes = buildPresetThemes();
 
 // Apply theme with specific mode
 export function applyTheme(theme, mode = null) {
-  if (!theme) return;
+  if (!theme || typeof window === "undefined" || !document?.documentElement) return;
   const root = document.documentElement;
 
   // Determine which mode to use
@@ -69,6 +69,7 @@ export function applyTheme(theme, mode = null) {
 
 // Load custom themes saved in localStorage
 export function loadCustomThemes() {
+  if (typeof window === "undefined") return {};
   try {
     const raw = localStorage.getItem(CUSTOM_THEMES_STORAGE_KEY);
     if (!raw) return {};
@@ -80,6 +81,7 @@ export function loadCustomThemes() {
 }
 
 export function saveCustomThemes(customThemes) {
+  if (typeof window === "undefined") return;
   try {
     localStorage.setItem(CUSTOM_THEMES_STORAGE_KEY, JSON.stringify(customThemes));
   } catch {
@@ -94,10 +96,12 @@ export function getAllThemes() {
 
 export function getStoredThemeKey() {
   // return null if not set to allow system preference default via ThemeProvider (system-auto)
+  if (typeof window === "undefined") return null;
   return localStorage.getItem(THEME_STORAGE_KEY) || null;
 }
 
 export function setStoredThemeKey(key) {
+  if (typeof window === "undefined") return;
   try {
     localStorage.setItem(THEME_STORAGE_KEY, key);
   } catch {

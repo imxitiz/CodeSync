@@ -29,6 +29,7 @@ export function ThemeProvider({ children }) {
   const stored = getStoredThemeKey();
   const [themeKey, setThemeKeyState] = useState(stored || "system-auto");
   const [currentMode, setCurrentMode] = useState(() => {
+    if (typeof window === "undefined") return "auto";
     const storedMode = localStorage.getItem("codesync.themeMode");
     return storedMode || "auto";
   });
@@ -83,7 +84,9 @@ export function ThemeProvider({ children }) {
 
   const updateCurrentMode = (mode) => {
     setCurrentMode(mode);
-    localStorage.setItem("codesync.themeMode", mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("codesync.themeMode", mode);
+    }
   };
 
   // Allow adding/removing custom themes

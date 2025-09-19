@@ -13,6 +13,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,jpg,jpeg}'],
+        // Exclude API routes and socket.io from caching
+        navigateFallbackDenylist: [/^\/api\/.*/, /^\/socket\.io\/.*/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\//,
@@ -49,6 +51,11 @@ export default defineConfig({
             options: {
               cacheName: 'static-resources',
             },
+          },
+          // Explicitly exclude API routes from any caching
+          {
+            urlPattern: /^.*\/api\/.*$/,
+            handler: 'NetworkOnly',
           },
         ],
         // Skip waiting and claim clients immediately

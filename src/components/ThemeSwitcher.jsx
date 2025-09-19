@@ -31,7 +31,10 @@ export function ThemeSwitcher({ className }) {
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [prevThemeKey, setPrevThemeKey] = useState(themeKey);
   const [previewMode, setPreviewMode] = useState("dark"); // 'dark' | 'light' for preview/import default
-  const [siteMode, setSiteMode] = useState(() => document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+  const [siteMode, setSiteMode] = useState(() => {
+    if (typeof window === "undefined" || !document?.documentElement) return 'light';
+    return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+  });
   const [selectOpen, setSelectOpen] = useState(false); // Track if select dropdown is open
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
@@ -96,7 +99,7 @@ export function ThemeSwitcher({ className }) {
   const canSwitchModes = availableModes.length > 1;
 
   useEffect(() => {
-    if (isDragging) {
+    if (isDragging && typeof window !== "undefined" && document) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       document.addEventListener('touchmove', handleTouchMove);
@@ -113,6 +116,8 @@ export function ThemeSwitcher({ className }) {
 
   // Sync siteMode with actual class
   useEffect(() => {
+    if (typeof window === "undefined" || !document?.documentElement) return;
+    
     const observer = new MutationObserver(() => {
       setSiteMode(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
     });
@@ -121,6 +126,8 @@ export function ThemeSwitcher({ className }) {
   }, []);
 
   const toggleSiteMode = () => {
+    if (typeof window === "undefined" || !document?.documentElement) return;
+    
     const root = document.documentElement;
     root.classList.toggle('dark');
     setSiteMode(root.classList.contains('dark') ? 'dark' : 'light');
