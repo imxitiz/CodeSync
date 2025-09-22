@@ -13,8 +13,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       workbox: {
         globPatterns: [
-          "**/*.{js,css,ico,png,svg,webp,jpg,jpeg}",
-          "assets/**/*.{js,css,woff2,woff,ttf}",
+          "**/*.{js,ts,tsx,css,ico,png,svg,webp,jpg,jpeg}",
+          "assets/**/*.{js,ts,tsx,css,woff2,woff,ttf}",
           // Specifically handle HTML with version hash
           "index.html",
         ],

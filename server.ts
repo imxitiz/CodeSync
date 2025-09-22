@@ -3,8 +3,10 @@ import path, { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express from "express";
+import type { Request, Response } from "express";
 import { Server } from "socket.io";
-import { ACTIONS } from "./action.js";
+import type { Socket } from "socket.io";
+import { ACTIONS } from "./src/utils/constants";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,7 +14,7 @@ const __dirname = dirname(__filename);
 const app = express();
 const server = http.createServer(app);
 const TRAILING_SLASH_REGEX = /\/$/;
-const normalize = (origin) => origin.replace(TRAILING_SLASH_REGEX, "");
+const normalize = (origin: string) => origin.replace(TRAILING_SLASH_REGEX, "");
 
 const defaultOrigins = [
   "http://localhost:5173",
@@ -35,7 +37,7 @@ const allowedOrigins = new Set(
 const ROOM_CLEANUP_DELAY_MS = 500;
 
 // allow requests with no origin (like mobile apps, curl, or server-to-server)
-const corsOrigin = (origin, callback) => {
+const corsOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
   if (!origin) {
     return callback(null, true);
   }
@@ -64,7 +66,7 @@ app.use(
 );
 
 // Health check endpoint to wake up server
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", (_req: Request, res: Response) => {
   res.json({
     status: "ok",
     message: "Server is healthy",
@@ -73,7 +75,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 // API endpoint for general server info (optional)
-app.get("/api/info", (_req, res) => {
+app.get("/api/info", (_req: Request, res: Response) => {
   res.json({
     name: "CodeSync Server",
     version: "1.0.0",
@@ -82,21 +84,21 @@ app.get("/api/info", (_req, res) => {
   });
 });
 
-const userSocketMap = new Map();
-const roomCreatorMap = new Map();
+const userSocketMap = new Map<string, string>();
+const roomCreatorMap = new Map<string, string>();
 
-const getAllconnectedClients = (roomId) =>
-  [...io.sockets.adapter.rooms.get(roomId)].map((socketId) => ({
+const getAllconnectedClients = (roomId: string) =>
+  [...(io.sockets.adapter.rooms.get(roomId) || [])].map((socketId) => ({
     socketId,
     username: userSocketMap.get(socketId),
   }));
 
-io.on("connection", (socket) => {
-  socket.on(ACTIONS.JOIN, ({ roomId, userName }) => {
+io.on("connection", (socket: Socket) => {
+  socket.on(ACTIONS.JOIN, ({ roomId, userName }: { roomId: string; userName: string }) => {
     userSocketMap.set(socket.id, userName);
 
     socket.join(roomId);
-    let roomCreator = null;
+    let roomCreator: string | undefined;
     if (roomCreatorMap.has(roomId)) {
       roomCreator = roomCreatorMap.get(roomId);
     } else {
@@ -129,15 +131,26 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code, currenteditor }) => {
+  socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code, currenteditor }: {
+    roomId: string;
+    code: string;
+    currenteditor: string;
+  }) => {
     socket.in(roomId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor });
   });
 
-  socket.on(ACTIONS.SYNC_CODE, ({ socketId, code, currenteditor }) => {
+  socket.on(ACTIONS.SYNC_CODE, ({ socketId, code, currenteditor }: {
+    socketId: string;
+    code: string;
+    currenteditor: string;
+  }) => {
     io.to(socketId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor });
   });
 
-  socket.on(ACTIONS.SET_CURRENT_EDITOR, ({ roomId, currenteditor }) => {
+  socket.on(ACTIONS.SET_CURRENT_EDITOR, ({ roomId, currenteditor }: {
+    roomId: string;
+    currenteditor: string;
+  }) => {
     socket.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
   });
 
@@ -157,20 +170,23 @@ io.on("connection", (socket) => {
       }, ROOM_CLEANUP_DELAY_MS);
     }
     userSocketMap.delete(socket.id);
-    socket.leave();
+    // socket.leave() doesn't take arguments in Socket.IO v4
   });
 });
 
 app.use(express.static("dist"));
 
 // Catch-all handler: send back index.html for non-API routes
-app.get("*", (req, res) => {
+app.get("*", (req: Request, res: Response) => {
   // Ensure API routes are not handled by this catch-all
   if (req.path.startsWith("/api/")) {
-    return res.status(404).json({ error: "API endpoint not found" });
+    res.status(404).json({ error: "API endpoint not found" });
+    return;
   }
   res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
 const PORT = 3000;
-server.listen(PORT, "0.0.0.0", () => {});
+server.listen(PORT, "0.0.0.0", () => {
+  // Server started successfully
+});

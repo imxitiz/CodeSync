@@ -1,4 +1,4 @@
-export const ACTIONS: Record<string, string> = {
+export const ACTIONS = {
   JOIN: "join",
   JOINED: "joined",
   DISCONNECTED: "disconnected",
@@ -9,6 +9,8 @@ export const ACTIONS: Record<string, string> = {
   clear_current_editor: "clear_current_editor",
   DUPLICATE_USER: "duplicate-user",
 } as const;
+
+export type ACTIONS = typeof ACTIONS[keyof typeof ACTIONS];
 
 export const BACKEND_API_URL: string =
   import.meta.env.VITE_BACKEND_API_URL || "http://localhost:3000";

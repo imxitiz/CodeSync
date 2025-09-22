@@ -1,4 +1,4 @@
-import { lazy, StrictMode, Suspense } from "react";
+import { lazy, StrictMode, Suspense, ReactNode } from "react";
 import { createRoot as createReactRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ClientOnly, ViteReactSSG } from "vite-react-ssg";
@@ -7,7 +7,14 @@ import HomePageModern from "@/pages/HomePageModern/HomePageModern.jsx";
 import {
   detectAndHandleServiceWorkerCache,
   setupHydrationErrorRecovery,
-} from "@/utils/swDetection.ts";
+} from "@/utils/swDetection";
+
+// Extend Window interface for custom properties
+declare global {
+  interface Window {
+    __SW_CACHE_LOAD__?: boolean;
+  }
+}
 
 // Setup error recovery immediately
 setupHydrationErrorRecovery();
@@ -52,7 +59,7 @@ function ClientApp() {
 // Enhanced initialization logic with multiple fallback strategies
 function initializeApp() {
   try {
-    const shouldForceClientRender = () => {
+    const shouldForceClientRender = (): boolean => {
       // Strategy 1: Check if we're loading from service worker cache
       const isFromSwCache = detectAndHandleServiceWorkerCache();
 
@@ -61,13 +68,16 @@ function initializeApp() {
         typeof window !== "undefined" &&
         (window.__SW_CACHE_LOAD__ ||
           (window.performance &&
-            window.performance.getEntriesByType("navigation")[0]
-              ?.transferSize === 0));
+            (
+              window.performance.getEntriesByType(
+                "navigation"
+              )[0] as PerformanceNavigationTiming
+            )?.transferSize === 0));
 
       return isFromSwCache || hasHydrationIssues;
     };
 
-    const forceClientRender = () => {
+    const forceClientRender = (): void => {
       const container = document.getElementById("root");
       if (container) {
         // Strategy 1: Clear and re-render
@@ -85,13 +95,13 @@ function initializeApp() {
         } catch (_renderError) {
           // Strategy 3: Fallback - reload page without cache
           setTimeout(() => {
-            window.location.reload(true);
+            window.location.replace(window.location.href);
           }, 100);
         }
       }
     };
 
-    const setupClientRender = () => {
+    const setupClientRender = (): void => {
       if (typeof document !== "undefined") {
         if (document.readyState === "loading") {
           document.addEventListener("DOMContentLoaded", forceClientRender);
@@ -105,15 +115,19 @@ function initializeApp() {
     const createSsgApp = () => {
       return ViteReactSSG({
         routes,
-        wrapper: ({ children }) => <StrictMode>{children}</StrictMode>,
-        onError: (_error) => {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <StrictMode>{children}</StrictMode>
+        ),
+        onError: (_error: unknown) => {
           // On SSG error, fall back to client-side rendering
           setTimeout(() => {
-            window.__SW_CACHE_LOAD__ = true; // Mark for client render
-            window.location.reload();
+            (
+              window as Window & { __SW_CACHE_LOAD__?: boolean }
+            ).__SW_CACHE_LOAD__ = true; // Mark for client render
+            window.location.replace(window.location.href);
           }, 100);
         },
-      });
+      } as any);
     };
 
     if (shouldForceClientRender()) {
@@ -125,7 +139,7 @@ function initializeApp() {
     return createSsgApp();
   } catch (_error) {
     // Ultimate fallback - force client-side rendering
-    const ultimateFallback = () => {
+    const ultimateFallback = (): void => {
       if (typeof document !== "undefined" && typeof window !== "undefined") {
         const container = document.getElementById("root");
         if (container) {
