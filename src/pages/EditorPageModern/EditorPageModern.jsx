@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import Avatar from "react-avatar";
+import toast from "react-hot-toast";
+import { FaCrown } from "react-icons/fa";
+import { FaRegCopy } from "react-icons/fa6";
+import { FiEdit2, FiLogOut } from "react-icons/fi";
+import { MdTextDecrease, MdTextIncrease } from "react-icons/md";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import AppShell from "@/components/AppShell.jsx";
 import ClientModern from "@/components/ClientModern.jsx";
 import EditorWrapper from "@/components/EditorWrapper.jsx";
-import { initSocket } from "@/utils/socket";
-import { ACTIONS } from "@/utils/constant";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
-import toast from "react-hot-toast";
-import { MdTextDecrease, MdTextIncrease } from "react-icons/md";
-import { FiLogOut, FiEdit2 } from "react-icons/fi";
-import { FaRegCopy } from "react-icons/fa6";
-import { FaCrown } from "react-icons/fa";
 import { Button } from "@/components/ui/button.jsx";
-import Avatar from "react-avatar";
+import { ACTIONS } from "@/utils/constant";
+import { initSocket } from "@/utils/socket";
 
 /**
  * EditorPageModern (Top-Bar + Editor canvas)
@@ -35,11 +35,10 @@ export default function EditorPageModern() {
   const userName = location.state?.userName || "User";
 
   // Track current dark mode based on document root class
-  const getIsDark = () =>
-    typeof document !== "undefined" &&
-    document.documentElement.classList.contains("dark");
+  const getIsDark = () => document?.documentElement.classList.contains("dark");
   const [isDark, setIsDark] = useState(getIsDark());
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: First load only
   useEffect(() => {
     const root = document.documentElement;
     const observer = new MutationObserver(() => {
@@ -51,7 +50,9 @@ export default function EditorPageModern() {
 
   // UI state
   const [serverStatus, setServerStatus] = useState("connecting"); // 'connecting', 'connected', 'disconnected'
-  const [connectionMessage, setConnectionMessage] = useState("Connecting to server...");
+  const [connectionMessage, setConnectionMessage] = useState(
+    "Connecting to server..."
+  );
   const [wrapLines, setWrapLines] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
   const [zen, setZen] = useState(false);
@@ -59,11 +60,19 @@ export default function EditorPageModern() {
   // Derived
   const isOwner = userName === roomCreator;
 
-  const sortedClients = useMemo(() => {
-    return [...(clients || [])].sort((a, b) =>
-      a.username === roomCreator ? -1 : b.username === roomCreator ? 1 : 0
-    );
-  }, [clients, roomCreator]);
+  const sortedClients = useMemo(
+    () =>
+      [...(clients || [])].sort((a, b) => {
+        if (a.username === roomCreator) {
+          return -1;
+        }
+        if (b.username === roomCreator) {
+          return 1;
+        }
+        return 0;
+      }),
+    [clients, roomCreator]
+  );
 
   const compactAvatars = useMemo(() => {
     const max = 5;
@@ -89,7 +98,9 @@ export default function EditorPageModern() {
 
   const copyCode = async () => {
     try {
-      if (!codeRef.current) return toast.error("No code to copy");
+      if (!codeRef.current) {
+        return toast.error("No code to copy");
+      }
       await navigator.clipboard.writeText(codeRef.current);
       toast.success("Code copied to clipboard");
     } catch {
@@ -106,8 +117,9 @@ export default function EditorPageModern() {
 
   const fontSizeChange = (change) => {
     const root = document.documentElement;
-    const currentSize = parseInt(
-      getComputedStyle(root).getPropertyValue("--editor-font-size") || 16
+    const currentSize = Number.parseInt(
+      getComputedStyle(root).getPropertyValue("--editor-font-size") || "16px",
+      10
     );
     const newSize = Math.max(8, Math.min(currentSize + change, 36));
     root.style.setProperty("--editor-font-size", `${newSize}px`);
@@ -122,7 +134,11 @@ export default function EditorPageModern() {
         currenteditor: "",
       });
     } else {
-      if (!isOwner) return toast.error("Only the room creator can change the editable state");
+      if (!isOwner) {
+        return toast.error(
+          "Only the room creator can change the editable state"
+        );
+      }
       setCurrentEditor(userName);
       toast.success("Editor is now editable");
       socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
@@ -147,6 +163,7 @@ export default function EditorPageModern() {
   }, [currentEditor]);
 
   // Socket init and events
+  // biome-ignore lint/correctness/useExhaustiveDependencies: First load only
   useEffect(() => {
     document.title = `${id} - CodeSync`;
 
@@ -176,23 +193,23 @@ export default function EditorPageModern() {
 
         socketRef.current.on(
           ACTIONS.JOINED,
-          ({ clients, username, socketId, roomcreator }) => {
-            setClients(clients);
+          ({ clients: joinedClients, username, socketId, roomcreator }) => {
+            setClients(joinedClients);
             setRoomCreator(roomcreator);
-            if (username === userName && roomcreator === username) {
-              if (
-                sessionStorage.getItem("admin") !== roomcreator &&
-                clients.length !== 1
-              ) {
-                toast.error(
-                  `${username} is already in the ${id} room.\nPlease try another UserName!`
-                );
-                navigate(`/`, {
-                  state: { id },
-                });
-              }
+            if (
+              username === userName &&
+              roomcreator === username &&
+              sessionStorage.getItem("admin") !== roomcreator &&
+              joinedClients.length !== 1
+            ) {
+              toast.error(
+                `${username} is already in the ${id} room.\nPlease try another UserName!`
+              );
+              navigate("/", {
+                state: { id },
+              });
             }
-            if (roomCreator === username || clients.length === 1) {
+            if (roomCreator === username || joinedClients.length === 1) {
               sessionStorage.setItem("admin", username);
             }
             if (username !== userName) {
@@ -212,27 +229,24 @@ export default function EditorPageModern() {
           toast.error(
             `${username} is already in the ${id} room.\nPlease try another UserName!`
           );
-          navigate(`/`, {
+          navigate("/", {
             state: { id },
           });
         });
 
-        socketRef.current.on(
-          ACTIONS.DISCONNECTED,
-          ({ socketId, username }) => {
-            toast.success(`${username} left the room`);
-            setClients((prev) =>
-              prev.filter((client) => client.socketId !== socketId)
-            );
-            if (currentEditor === username) {
-              setCurrentEditor("");
-              socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-                roomId: id,
-                currenteditor: "",
-              });
-            }
+        socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
+          toast.success(`${username} left the room`);
+          setClients((prev) =>
+            prev.filter((client) => client.socketId !== socketId)
+          );
+          if (currentEditor === username) {
+            setCurrentEditor("");
+            socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+              roomId: id,
+              currenteditor: "",
+            });
           }
-        );
+        });
 
         socketRef.current.on(
           ACTIONS.SET_CURRENT_EDITOR,
@@ -241,7 +255,9 @@ export default function EditorPageModern() {
               toast.success("You are now the editor");
             }
             if (currenteditor === "" && userName === roomCreator) {
-              toast.success(`${currentEditorRef.current} have released control`);
+              toast.success(
+                `${currentEditorRef.current} have released control`
+              );
             }
             setCurrentEditor(currenteditor);
             return () => {
@@ -249,10 +265,12 @@ export default function EditorPageModern() {
             };
           }
         );
-      } catch (error) {
+      } catch (_error) {
         setServerStatus("disconnected");
         setConnectionMessage("Failed to connect to server");
-        toast.error("Failed to connect to server. Please check your connection.");
+        toast.error(
+          "Failed to connect to server. Please check your connection."
+        );
         setTimeout(() => {
           navigate("/");
         }, 3000);
@@ -276,11 +294,11 @@ export default function EditorPageModern() {
   useEffect(() => {
     if (!location.state) {
       if (id) {
-        navigate(`/`, {
+        navigate("/", {
           state: { id },
         });
       } else {
-        navigate(`/`);
+        navigate("/");
       }
     }
   }, [location.state, id, navigate]);
@@ -348,23 +366,25 @@ export default function EditorPageModern() {
         <div className="flex h-full flex-col overflow-hidden">
           {/* Top bar (hidden in Zen) */}
           {!zen && (
-            <div className="sticky top-0 z-35 flex items-center justify-between gap-2 border-b bg-background/90 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/70 overflow-x-scroll">
+            <div className="sticky top-0 z-35 flex items-center justify-between gap-2 overflow-x-scroll border-b bg-background/90 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/70">
               {/* Left: room info */}
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">
+                <p className="truncate font-semibold text-sm">
                   Room:
-                  <span className="ms-2 inline-flex items-center rounded-md border bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+                  <span className="ms-2 inline-flex items-center rounded-md border bg-secondary px-2 py-0.5 font-medium text-secondary-foreground text-xs">
                     {id}
                   </span>
                 </p>
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                <p className="mt-0.5 truncate text-muted-foreground text-xs">
                   Welcome,
                   <span className="ms-1 inline-flex items-center rounded-md bg-accent px-1.5 py-0.5 text-[11px] text-accent-foreground">
                     {userName}
                   </span>
                   {serverStatus !== "connected" ? (
-                    <span className="ms-2 inline-flex items-center rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-200 border border-amber-500/40"
-                      aria-live="polite">
+                    <span
+                      aria-live="polite"
+                      className="ms-2 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-200"
+                    >
                       {connectionMessage}
                     </span>
                   ) : null}
@@ -378,27 +398,25 @@ export default function EditorPageModern() {
                     const crown = username === roomCreator;
                     const pencil = username === currentEditor;
                     return (
-                      <div key={socketId} className="relative">
+                      <div className="relative" key={socketId}>
                         <Avatar
-                          name={username}
-                          size={32}
-                          round="8px"
                           fgColor="#000"
+                          name={username}
+                          round="8px"
+                          size={32}
                         />
                         {crown ? (
                           <span
+                            className="-right-1.5 -top-1.5 pointer-events-none absolute inline-flex size-5 items-center justify-center rounded-full bg-amber-400 text-amber-950 shadow-sm ring-1 ring-border"
                             title="Owner"
-                            aria-label="Owner"
-                            className="pointer-events-none absolute -right-1.5 -top-1.5 inline-flex size-5 items-center justify-center rounded-full bg-amber-400 text-amber-950 ring-1 ring-border shadow-sm"
                           >
                             <FaCrown className="size-3.5" />
                           </span>
                         ) : null}
                         {pencil ? (
                           <span
+                            className="-left-1.5 -bottom-1.5 pointer-events-none absolute inline-flex size-5 items-center justify-center rounded-full bg-emerald-400 text-emerald-950 shadow-sm ring-1 ring-border"
                             title="Editor"
-                            aria-label="Editor"
-                            className="pointer-events-none absolute -left-1.5 -bottom-1.5 inline-flex size-5 items-center justify-center rounded-full bg-emerald-400 text-emerald-950 ring-1 ring-border shadow-sm"
                           >
                             <FiEdit2 className="size-3.5" />
                           </span>
@@ -408,11 +426,11 @@ export default function EditorPageModern() {
                   })}
                   {compactAvatars.extra > 0 && (
                     <button
-                      type="button"
-                      className="ms-1 rounded-md border bg-background px-2 py-1 text-xs text-foreground hover:bg-accent cursor-pointer"
-                      onClick={() => setShowParticipants(true)}
                       aria-label="Show all participants"
+                      className="ms-1 cursor-pointer rounded-md border bg-background px-2 py-1 text-foreground text-xs hover:bg-accent"
+                      onClick={() => setShowParticipants(true)}
                       title="Show all participants"
+                      type="button"
                     >
                       +{compactAvatars.extra}
                     </button>
@@ -423,58 +441,62 @@ export default function EditorPageModern() {
               {/* Right: tools */}
               <div className="flex items-center gap-1">
                 <Button
-                  size="sm"
-                  variant="outline"
-                  title="Increase editor text size"
                   onClick={() => fontSizeChange(2)}
+                  size="sm"
+                  title="Increase editor text size"
+                  variant="outline"
                 >
                   <MdTextIncrease />
                 </Button>
                 <Button
-                  size="sm"
-                  variant="outline"
-                  title="Decrease editor text size"
                   onClick={() => fontSizeChange(-2)}
+                  size="sm"
+                  title="Decrease editor text size"
+                  variant="outline"
                 >
                   <MdTextDecrease />
                 </Button>
 
                 <Button
-                  size="sm"
-                  variant={wrapLines ? "secondary" : "outline"}
-                  title="Toggle line wrap"
                   onClick={() => setWrapLines((v) => !v)}
+                  size="sm"
+                  title="Toggle line wrap"
+                  variant={wrapLines ? "secondary" : "outline"}
                 >
                   {wrapLines ? "Wrap: On" : "Wrap: Off"}
                 </Button>
 
                 <Button
-                  size="sm"
-                  variant="outline"
                   onClick={copyCode}
+                  size="sm"
                   title="Copy code"
+                  variant="outline"
                 >
-                  <FaRegCopy /> <span className="hidden sm:inline-block">Copy</span>
+                  <FaRegCopy />{" "}
+                  <span className="hidden sm:inline-block">Copy</span>
                 </Button>
 
                 <Button
-                  size="sm"
-                  variant="outline"
                   onClick={copyRoomId}
+                  size="sm"
                   title="Copy room id"
+                  variant="outline"
                 >
                   ID
                 </Button>
 
-                {((currentEditor === userName) || (isOwner && currentEditor !== "")) && (
+                {(currentEditor === userName ||
+                  (isOwner && currentEditor !== "")) && (
                   <Button
-                    size="sm"
-                    variant={currentEditor === userName ? "secondary" : "default"}
                     onClick={toggleEditable}
+                    size="sm"
                     title={
                       currentEditor === userName
                         ? "Release Control"
                         : "Take Control"
+                    }
+                    variant={
+                      currentEditor === userName ? "secondary" : "default"
                     }
                   >
                     {currentEditor === userName ? "Release" : "Take"}
@@ -482,41 +504,47 @@ export default function EditorPageModern() {
                 )}
 
                 <Button
-                  size="sm"
-                  variant="ghost"
-                  title="Toggle participants"
-                  onClick={() => setShowParticipants(true)}
                   className="hidden sm:inline-flex"
+                  onClick={() => setShowParticipants(true)}
+                  size="sm"
+                  title="Toggle participants"
+                  variant="ghost"
                 >
                   People
                 </Button>
 
                 <Button
-                  size="sm"
-                  variant={zen ? "secondary" : "outline"}
-                  title={zen ? "Exit Zen mode" : "Enter Zen mode"}
                   onClick={() => setZen((v) => !v)}
+                  size="sm"
+                  title={zen ? "Exit Zen mode" : "Enter Zen mode"}
+                  variant={zen ? "secondary" : "outline"}
                 >
                   {zen ? "Exit Zen" : "Zen"}
                 </Button>
 
-                <Button size="sm" variant="destructive" onClick={leaveRoom} title="Leave room">
-                  <FiLogOut /> <span className="hidden sm:inline-block">Leave</span>
+                <Button
+                  onClick={leaveRoom}
+                  size="sm"
+                  title="Leave room"
+                  variant="destructive"
+                >
+                  <FiLogOut />{" "}
+                  <span className="hidden sm:inline-block">Leave</span>
                 </Button>
               </div>
             </div>
           )}
 
           {/* Editor canvas (fills remaining height) */}
-          <section className="relative flex-1 min-h-0 overflow-hidden">
+          <section className="relative min-h-0 flex-1 overflow-hidden">
             {/* Exit Zen small control */}
             {zen && (
               <button
-                type="button"
-                onClick={() => setZen(false)}
-                className="absolute right-3 top-3 z-20 inline-flex items-center justify-center rounded-md border bg-background/90 px-2 py-1 text-xs shadow-sm backdrop-blur outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 cursor-pointer"
                 aria-label="Exit Zen mode"
+                className="absolute top-3 right-3 z-20 inline-flex cursor-pointer items-center justify-center rounded-md border bg-background/90 px-2 py-1 text-xs shadow-sm outline-none backdrop-blur focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                onClick={() => setZen(false)}
                 title="Exit Zen mode"
+                type="button"
               >
                 Exit Zen
               </button>
@@ -525,10 +553,10 @@ export default function EditorPageModern() {
             {/* Participants Panel (overlay) */}
             {showParticipants && (
               <div
-                role="dialog"
-                aria-modal="true"
                 aria-labelledby="participants-title"
+                aria-modal="true"
                 className="absolute inset-0 z-50 grid place-items-center p-3"
+                role="dialog"
               >
                 <div
                   className="absolute inset-0 bg-background/70 backdrop-blur-sm"
@@ -536,16 +564,23 @@ export default function EditorPageModern() {
                 />
                 <div className="relative z-10 w-full max-w-4xl rounded-lg border bg-card text-card-foreground shadow-lg">
                   <div className="flex items-center justify-between border-b px-4 py-3">
-                    <h2 id="participants-title" className="text-sm font-semibold">
+                    <h2
+                      className="font-semibold text-sm"
+                      id="participants-title"
+                    >
                       Participants ({sortedClients.length})
                     </h2>
                     <div className="flex items-center gap-2">
                       {isOwner && (
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-muted-foreground text-xs">
                           Tip: Click a user to grant editor
                         </span>
                       )}
-                      <Button size="sm" variant="ghost" onClick={() => setShowParticipants(false)}>
+                      <Button
+                        onClick={() => setShowParticipants(false)}
+                        size="sm"
+                        variant="ghost"
+                      >
                         Close
                       </Button>
                     </div>
@@ -554,30 +589,33 @@ export default function EditorPageModern() {
                     <div className="space-y-2">
                       {sortedClients.map(({ socketId, username }) => (
                         <div
+                          className={isOwner ? "cursor-pointer" : ""}
                           key={socketId}
                           onClick={
-                            isOwner ? () => handleGrantEditor(username) : undefined
+                            isOwner
+                              ? () => handleGrantEditor(username)
+                              : undefined
                           }
-                          className={isOwner ? "cursor-pointer" : ""}
-                          title={
-                            isOwner ? "Click to grant editor" : undefined
-                          }
+                          title={isOwner ? "Click to grant editor" : undefined}
                         >
                           <ClientModern
-                            username={username}
-                            roomcreator={roomCreator}
-                            currentEditor={currentEditor}
                             canGrantEdit={isOwner}
+                            currentEditor={currentEditor}
+                            roomcreator={roomCreator}
+                            username={username}
                           />
                         </div>
                       ))}
                     </div>
                   </div>
                   <div className="flex items-center justify-end gap-2 border-t px-4 py-3">
-                    <Button size="sm" variant="outline" onClick={copyRoomId}>
+                    <Button onClick={copyRoomId} size="sm" variant="outline">
                       Copy Room Id
                     </Button>
-                    <Button size="sm" onClick={() => setShowParticipants(false)}>
+                    <Button
+                      onClick={() => setShowParticipants(false)}
+                      size="sm"
+                    >
                       Done
                     </Button>
                   </div>
@@ -586,19 +624,21 @@ export default function EditorPageModern() {
             )}
 
             {/* Editor wrapper takes full available space */}
-            <div className={`editor-host h-full w-full ${wrapLines ? 'wrap-on' : 'no-wrap'}`}>
+            <div
+              className={`editor-host h-full w-full ${wrapLines ? "wrap-on" : "no-wrap"}`}
+            >
               <EditorWrapper
-                socketRef={socketRef}
-                roomId={id}
+                copyCode={copyCode}
+                currentEditor={currentEditor}
+                darkMode={isDark}
+                editable={userName === currentEditor || isOwner}
                 onCodeChange={(code) => {
                   codeRef.current = code;
                 }}
-                copyCode={copyCode}
-                editable={userName === currentEditor || isOwner}
-                currentEditor={currentEditor}
+                roomId={id}
                 setCurrentEditor={setCurrentEditor}
+                socketRef={socketRef}
                 wrap={wrapLines}
-                darkMode={isDark}
               />
             </div>
           </section>

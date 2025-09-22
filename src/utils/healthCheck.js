@@ -10,7 +10,7 @@ import { BACKEND_API_URL } from "./constant";
  * @param {number} timeout - Timeout in milliseconds (default: 10000)
  * @returns {Promise<boolean>} - True if server is healthy, false otherwise
  */
-export const checkServerHealth = async (timeout = 10000) => {
+export const checkServerHealth = async (timeout = 10_000) => {
   const backendUrl = BACKEND_API_URL;
   const healthUrl = `${backendUrl}/api/health`;
 
@@ -19,10 +19,10 @@ export const checkServerHealth = async (timeout = 10000) => {
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     const response = await fetch(healthUrl, {
-      method: 'GET',
+      method: "GET",
       signal: controller.signal,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     });
 
@@ -30,26 +30,26 @@ export const checkServerHealth = async (timeout = 10000) => {
 
     if (response.ok) {
       // Validate response is JSON and has our specific format
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
+      const contentType = response.headers.get("content-type");
+      if (!contentType?.includes("application/json")) {
         return false;
       }
 
       const data = await response.json();
 
       // Check for our specific response format
-      if (data &&
-        data.status === 'ok' &&
-        data.message === 'Server is healthy' &&
-        data.timestamp) {
+      if (
+        data &&
+        data.status === "ok" &&
+        data.message === "Server is healthy" &&
+        data.timestamp
+      ) {
         return true;
-      } else {
-        return false;
       }
-    } else {
       return false;
     }
-  } catch (error) {
+    return false;
+  } catch (_error) {
     return false;
   }
 };
@@ -67,8 +67,8 @@ export const waitForServerHealth = async (options = {}) => {
   const {
     maxRetries = 5,
     retryDelay = 2000,
-    timeout = 10000,
-    onRetry = null
+    timeout = 10_000,
+    onRetry = null,
   } = options;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -83,7 +83,7 @@ export const waitForServerHealth = async (options = {}) => {
     }
 
     if (attempt < maxRetries) {
-      await new Promise(resolve => setTimeout(resolve, retryDelay));
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
     }
   }
 
@@ -96,5 +96,5 @@ export const waitForServerHealth = async (options = {}) => {
  */
 export const wakeUpServer = () => {
   // Simple fire-and-forget request to wake up server
-  fetch(`${BACKEND_API_URL}/api/health`).catch(() => { });
+  fetch(`${BACKEND_API_URL}/api/health`).catch(() => {});
 };

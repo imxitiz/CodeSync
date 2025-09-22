@@ -1,23 +1,23 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import HomePage from './pages/HomePage/HomePage';
-import EditorPage from './pages/EditorPage/EditorPage';
-import { Toaster } from 'react-hot-toast';
-import { useEffect } from 'react';
+import { useEffect } from "react";
+import { Toaster } from "react-hot-toast";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import EditorPage from "./pages/EditorPage/EditorPage";
+import HomePage from "./pages/HomePage/HomePage";
 
 const router = createBrowserRouter([
   {
-    path: '/',
+    path: "/",
     element: <HomePage />,
   },
   {
-    path: 'editor/:id',
+    path: "editor/:id",
     element: <EditorPage />,
   },
 ]);
 
 function App() {
   useEffect(() => {
-    document.title = 'CodeSync';
+    document.title = "CodeSync";
   }, []);
 
   return (
@@ -29,14 +29,14 @@ function App() {
             success: {
               theme: {
                 colors: {
-                  primary: '#4aee88',
+                  primary: "#4aee88",
                 },
               },
             },
           }}
         />
       </div>
-      <RouterProvider router={router} future={{ v7_partialHydration: true }} />
+      <RouterProvider future={{ v7_partialHydration: true }} router={router} />
     </>
   );
 }
