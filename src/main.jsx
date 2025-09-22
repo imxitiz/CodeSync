@@ -7,7 +7,7 @@ import HomePageModern from "@/pages/HomePageModern/HomePageModern.jsx";
 import {
   detectAndHandleServiceWorkerCache,
   setupHydrationErrorRecovery,
-} from "@/utils/swDetection.js";
+} from "@/utils/swDetection.ts";
 
 // Setup error recovery immediately
 setupHydrationErrorRecovery();

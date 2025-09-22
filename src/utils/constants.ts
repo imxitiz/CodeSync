@@ -1,4 +1,4 @@
-export const ACTIONS = {
+export const ACTIONS: Record<string, string> = {
   JOIN: "join",
   JOINED: "joined",
   DISCONNECTED: "disconnected",
@@ -8,7 +8,7 @@ export const ACTIONS = {
   SET_CURRENT_EDITOR: "set_current_editor",
   clear_current_editor: "clear_current_editor",
   DUPLICATE_USER: "duplicate-user",
-};
+} as const;
 
-export const BACKEND_API_URL =
+export const BACKEND_API_URL: string =
   import.meta.env.VITE_BACKEND_API_URL || "http://localhost:3000";

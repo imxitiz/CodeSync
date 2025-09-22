@@ -3,14 +3,23 @@
  * This helps wake up sleeping servers (like on Render) before establishing socket connections
  */
 
-import { BACKEND_API_URL } from "./constant";
+import { BACKEND_API_URL } from "./constants";
+
+/**
+ * Health check response type
+ */
+type HealthResponse = {
+  status: string;
+  message: string;
+  timestamp: string;
+};
 
 /**
  * Check if the server is healthy and responding
- * @param {number} timeout - Timeout in milliseconds (default: 10000)
- * @returns {Promise<boolean>} - True if server is healthy, false otherwise
+ * @param timeout - Timeout in milliseconds (default: 10000)
+ * @returns Promise<boolean> - True if server is healthy, false otherwise
  */
-export const checkServerHealth = async (timeout = 10_000) => {
+export const checkServerHealth = async (timeout = 10_000): Promise<boolean> => {
   const backendUrl = BACKEND_API_URL;
   const healthUrl = `${backendUrl}/api/health`;
 
@@ -35,14 +44,18 @@ export const checkServerHealth = async (timeout = 10_000) => {
         return false;
       }
 
-      const data = await response.json();
+      const data: unknown = await response.json();
 
       // Check for our specific response format
       if (
         data &&
-        data.status === "ok" &&
-        data.message === "Server is healthy" &&
-        data.timestamp
+        typeof data === "object" &&
+        "status" in data &&
+        "message" in data &&
+        "timestamp" in data &&
+        (data as HealthResponse).status === "ok" &&
+        (data as HealthResponse).message === "Server is healthy" &&
+        (data as HealthResponse).timestamp
       ) {
         return true;
       }
@@ -55,20 +68,28 @@ export const checkServerHealth = async (timeout = 10_000) => {
 };
 
 /**
- * Wait for server to be healthy with retries
- * @param {Object} options - Configuration options
- * @param {number} options.maxRetries - Maximum number of retry attempts (default: 5)
- * @param {number} options.retryDelay - Delay between retries in milliseconds (default: 2000)
- * @param {number} options.timeout - Timeout for each health check (default: 10000)
- * @param {Function} options.onRetry - Callback called on each retry attempt
- * @returns {Promise<boolean>} - True if server becomes healthy, false if all retries exhausted
+ * Options for waitForServerHealth function
  */
-export const waitForServerHealth = async (options = {}) => {
+type WaitForHealthOptions = {
+  maxRetries?: number;
+  retryDelay?: number;
+  timeout?: number;
+  onRetry?: (attempt: number, maxRetries: number) => void;
+};
+
+/**
+ * Wait for server to be healthy with retries
+ * @param options - Configuration options
+ * @returns Promise<boolean> - True if server becomes healthy, false if all retries exhausted
+ */
+export const waitForServerHealth = async (
+  options: WaitForHealthOptions = {}
+): Promise<boolean> => {
   const {
     maxRetries = 5,
     retryDelay = 2000,
     timeout = 10_000,
-    onRetry = null,
+    onRetry,
   } = options;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -94,7 +115,7 @@ export const waitForServerHealth = async (options = {}) => {
  * Wake up server with a simple ping - useful for servers that sleep after inactivity
  * This is a fire-and-forget request to wake up the server
  */
-export const wakeUpServer = () => {
+export const wakeUpServer = (): void => {
   // Simple fire-and-forget request to wake up server
-  fetch(`${BACKEND_API_URL}/api/health`).catch(() => {});
+  fetch(`${BACKEND_API_URL}/api/health`).catch(() => { });
 };
