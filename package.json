@@ -8,10 +8,11 @@
     "dev": "npm run build && npm run server:prod",
     "build": "vite-react-ssg build",
     "build:ssg": "vite-react-ssg build",
-    "lint": "eslint .",
     "preview": "vite preview",
     "server": "nodemon server.js",
-    "server:prod": "node server.js"
+    "server:prod": "node server.js",
+    "check": "bunx ultracite@latest check",
+    "fix": "bunx ultracite@latest fix"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.2",
@@ -43,14 +44,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.4",
-    "@eslint/js": "^9.13.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
-    "eslint": "^9.13.0",
-    "eslint-plugin-react": "^7.37.2",
-    "eslint-plugin-react-hooks": "^5.0.0",
-    "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
     "nodemon": "^3.1.7",
     "tw-animate-css": "^1.3.8",

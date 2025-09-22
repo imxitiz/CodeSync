@@ -5,11 +5,13 @@ export const THEME_STORAGE_KEY = "codesync.theme";
 export const CUSTOM_THEMES_STORAGE_KEY = "codesync.customThemes";
 
 function slugify(name) {
-  return String(name || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64) || "custom";
+  return (
+    String(name || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64) || "custom"
+  );
 }
 
 // Build preset themes from files in ./presets
@@ -19,12 +21,13 @@ const presetModules = import.meta.glob("./presets/*.js", {
   import: "default",
 });
 
+const JS_FILE_REGEX = /\.js$/i;
 /**
  * Create a key for the theme using file name or theme name+mode.
  * Keeps "system" stable for the consolidated system theme.
  */
 function keyFromTheme(filePath, theme) {
-  const fileBase = filePath.split("/").pop().replace(/\.js$/, "");
+  const fileBase = filePath.split("/").pop().replace(JS_FILE_REGEX, "");
   if (fileBase === "system") {
     return "system";
   }
@@ -35,7 +38,9 @@ function keyFromTheme(filePath, theme) {
 function buildPresetThemes() {
   const out = {};
   for (const [path, theme] of Object.entries(presetModules)) {
-    if (!theme || typeof theme !== "object") continue;
+    if (!theme || typeof theme !== "object") {
+      continue;
+    }
     const k = keyFromTheme(path, theme);
     out[k] = theme;
   }
@@ -47,21 +52,27 @@ export const presetThemes = buildPresetThemes();
 // Apply theme with specific mode - enhanced for service worker compatibility
 export function applyTheme(theme, mode = null) {
   // Enhanced checks for service worker cached content
-  if (!theme) return;
-  if (typeof window === "undefined") return;
-  
+  if (!theme) {
+    return;
+  }
+  if (typeof window === "undefined") {
+    return;
+  }
+
   // Ensure DOM is ready and document is available
-  if (!document || !document.documentElement) {
+  if (!document?.documentElement) {
     // If document is not ready, try again after DOM loads
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => applyTheme(theme, mode));
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () =>
+        applyTheme(theme, mode)
+      );
       return;
     }
     // Last resort - wait for next tick
     setTimeout(() => applyTheme(theme, mode), 0);
     return;
   }
-  
+
   const root = document.documentElement;
 
   // Determine which mode to use
@@ -77,40 +88,50 @@ export function applyTheme(theme, mode = null) {
   // Get tokens for the active mode
   const tokens = theme.modes?.[activeMode] || theme.tokens || {};
 
-  Object.entries(tokens).forEach(([key, value]) => {
-    root.style.setProperty(`--${key}`, value);
-  });
+  for (const key of Object.keys(tokens)) {
+    root.style.setProperty(`--${key}`, tokens[key]);
+  }
 }
 
 // Load custom themes saved in localStorage
 export function loadCustomThemes() {
-  if (typeof window === "undefined") return {};
-  
+  if (typeof window === "undefined") {
+    return {};
+  }
+
   // Ensure localStorage is available (can be null in some SW contexts)
-  if (!window.localStorage) return {};
-  
+  if (!window.localStorage) {
+    return {};
+  }
+
   try {
     const raw = window.localStorage.getItem(CUSTOM_THEMES_STORAGE_KEY);
-    if (!raw) return {};
+    if (!raw) {
+      return {};
+    }
     const parsed = JSON.parse(raw);
     return typeof parsed === "object" && parsed ? parsed : {};
-  } catch (error) {
-    console.warn('Failed to load custom themes:', error);
+  } catch (_error) {
     return {};
   }
 }
 
 export function saveCustomThemes(customThemes) {
-  if (typeof window === "undefined") return;
-  
-  // Ensure localStorage is available
-  if (!window.localStorage) return;
-  
-  try {
-    window.localStorage.setItem(CUSTOM_THEMES_STORAGE_KEY, JSON.stringify(customThemes));
-  } catch (error) {
-    console.warn('Failed to save custom themes:', error);
+  if (typeof window === "undefined") {
+    return;
   }
+
+  // Ensure localStorage is available
+  if (!window.localStorage) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      CUSTOM_THEMES_STORAGE_KEY,
+      JSON.stringify(customThemes)
+    );
+  } catch (_error) {}
 }
 
 export function getAllThemes() {
@@ -120,40 +141,49 @@ export function getAllThemes() {
 
 export function getStoredThemeKey() {
   // return null if not set to allow system preference default via ThemeProvider (system-auto)
-  if (typeof window === "undefined") return null;
-  
+  if (typeof window === "undefined") {
+    return null;
+  }
+
   // Ensure localStorage is available
-  if (!window.localStorage) return null;
-  
+  if (!window.localStorage) {
+    return null;
+  }
+
   try {
     return window.localStorage.getItem(THEME_STORAGE_KEY) || null;
-  } catch (error) {
-    console.warn('Failed to get stored theme key:', error);
+  } catch (_error) {
     return null;
   }
 }
 
 export function setStoredThemeKey(key) {
-  if (typeof window === "undefined") return;
-  
+  if (typeof window === "undefined") {
+    return;
+  }
+
   // Ensure localStorage is available
-  if (!window.localStorage) return;
-  
+  if (!window.localStorage) {
+    return;
+  }
+
   try {
     if (key === null || key === "system-auto") {
       window.localStorage.removeItem(THEME_STORAGE_KEY);
     } else {
       window.localStorage.setItem(THEME_STORAGE_KEY, key);
     }
-  } catch (error) {
-    console.warn('Failed to set stored theme key:', error);
-  }
+  } catch (_error) {}
 }
 
 // Helpers for "System" mode
 export function getSystemMode() {
-  if (typeof window === "undefined" || !window.matchMedia) return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  if (typeof window === "undefined" || !window.matchMedia) {
+    return "light";
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 
 // Parse CSS variables exported from tweakcn (.css content)
@@ -169,7 +199,11 @@ export function parseCssVariables(cssText) {
     const vars = {};
     const re = /--([a-z0-9-]+)\s*:\s*([^;]+);/gi;
     let match;
-    while ((match = re.exec(block))) {
+    while (true) {
+      match = re.exec(block);
+      if (!match) {
+        break;
+      }
       vars[match[1]] = match[2].trim();
     }
     return vars;
@@ -187,8 +221,6 @@ export function parseCssVariables(cssText) {
 // Build single theme from tweakcn CSS string with both light and dark modes
 export function createThemeFromCss(baseName, cssText) {
   const { lightTokens, darkTokens } = parseCssVariables(cssText);
-  const safe = (s) =>
-    String(s || "custom").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
 
   const modes = {};
 
@@ -210,7 +242,7 @@ export function createThemeFromCss(baseName, cssText) {
   return {
     name: baseName,
     modes,
-    defaultMode: modes.dark ? "dark" : "light"
+    defaultMode: modes.dark ? "dark" : "light",
   };
 }
 
@@ -219,13 +251,16 @@ export function createThemesFromCss(baseName, cssText, includeDark = true) {
   const theme = createThemeFromCss(baseName, cssText);
   const themes = {};
   const safe = (s) =>
-    String(s || "custom").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+    String(s || "custom")
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
 
   if (theme.modes.light) {
     themes[`${safe(baseName)}-light`] = {
       name: `${baseName} Light`,
       mode: "light",
-      tokens: theme.modes.light
+      tokens: theme.modes.light,
     };
   }
 
@@ -233,7 +268,7 @@ export function createThemesFromCss(baseName, cssText, includeDark = true) {
     themes[`${safe(baseName)}-dark`] = {
       name: `${baseName} Dark`,
       mode: "dark",
-      tokens: theme.modes.dark
+      tokens: theme.modes.dark,
     };
   }
 

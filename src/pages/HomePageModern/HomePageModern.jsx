@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
-import AppShell from "@/components/AppShell.jsx";
-import { v4 as uuidv4 } from "uuid";
 import toast from "react-hot-toast";
 import { useLocation, useNavigate } from "react-router-dom";
-import { wakeUpServer, waitForServerHealth } from "@/utils/healthCheck";
+import { v4 as uuidv4 } from "uuid";
+import AppShell from "@/components/AppShell.jsx";
 import { Button } from "@/components/ui/button.jsx";
-import { Input } from "@/components/ui/input.jsx";
 import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
-  CardFooter,
 } from "@/components/ui/card.jsx";
+import { Input } from "@/components/ui/input.jsx";
+import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
 
 export default function HomePageModern() {
   const [roomId, setRoomId] = useState("");
@@ -26,7 +26,9 @@ export default function HomePageModern() {
 
   useEffect(() => {
     const id = location.state?.id || null;
-    if (id) setRoomId(id);
+    if (id) {
+      setRoomId(id);
+    }
     wakeUpServer();
   }, [location.state]);
 
@@ -42,7 +44,7 @@ export default function HomePageModern() {
   };
 
   const randomizeName = () => {
-    const n = "User" + Math.floor(Math.random() * 1000);
+    const n = `User${Math.floor(Math.random() * 1000)}`;
     setUserName(n);
   };
 
@@ -75,7 +77,7 @@ export default function HomePageModern() {
 
     let finalUserName = userName.trim();
     if (!finalUserName) {
-      finalUserName = "User" + Math.floor(Math.random() * 1000);
+      finalUserName = `User${Math.floor(Math.random() * 1000)}`;
       setUserName(finalUserName);
     }
 
@@ -111,25 +113,27 @@ export default function HomePageModern() {
   };
 
   const onKeyDown = (e) => {
-    if (e.key === "Enter") joinRoom(e);
+    if (e.key === "Enter") {
+      joinRoom(e);
+    }
   };
 
   return (
     <AppShell className="relative">
       <section className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-8 px-3 py-10 md:grid-cols-2 md:py-16">
         <div className="order-2 md:order-1">
-          <h1 className="text-balance bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-3xl font-semibold tracking-tight text-transparent sm:text-4xl md:text-5xl">
+          <h1 className="text-balance bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text font-semibold text-3xl text-transparent tracking-tight sm:text-4xl md:text-5xl">
             Collaborate in real-time.
             <br />
             Share code with one link.
           </h1>
-          <p className="mt-3 max-w-prose text-pretty text-sm text-muted-foreground sm:text-base">
+          <p className="mt-3 max-w-prose text-pretty text-muted-foreground text-sm sm:text-base">
             Create a room, share the link, and start collaborating instantly. No
             setup, just productive pairing with live presence and editor
             control. Fully themeable with light, dark, and custom palettes.
           </p>
 
-          <ul className="mt-5 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+          <ul className="mt-5 grid gap-2 text-muted-foreground text-sm sm:grid-cols-2">
             <li className="flex items-center gap-2">
               <span className="size-1.5 rounded-full bg-primary" />
               One-click join via link
@@ -159,73 +163,72 @@ export default function HomePageModern() {
             </CardHeader>
             <CardContent className="space-y-4">
               {serverStatusMessage && (
-                <div
-                  role="status"
-                  className="rounded-md border border-border bg-accent/40 px-3 py-2 text-sm"
-                >
+                <div className="rounded-md border border-border bg-accent/40 px-3 py-2 text-sm">
                   {serverStatusMessage}
                 </div>
               )}
 
               <div className="space-y-2">
-                <label htmlFor="room-id" className="text-sm font-medium">
+                <label className="font-medium text-sm" htmlFor="room-id">
                   Room ID
                 </label>
                 <div className="flex items-center gap-2">
                   <Input
+                    aria-describedby="room-help"
+                    aria-label="Room ID"
+                    autoCapitalize="off"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoFocus
+                    className="flex-1 cursor-text"
                     id="room-id"
-                    placeholder="Enter or paste room id"
-                    value={roomId}
+                    inputMode="text"
+                    maxLength={256}
                     onChange={handleRoomIdChange}
                     onKeyDown={onKeyDown}
-                    autoFocus
-                    aria-describedby="room-help"
-                    autoCapitalize="off"
-                    autoCorrect="off"
+                    placeholder="Enter or paste room id"
                     spellCheck="false"
-                    inputMode="text"
-                    autoComplete="off"
-                    aria-label="Room ID"
-                    className="flex-1 cursor-text"
-                    maxLength={256}
+                    value={roomId}
                   />
                   <Button
+                    className="cursor-pointer"
+                    onClick={pasteFromClipboard}
+                    size="sm"
+                    tabIndex={-1}
+                    title="Paste from clipboard"
                     type="button"
                     variant="outline"
-                    size="sm"
-                    onClick={pasteFromClipboard}
-                    title="Paste from clipboard"
-                    tabIndex={-1}
-                    className="cursor-pointer"
                   >
                     Paste
                   </Button>
                 </div>
-                <p id="room-help" className="sr-only">Tip: Press Ctrl/⌘+V to paste quickly.</p>
+                <p className="sr-only" id="room-help">
+                  Tip: Press Ctrl/⌘+V to paste quickly.
+                </p>
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="username" className="text-sm font-medium">
+                <label className="font-medium text-sm" htmlFor="username">
                   Your name
                 </label>
                 <div className="flex items-center gap-2">
                   <Input
-                    id="username"
-                    placeholder="e.g. Alex"
-                    value={userName}
-                    onChange={(e) => setUserName(e.target.value)}
-                    onKeyDown={onKeyDown}
                     aria-label="Your name"
                     className="flex-1"
+                    id="username"
                     maxLength={32}
+                    onChange={(e) => setUserName(e.target.value)}
+                    onKeyDown={onKeyDown}
+                    placeholder="e.g. Alex"
                     spellCheck="false"
+                    value={userName}
                   />
                   <Button
+                    onClick={randomizeName}
+                    size="sm"
+                    title="Generate a random name"
                     type="button"
                     variant="ghost"
-                    size="sm"
-                    onClick={randomizeName}
-                    title="Generate a random name"
                   >
                     Random
                   </Button>
@@ -234,21 +237,21 @@ export default function HomePageModern() {
             </CardContent>
             <CardFooter className="flex flex-col items-stretch gap-2">
               <Button
-                size="lg"
-                className="w-full"
-                onClick={joinRoom}
-                disabled={isCheckingServer}
                 aria-label="Join room"
+                className="w-full"
+                disabled={isCheckingServer}
+                onClick={joinRoom}
+                size="lg"
               >
                 {isCheckingServer ? "Connecting..." : "Join now"}
               </Button>
               <div className="flex items-center justify-center">
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  type="button"
                   onClick={createnewroom}
+                  size="sm"
                   title="Generate a new room ID"
+                  type="button"
+                  variant="ghost"
                 >
                   Create new room
                 </Button>
@@ -265,8 +268,8 @@ export default function HomePageModern() {
             <a
               className="underline underline-offset-2 hover:text-foreground"
               href="https://github.com/sachinthapa572"
-              target="_blank"
               rel="noreferrer"
+              target="_blank"
             >
               Sachin Thapa
             </a>
@@ -275,12 +278,12 @@ export default function HomePageModern() {
             ·
           </span>
           <span className="text-muted-foreground">
-            Maintainers: {" "}
+            Maintainers:{" "}
             <a
               className="underline underline-offset-2 hover:text-foreground"
               href="https://github.com/imxitiz"
-              target="_blank"
               rel="noreferrer"
+              target="_blank"
             >
               Kshitiz
             </a>

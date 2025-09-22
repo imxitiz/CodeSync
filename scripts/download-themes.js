@@ -12,15 +12,16 @@
  * node scripts/download-themes.js https://tweakcn.com/r/themes/twitter.json https://tweakcn.com/r/themes/darkmatter.json
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PRESETS_DIR = path.join(__dirname, '..', 'src', 'theme', 'presets');
+const PRESETS_DIR = path.join(__dirname, "..", "src", "theme", "presets");
 const themeNameRegex = /^[a-z0-9-]+$/i;
+const urlRegex = /^https?:\/\//i;
 
 // Ensure presets directory exists
 if (!fs.existsSync(PRESETS_DIR)) {
@@ -35,8 +36,8 @@ async function fetchTheme(url) {
     console.log(`Fetching: ${url}`);
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Theme-Downloader/1.0',
-        'Accept': 'application/json',
+        "User-Agent": "Theme-Downloader/1.0",
+        Accept: "application/json",
       },
     });
 
@@ -77,7 +78,7 @@ function generateThemeObject(data, baseName) {
   return {
     name: baseName,
     modes,
-    defaultMode: modes.dark ? "dark" : "light"
+    defaultMode: modes.dark ? "dark" : "light",
   };
 }
 
@@ -95,7 +96,7 @@ function saveTheme(themeObject, filename) {
   const filePath = path.join(PRESETS_DIR, filename);
   const content = generateFileContent(themeObject);
 
-  fs.writeFileSync(filePath, content, 'utf8');
+  fs.writeFileSync(filePath, content, "utf8");
   console.log(`✅ Saved: ${filePath}`);
 }
 
@@ -104,7 +105,7 @@ function saveTheme(themeObject, filename) {
  */
 function extractThemeName(data) {
   const match = data.name?.match(themeNameRegex);
-  return match ? match[0] : 'custom-theme';
+  return match ? match[0] : "custom-theme";
 }
 
 /**
@@ -114,10 +115,14 @@ async function main() {
   const urls = process.argv.slice(2);
 
   if (urls.length === 0) {
-    console.log('Usage: node scripts/download-themes.js [theme-names... | theme-urls...]');
-    console.log('Examples:');
-    console.log('  node scripts/download-themes.js twitter darkmatter');
-    console.log('  node scripts/download-themes.js https://tweakcn.com/r/themes/twitter.json https://example.com/my-theme.json');
+    console.log(
+      "Usage: node scripts/download-themes.js [theme-names... | theme-urls...]"
+    );
+    console.log("Examples:");
+    console.log("  node scripts/download-themes.js twitter darkmatter");
+    console.log(
+      "  node scripts/download-themes.js https://tweakcn.com/r/themes/twitter.json https://example.com/my-theme.json"
+    );
     process.exit(1);
   }
 
@@ -125,16 +130,17 @@ async function main() {
 
   for (const input of urls) {
     let url;
-
     // If input looks like a URL, use it as-is
-    if (/^https?:\/\//i.test(input)) {
+    if (urlRegex.test(input)) {
       url = input;
       console.log(`Using URL: ${url}`);
     } else {
       // Accept short theme name only (e.g. "twitter" -> https://tweakcn.com/r/themes/twitter.json)
       if (!themeNameRegex.test(input)) {
         console.error(`❌ Invalid theme name: ${input}`);
-        console.error('Theme names may only contain letters, numbers and hyphens, or provide a full URL starting with https://');
+        console.error(
+          "Theme names may only contain letters, numbers and hyphens, or provide a full URL starting with https://"
+        );
         continue;
       }
 
@@ -143,7 +149,9 @@ async function main() {
     }
 
     const data = await fetchTheme(url);
-    if (!data) continue;
+    if (!data) {
+      continue;
+    }
 
     const baseName = extractThemeName(data);
     const themeObject = generateThemeObject(data, baseName);
@@ -152,8 +160,8 @@ async function main() {
     saveTheme(themeObject, filename);
   }
 
-  console.log('\n🎉 All themes downloaded successfully!');
-  console.log('Restart your dev server to see the new presets.');
+  console.log("\n🎉 All themes downloaded successfully!");
+  console.log("Restart your dev server to see the new presets.");
 }
 
 // Run the script

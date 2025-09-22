@@ -1,23 +1,38 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   applyTheme,
   getAllThemes,
   getStoredThemeKey,
-  setStoredThemeKey,
-  saveCustomThemes,
-  loadCustomThemes,
   getSystemMode,
+  loadCustomThemes,
+  saveCustomThemes,
+  setStoredThemeKey,
 } from "./themes";
 
 // React Context for theme
 const ThemeContext = createContext({
   themeKey: "system-auto",
   currentMode: "auto",
-  setThemeKey: (_key) => {},
-  setCurrentMode: (_mode) => {},
+  setThemeKey: (_key) => {
+    // Default context function - should be overridden by provider
+  },
+  setCurrentMode: (_mode) => {
+    // Default context function - should be overridden by provider
+  },
   themes: {},
-  addCustomTheme: (_key, _theme) => {},
-  removeCustomTheme: (_key) => {},
+  addCustomTheme: (_key, _theme) => {
+    // Default context function - should be overridden by provider
+  },
+  removeCustomTheme: (_key) => {
+    // Default context function - should be overridden by provider
+  },
 });
 
 export function useTheme() {
@@ -30,9 +45,7 @@ export function ThemeProvider({ children }) {
     // Delay localStorage access until after mount for better SW compatibility
     return "system-auto";
   });
-  const [currentMode, setCurrentMode] = useState(() => {
-    return "auto";
-  });
+  const [currentMode, setCurrentMode] = useState(() => "auto");
   const [customThemes, setCustomThemes] = useState({});
   const [isInitialized, setIsInitialized] = useState(false);
   const mediaRef = useRef(null);
@@ -46,7 +59,7 @@ export function ThemeProvider({ children }) {
           setThemeKeyState(stored);
         }
 
-        if (typeof window !== "undefined" && window.localStorage) {
+        if (window?.localStorage) {
           const storedMode = window.localStorage.getItem("codesync.themeMode");
           if (storedMode && storedMode !== currentMode) {
             setCurrentMode(storedMode);
@@ -56,36 +69,35 @@ export function ThemeProvider({ children }) {
         const customThemesData = loadCustomThemes();
         setCustomThemes(customThemesData);
         setIsInitialized(true);
-      } catch (error) {
-        console.warn('Theme initialization failed:', error);
+      } catch (_error) {
+        // Ignore initialization errors for better SW compatibility
         setIsInitialized(true); // Continue with defaults
       }
     };
 
     const handleThemeReinit = () => {
-      console.log('Theme reinitialization requested');
       initializeTheme();
     };
 
     // Initialize immediately if DOM is ready, otherwise wait
     if (typeof window !== "undefined") {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeTheme);
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initializeTheme);
       } else {
         initializeTheme();
       }
-      
+
       // Listen for theme reinit events (from SW compatibility layer)
-      window.addEventListener('theme-reinit', handleThemeReinit);
+      window.addEventListener("theme-reinit", handleThemeReinit);
     }
 
     return () => {
       if (typeof window !== "undefined") {
-        document.removeEventListener?.('DOMContentLoaded', initializeTheme);
-        window.removeEventListener?.('theme-reinit', handleThemeReinit);
+        document.removeEventListener?.("DOMContentLoaded", initializeTheme);
+        window.removeEventListener?.("theme-reinit", handleThemeReinit);
       }
     };
-  }, []);
+  }, [currentMode, themeKey]);
 
   // Aggregate themes (preset + custom)
   const themes = useMemo(() => {
@@ -95,64 +107,82 @@ export function ThemeProvider({ children }) {
 
   // Apply theme whenever themeKey, currentMode, or themes change (only after initialization)
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized) {
+      return;
+    }
 
-    const apply = () => {
+    const getEffectiveMode = () =>
+      currentMode === "auto" ? getSystemMode() : currentMode;
+
+    const applyThemeForKey = () => {
       try {
         if (themeKey === "system-auto") {
-          const systemMode = getSystemMode();
-          const theme = themes["system"];
-          applyTheme(theme, currentMode === "auto" ? systemMode : currentMode);
+          const theme = themes.system;
+          applyTheme(theme, getEffectiveMode());
         } else {
           const theme = themes[themeKey];
           if (theme) {
             // For new format themes with modes
             if (theme.modes) {
-              const modeToUse = currentMode === "auto" ? getSystemMode() : currentMode;
-              applyTheme(theme, modeToUse);
+              applyTheme(theme, getEffectiveMode());
             } else {
               // Legacy format - use theme.mode
               applyTheme(theme);
             }
           }
         }
-      } catch (error) {
-        console.warn('Theme application failed:', error);
+      } catch (_error) {
+        // Ignore initialization errors for better SW compatibility
       }
     };
 
-    // Ensure DOM is ready before applying theme
-    if (typeof window !== "undefined") {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', apply);
-      } else {
-        // Use requestAnimationFrame for better timing with cached content
-        requestAnimationFrame(apply);
+    const setupDomReadyApplication = () => {
+      if (typeof window !== "undefined") {
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", applyThemeForKey);
+        } else {
+          // Use requestAnimationFrame for better timing with cached content
+          requestAnimationFrame(applyThemeForKey);
+        }
       }
-    }
+    };
 
-    // Manage media query listener for system-auto or auto mode
-    if ((themeKey === "system-auto" || currentMode === "auto") && typeof window !== "undefined" && window.matchMedia) {
-      try {
-        const mq = window.matchMedia("(prefers-color-scheme: dark)");
-        mediaRef.current = mq;
-        const onChange = () => {
-          requestAnimationFrame(apply);
-        };
-        mq.addEventListener?.("change", onChange);
-        return () => {
-          mq.removeEventListener?.("change", onChange);
-          document.removeEventListener?.('DOMContentLoaded', apply);
-        };
-      } catch (error) {
-        console.warn('Media query listener setup failed:', error);
+    const setupMediaQueryListener = () => {
+      if (
+        (themeKey === "system-auto" || currentMode === "auto") &&
+        typeof window !== "undefined" &&
+        window.matchMedia
+      ) {
+        try {
+          const mq = window.matchMedia("(prefers-color-scheme: dark)");
+          mediaRef.current = mq;
+          const onChange = () => {
+            requestAnimationFrame(applyThemeForKey);
+          };
+          mq.addEventListener?.("change", onChange);
+          return () => {
+            mq.removeEventListener?.("change", onChange);
+            document.removeEventListener?.(
+              "DOMContentLoaded",
+              applyThemeForKey
+            );
+          };
+        } catch (_error) {
+          // Ignore media query setup errors
+        }
       }
-    }
-    
+      return () => {
+        if (document?.removeEventListener) {
+          document.removeEventListener("DOMContentLoaded", applyThemeForKey);
+        }
+      };
+    };
+
+    setupDomReadyApplication();
+    const cleanupMediaQuery = setupMediaQueryListener();
+
     return () => {
-      if (typeof document !== "undefined" && document.removeEventListener) {
-        document.removeEventListener('DOMContentLoaded', apply);
-      }
+      cleanupMediaQuery();
     };
   }, [themeKey, currentMode, themes, isInitialized]);
 
@@ -164,11 +194,11 @@ export function ThemeProvider({ children }) {
 
   const updateCurrentMode = (mode) => {
     setCurrentMode(mode);
-    if (typeof window !== "undefined" && window.localStorage) {
+    if (window?.localStorage) {
       try {
         window.localStorage.setItem("codesync.themeMode", mode);
-      } catch (error) {
-        console.warn('Failed to save theme mode:', error);
+      } catch (_error) {
+        // Ignore localStorage errors
       }
     }
   };
@@ -185,10 +215,10 @@ export function ThemeProvider({ children }) {
   };
 
   const removeCustomTheme = (key) => {
-    const next = { ...customThemes };
-    delete next[key];
-    setCustomThemes(next);
-    saveCustomThemes(next);
+    const updatedThemes = { ...customThemes };
+    delete updatedThemes[key];
+    setCustomThemes(updatedThemes);
+    saveCustomThemes(updatedThemes);
   };
 
   return (
@@ -200,7 +230,7 @@ export function ThemeProvider({ children }) {
         setCurrentMode: updateCurrentMode,
         themes,
         addCustomTheme,
-        removeCustomTheme
+        removeCustomTheme,
       }}
     >
       {children}
