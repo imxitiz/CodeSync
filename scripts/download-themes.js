@@ -20,6 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PRESETS_DIR = path.join(__dirname, '..', 'src', 'theme', 'presets');
+const themeNameRegex = /^[a-z0-9-]+$/i;
 
 // Ensure presets directory exists
 if (!fs.existsSync(PRESETS_DIR)) {
@@ -101,9 +102,9 @@ function saveTheme(themeObject, filename) {
 /**
  * Extract theme name from URL
  */
-function extractThemeName(url) {
-  const match = url.match(/\/themes\/([^\/]+)\.json$/);
-  return match ? match[1] : 'custom-theme';
+function extractThemeName(data) {
+  const match = data.name?.match(themeNameRegex);
+  return match ? match[0] : 'custom-theme';
 }
 
 /**
@@ -131,7 +132,7 @@ async function main() {
       console.log(`Using URL: ${url}`);
     } else {
       // Accept short theme name only (e.g. "twitter" -> https://tweakcn.com/r/themes/twitter.json)
-      if (!/^[a-z0-9-]+$/i.test(input)) {
+      if (!themeNameRegex.test(input)) {
         console.error(`❌ Invalid theme name: ${input}`);
         console.error('Theme names may only contain letters, numbers and hyphens, or provide a full URL starting with https://');
         continue;
@@ -144,7 +145,7 @@ async function main() {
     const data = await fetchTheme(url);
     if (!data) continue;
 
-    const baseName = extractThemeName(url);
+    const baseName = extractThemeName(data);
     const themeObject = generateThemeObject(data, baseName);
     const filename = `${baseName}.js`;
 
