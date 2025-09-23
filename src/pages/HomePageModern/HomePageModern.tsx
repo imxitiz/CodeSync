@@ -3,7 +3,7 @@ import toast from "react-hot-toast";
 import { useLocation, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import AppShell from "@/components/AppShell";
-import { Button } from "@/components/ui/button.jsx";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -11,8 +11,8 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card.jsx";
-import { Input } from "@/components/ui/input.jsx";
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
 
 export default function HomePageModern() {
@@ -154,7 +154,7 @@ export default function HomePageModern() {
         </div>
 
         <div className="order-1 md:order-2">
-          <Card className="mx-auto w-full max-w-md border border-primary">
+          <Card className="mx-auto w-full max-w-md border border-primary drop-shadow-md drop-shadow-primary">
             <CardHeader>
               <CardTitle>Join a room</CardTitle>
               <CardDescription>

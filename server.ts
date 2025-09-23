@@ -1,16 +1,16 @@
 import http from "node:http";
 import path, { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import cors from "cors";
 import type { Request, Response } from "express";
 import express from "express";
 import type { Socket } from "socket.io";
 import { Server } from "socket.io";
-import { ACTIONS } from "./src/utils/constants.ts";
-import { pathToFileURL } from "node:url";
+import { ACTIONS } from "./action.js";
 
 // Use import.meta.url if available (ESM), otherwise use process.argv[1]
-const currentFile = import.meta.url || pathToFileURL(process.argv[1] || 'server.ts').href;
+const currentFile =
+  import.meta.url || pathToFileURL(process.argv[1] || "server.ts").href;
 const __filename = fileURLToPath(currentFile);
 const __dirname = dirname(__filename);
 

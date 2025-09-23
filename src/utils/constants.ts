@@ -2,17 +2,22 @@ export const ACTIONS = {
   JOIN: "join",
   JOINED: "joined",
   DISCONNECTED: "disconnected",
-  LEAVE: "leave",
   CODE_CHANGE: "code-change",
   SYNC_CODE: "sync-code",
+  LEAVE: "leave",
+  USER_JOINED: "user-joined",
+  USER_LEFT: "user-left",
+  CHANGE_EDITOR: "change-editor",
+  EDITOR_CHANGED: "editor-changed",
+  GRANT_EDIT: "grant-edit",
+  EDIT_GRANTED: "edit-granted",
+  REVOKE_EDIT: "revoke-edit",
+  EDIT_REVOKED: "edit-revoked",
   SET_CURRENT_EDITOR: "set_current_editor",
-  clear_current_editor: "clear_current_editor",
   DUPLICATE_USER: "duplicate-user",
 } as const;
 
 export type ACTIONS = (typeof ACTIONS)[keyof typeof ACTIONS];
 
 export const BACKEND_API_URL: string =
-  process?.env.VITE_BACKEND_API_URL
-    ? process.env.VITE_BACKEND_API_URL
-    : "http://localhost:3000";
+  import.meta.env.VITE_BACKEND_API_URL || "http://localhost:3000";

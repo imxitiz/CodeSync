@@ -21,16 +21,6 @@
     "noImplicitOverride": true,
     "noImplicitReturns": true
   },
-  "include": [
-    "server.ts",
-    "action.ts",
-    "src/utils/constants.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "build",
-    "src/**/*",
-    "scripts/**/*"
-  ]
+  "include": ["server.ts", "action.ts", "src/utils/constants.ts"],
+  "exclude": ["node_modules", "dist", "build", "src/**/*", "scripts/**/*"]
 }
