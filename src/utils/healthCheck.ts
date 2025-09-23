@@ -117,5 +117,5 @@ export const waitForServerHealth = async (
  */
 export const wakeUpServer = (): void => {
   // Simple fire-and-forget request to wake up server
-  fetch(`${BACKEND_API_URL}/api/health`).catch(() => { });
+  fetch(`${BACKEND_API_URL}/api/health`).catch(() => {});
 };

@@ -10,7 +10,9 @@ export const ACTIONS = {
   DUPLICATE_USER: "duplicate-user",
 } as const;
 
-export type ACTIONS = typeof ACTIONS[keyof typeof ACTIONS];
+export type ACTIONS = (typeof ACTIONS)[keyof typeof ACTIONS];
 
 export const BACKEND_API_URL: string =
-  import.meta.env.VITE_BACKEND_API_URL || "http://localhost:3000";
+  process?.env.VITE_BACKEND_API_URL
+    ? process.env.VITE_BACKEND_API_URL
+    : "http://localhost:3000";

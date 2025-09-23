@@ -1,5 +1,5 @@
-import { io } from "socket.io-client";
 import type { Socket } from "socket.io-client";
+import { io } from "socket.io-client";
 import { BACKEND_API_URL } from "./constants";
 
 export const initSocket = (): Socket => {

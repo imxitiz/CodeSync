@@ -1,5 +1,6 @@
 import {
   createContext,
+  type ReactNode,
   useContext,
   useEffect,
   useMemo,
@@ -16,39 +17,80 @@ import {
   setStoredThemeKey,
 } from "./themes";
 
+// Type definitions for theme system
+type ThemeTokens = {
+  [key: string]: string;
+};
+
+type LegacyTheme = {
+  name?: string;
+  mode: "light" | "dark";
+  tokens: ThemeTokens;
+};
+
+type ModernTheme = {
+  name: string;
+  modes: {
+    light: ThemeTokens;
+    dark: ThemeTokens;
+  };
+  defaultMode: "light" | "dark";
+};
+
+type Theme = LegacyTheme | ModernTheme;
+
+// Type guard functions
+function isModernTheme(theme: Theme): theme is ModernTheme {
+  return "modes" in theme && "defaultMode" in theme;
+}
+
+type ThemeContextValue = {
+  themeKey: string;
+  currentMode: string;
+  setThemeKey: (key: string) => void;
+  setCurrentMode: (mode: string) => void;
+  themes: Record<string, Theme>;
+  addCustomTheme: (key: string, theme: Theme) => void;
+  removeCustomTheme: (key: string) => void;
+};
+
+type ThemeProviderProps = {
+  children: ReactNode;
+};
+
 // React Context for theme
-const ThemeContext = createContext({
+const ThemeContext = createContext<ThemeContextValue>({
   themeKey: "system-auto",
   currentMode: "auto",
-  setThemeKey: (_key) => {
+  setThemeKey: (_key: string) => {
     // Default context function - should be overridden by provider
   },
-  setCurrentMode: (_mode) => {
+  setCurrentMode: (_mode: string) => {
     // Default context function - should be overridden by provider
   },
   themes: {},
-  addCustomTheme: (_key, _theme) => {
+  addCustomTheme: (_key: string, _theme: Theme) => {
     // Default context function - should be overridden by provider
   },
-  removeCustomTheme: (_key) => {
+  removeCustomTheme: (_key: string) => {
     // Default context function - should be overridden by provider
   },
 });
 
-export function useTheme() {
+export function useTheme(): ThemeContextValue {
   return useContext(ThemeContext);
 }
 
-export function ThemeProvider({ children }) {
+export function ThemeProvider({ children }: ThemeProviderProps): JSX.Element {
   // Enhanced initialization for service worker compatibility
-  const [themeKey, setThemeKeyState] = useState(() => {
+  const [themeKey, setThemeKeyState] = useState<string>(() => {
     // Delay localStorage access until after mount for better SW compatibility
     return "system-auto";
   });
-  const [currentMode, setCurrentMode] = useState(() => "auto");
-  const [customThemes, setCustomThemes] = useState({});
-  const [isInitialized, setIsInitialized] = useState(false);
-  const mediaRef = useRef(null);
+  const [currentMode, setCurrentMode] = useState<string>(() => "auto");
+  const [customThemes, setCustomThemes] = useState<Record<string, Theme>>({});
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
+  const mediaRef = useRef<MediaQueryList | null>(null);
 
   // Initialize theme after component mounts (better SW compatibility)
   useEffect(() => {
@@ -67,7 +109,9 @@ export function ThemeProvider({ children }) {
         }
 
         const customThemesData = loadCustomThemes();
-        setCustomThemes(customThemesData);
+        if (customThemesData) {
+          setCustomThemes(customThemesData as Record<string, Theme>);
+        }
         setIsInitialized(true);
       } catch (_error) {
         // Ignore initialization errors for better SW compatibility
@@ -100,9 +144,10 @@ export function ThemeProvider({ children }) {
   }, [currentMode, themeKey]);
 
   // Aggregate themes (preset + custom)
-  const themes = useMemo(() => {
+  const themes = useMemo((): Record<string, Theme> => {
     // getAllThemes reads custom from localStorage; but we also keep local state for immediate UI
-    return { ...getAllThemes(), ...customThemes };
+    const allThemes = getAllThemes();
+    return { ...allThemes, ...customThemes } as Record<string, Theme>;
   }, [customThemes]);
 
   // Apply theme whenever themeKey, currentMode, or themes change (only after initialization)
@@ -123,7 +168,7 @@ export function ThemeProvider({ children }) {
           const theme = themes[themeKey];
           if (theme) {
             // For new format themes with modes
-            if (theme.modes) {
+            if (isModernTheme(theme as Theme)) {
               applyTheme(theme, getEffectiveMode());
             } else {
               // Legacy format - use theme.mode
@@ -186,13 +231,13 @@ export function ThemeProvider({ children }) {
     };
   }, [themeKey, currentMode, themes, isInitialized]);
 
-  const setThemeKey = (key) => {
+  const setThemeKey = (key: string): void => {
     setThemeKeyState(key);
     // Persist the choice; allow clearing when system-auto to reflect that behavior
     setStoredThemeKey(key);
   };
 
-  const updateCurrentMode = (mode) => {
+  const updateCurrentMode = (mode: string): void => {
     setCurrentMode(mode);
     if (window?.localStorage) {
       try {
@@ -204,7 +249,7 @@ export function ThemeProvider({ children }) {
   };
 
   // Allow adding/removing custom themes
-  const addCustomTheme = (key, theme) => {
+  const addCustomTheme = (key: string, theme: Theme): void => {
     const next = { ...customThemes, [key]: theme };
     setCustomThemes(next);
     saveCustomThemes(next);
@@ -214,7 +259,7 @@ export function ThemeProvider({ children }) {
     }
   };
 
-  const removeCustomTheme = (key) => {
+  const removeCustomTheme = (key: string): void => {
     const updatedThemes = { ...customThemes };
     delete updatedThemes[key];
     setCustomThemes(updatedThemes);

@@ -1,4 +1,6 @@
-export default {
+import type { ModernTheme } from "../themes";
+
+const glassBlueTheme: ModernTheme = {
   name: "glass-blue",
   modes: {
     light: {
@@ -133,3 +135,5 @@ export default {
   },
   defaultMode: "dark",
 };
+
+export default glassBlueTheme;

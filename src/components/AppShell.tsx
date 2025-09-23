@@ -1,8 +1,13 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Toaster } from "react-hot-toast";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher.jsx";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/theme/ThemeProvider.jsx";
+
+export type AppShellProps = {
+  children: ReactNode;
+  className?: string;
+};
 
 /**
  * AppShell: shared layout wrapper (header, main, toaster, theming)
@@ -10,8 +15,8 @@ import { ThemeProvider } from "@/theme/ThemeProvider.jsx";
  * - Skip-to-content link for a11y
  * - Responsive container
  */
-export default function AppShell({ children, className }) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+export default function AppShell({ children, className }: AppShellProps) {
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
 
   return (
     <ThemeProvider>

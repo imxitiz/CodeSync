@@ -27,16 +27,15 @@ function App() {
           position="top-right"
           toastOptions={{
             success: {
-              theme: {
-                colors: {
-                  primary: "#4aee88",
-                },
+              style: {
+                background: "#4aee88",
+                color: "white",
               },
             },
           }}
         />
       </div>
-      <RouterProvider future={{ v7_partialHydration: true }} router={router} />
+      <RouterProvider router={router} />
     </>
   );
 }

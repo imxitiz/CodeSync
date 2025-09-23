@@ -1,4 +1,6 @@
-export default {
+import type { ModernTheme } from "../themes";
+
+const monoTheme: ModernTheme = {
   name: "mono",
   modes: {
     light: {
@@ -133,3 +135,5 @@ export default {
   },
   defaultMode: "dark",
 };
+
+export default monoTheme;

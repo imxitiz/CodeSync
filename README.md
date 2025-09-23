@@ -43,8 +43,8 @@ Note for Vercel users: If you deploy a single-page app (SPA) on Vercel and navig
    - `PORT`: Server port (default: 3000)
 
 2. **Deploy the backend** with the following files:
-   - `server.js`
-   - `action.js`
+   - `server.ts`
+   - `action.ts`
    - `package.json`
 
 3. **The backend provides these endpoints:**

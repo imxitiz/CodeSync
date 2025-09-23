@@ -2,12 +2,35 @@ import { javascript } from "@codemirror/lang-javascript";
 import { EditorView } from "@codemirror/view";
 import { dracula } from "@uiw/codemirror-theme-dracula";
 import CodeMirror from "@uiw/react-codemirror";
-import { useEffect, useMemo, useState } from "react";
+import { type RefObject, useEffect, useMemo, useState } from "react";
 import { ACTIONS } from "../../action";
+
+type CodeChangeData = {
+  roomId: string;
+  code: string;
+  currenteditor: string;
+};
+
+type Socket = {
+  emit: (event: string, data: CodeChangeData) => void;
+  on: (event: string, callback: (data: CodeChangeData) => void) => void;
+  off: (event: string, callback: (data: CodeChangeData) => void) => void;
+};
+
+export type EditorProps = {
+  socketRef: RefObject<Socket>;
+  roomId: string;
+  onCodeChange: (code: string) => void;
+  editable: boolean;
+  currentEditor: string;
+  setCurrentEditor: (editor: string) => void;
+  wrap?: boolean;
+  darkMode?: boolean;
+};
 
 // Added "wrap" prop to control line wrapping (true = wrap at viewport width)
 // Added "darkMode" prop to switch editor theme; light uses CSS variables for colors
-const Editor = ({
+const Editor: React.FC<EditorProps> = ({
   socketRef,
   roomId,
   onCodeChange,
@@ -17,7 +40,7 @@ const Editor = ({
   wrap = false,
   darkMode = true,
 }) => {
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState<string>("");
 
   // Minimal light theme that follows CSS variables (no external theme needed)
   const lightTheme = useMemo(
@@ -65,7 +88,7 @@ const Editor = ({
     return base;
   }, [wrap, themeExt]);
 
-  const handleChange = (value) => {
+  const handleChange = (value: string): void => {
     if (!editable) {
       return;
     }
@@ -81,9 +104,16 @@ const Editor = ({
     }
   };
 
+  // @ts-expect-error
   useEffect(() => {
     if (socketRef.current) {
-      const handleCodeChange = ({ code: newCode, currenteditor }) => {
+      const handleCodeChange = ({
+        code: newCode,
+        currenteditor,
+      }: {
+        code: string;
+        currenteditor: string;
+      }) => {
         if (newCode !== null && newCode !== code) {
           setCode(newCode);
           onCodeChange(newCode);
@@ -94,7 +124,9 @@ const Editor = ({
       socketRef.current.on(ACTIONS.CODE_CHANGE, handleCodeChange);
 
       return () => {
-        socketRef.current.off(ACTIONS.CODE_CHANGE, handleCodeChange);
+        if (socketRef.current) {
+          socketRef.current.off(ACTIONS.CODE_CHANGE, handleCodeChange);
+        }
       };
     }
   }, [code, onCodeChange, socketRef, setCurrentEditor]);
@@ -113,7 +145,7 @@ const Editor = ({
       // theme prop left undefined for light; dark handled by dracula in extensions
       readOnly={!editable}
       style={{ height: "100%", width: "100%", minHeight: 0, minWidth: 0 }}
-      theme={darkMode ? dracula : undefined}
+      theme={darkMode ? dracula : "light"}
       value={code}
       width="100%"
     />

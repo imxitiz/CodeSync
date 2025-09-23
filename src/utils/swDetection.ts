@@ -56,7 +56,9 @@ export function isServedFromServiceWorker(): boolean {
     if (window?.performance) {
       const resources = performance.getEntriesByType("resource");
       const jsResources = resources.filter((r) => r.name.includes(".js"));
-      const cachedResources = jsResources.filter((r) => (r as PerformanceResourceTiming).transferSize === 0);
+      const cachedResources = jsResources.filter(
+        (r) => (r as PerformanceResourceTiming).transferSize === 0
+      );
 
       if (
         cachedResources.length > 0 &&
@@ -80,13 +82,14 @@ export function clearSSGHydrationData(): void {
   // Clear ViteReactSSG hydration data to force client-side rendering
   try {
     if (typeof window !== "undefined") {
-      (window as Window & {
+      const windowWithProps = window as Window & {
         __staticRouterHydrationData__?: unknown;
         __VITE_REACT_SSG_HASH__?: unknown;
-      }).__staticRouterHydrationData__ = undefined;
-      (window as Window & {
-        __VITE_REACT_SSG_HASH__?: unknown;
-      }).__VITE_REACT_SSG_HASH__ = undefined;
+      };
+      // biome-ignore lint/suspicious/noExplicitAny: Required for clearing SSG hydration data
+      windowWithProps.__staticRouterHydrationData__ = undefined as any;
+      // biome-ignore lint/suspicious/noExplicitAny: Required for clearing SSG hydration data
+      windowWithProps.__VITE_REACT_SSG_HASH__ = undefined as any;
 
       // Also clear any SSG-related data attributes
       const root = document.getElementById("root");
@@ -129,42 +132,54 @@ export function detectAndHandleServiceWorkerCache(): boolean {
       .getElementById("root")
       ?.hasAttribute("data-server-rendered");
     const hasHydrationData =
-      (window as Window & {
-        __staticRouterHydrationData__?: unknown;
-        __VITE_REACT_SSG_HASH__?: unknown;
-      }).__staticRouterHydrationData__ ||
-      (window as Window & {
-        __VITE_REACT_SSG_HASH__?: unknown;
-      }).__VITE_REACT_SSG_HASH__;
+      (
+        window as Window & {
+          __staticRouterHydrationData__?: unknown;
+          __VITE_REACT_SSG_HASH__?: unknown;
+        }
+      ).__staticRouterHydrationData__ ||
+      (
+        window as Window & {
+          __VITE_REACT_SSG_HASH__?: unknown;
+        }
+      ).__VITE_REACT_SSG_HASH__;
 
     if (hasSsgContent && hasHydrationData) {
       clearSSGHydrationData();
       forceClientSideRender();
 
       // Add markers
-      (window as Window & {
-        __SW_CACHE_LOAD__?: boolean;
-        __HYDRATION_MISMATCH_FIXED__?: boolean;
-      }).__SW_CACHE_LOAD__ = true;
-      (window as Window & {
-        __HYDRATION_MISMATCH_FIXED__?: boolean;
-      }).__HYDRATION_MISMATCH_FIXED__ = true;
+      (
+        window as Window & {
+          __SW_CACHE_LOAD__?: boolean;
+          __HYDRATION_MISMATCH_FIXED__?: boolean;
+        }
+      ).__SW_CACHE_LOAD__ = true;
+      (
+        window as Window & {
+          __HYDRATION_MISMATCH_FIXED__?: boolean;
+        }
+      ).__HYDRATION_MISMATCH_FIXED__ = true;
 
       return true;
     }
     if (hasSsgContent) {
       forceClientSideRender();
-      (window as Window & {
-        __SW_CACHE_LOAD__?: boolean;
-      }).__SW_CACHE_LOAD__ = true;
+      (
+        window as Window & {
+          __SW_CACHE_LOAD__?: boolean;
+        }
+      ).__SW_CACHE_LOAD__ = true;
 
       return true;
     }
 
     // Even if no obvious issues, mark as SW cache load
-    (window as Window & {
-      __SW_CACHE_LOAD__?: boolean;
-    }).__SW_CACHE_LOAD__ = true;
+    (
+      window as Window & {
+        __SW_CACHE_LOAD__?: boolean;
+      }
+    ).__SW_CACHE_LOAD__ = true;
   }
 
   return isFromSw;
@@ -211,15 +226,18 @@ export function setupHydrationErrorRecovery(): void {
     });
 
     // Also catch unhandled promise rejections
-    window.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
-      if (event.reason?.message?.includes("hydration")) {
-        clearSSGHydrationData();
-        forceClientSideRender();
+    window.addEventListener(
+      "unhandledrejection",
+      (event: PromiseRejectionEvent) => {
+        if (event.reason?.message?.includes("hydration")) {
+          clearSSGHydrationData();
+          forceClientSideRender();
 
-        setTimeout(() => {
-          window.location.reload();
-        }, 100);
+          setTimeout(() => {
+            window.location.reload();
+          }, 100);
+        }
       }
-    });
+    );
   }
 }

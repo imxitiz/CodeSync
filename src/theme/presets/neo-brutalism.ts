@@ -1,4 +1,6 @@
-export default {
+import type { ModernTheme } from "../themes";
+
+const neoBrutalismTheme: ModernTheme = {
   name: "neo-brutalism",
   modes: {
     light: {
@@ -135,3 +137,5 @@ export default {
   },
   defaultMode: "dark",
 };
+
+export default neoBrutalismTheme;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "react-avatar";
 import toast from "react-hot-toast";
 import { FaCrown } from "react-icons/fa";
@@ -6,12 +6,27 @@ import { FaRegCopy } from "react-icons/fa6";
 import { FiEdit2, FiLogOut } from "react-icons/fi";
 import { MdTextDecrease, MdTextIncrease } from "react-icons/md";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import AppShell from "@/components/AppShell.jsx";
-import ClientModern from "@/components/ClientModern.jsx";
-import EditorWrapper from "@/components/EditorWrapper.jsx";
-import { Button } from "@/components/ui/button.jsx";
-import { ACTIONS } from "@/utils/constant";
+import AppShell from "@/components/AppShell";
+import ClientModern from "@/components/ClientModern";
+import EditorWrapper from "@/components/EditorWrapper";
+import { Button } from "@/components/ui/button";
+import { ACTIONS } from "@/utils/constants";
 import { initSocket } from "@/utils/socket";
+
+type Client = {
+  socketId: string;
+  username: string;
+};
+
+type Socket = {
+  // biome-ignore lint/suspicious/noExplicitAny: Socket data can be any shape for real-time events
+  emit: (event: string, data: any) => void;
+  // biome-ignore lint/suspicious/noExplicitAny: Socket callbacks receive any data structure
+  on: (event: string, callback: (data: any) => void) => void;
+  // biome-ignore lint/suspicious/noExplicitAny: Socket callbacks receive any data structure
+  off: (event: string, callback: (data: any) => void) => void;
+  disconnect: () => void;
+};
 
 /**
  * EditorPageModern (Top-Bar + Editor canvas)
@@ -23,20 +38,20 @@ import { initSocket } from "@/utils/socket";
  * - Line wrap toggle (Editor supports wrapping without horizontal scroll)
  */
 export default function EditorPageModern() {
-  const [clients, setClients] = useState([]);
-  const [currentEditor, setCurrentEditor] = useState("");
-  const currentEditorRef = useRef(currentEditor);
-  const [roomCreator, setRoomCreator] = useState(null);
-  const socketRef = useRef(null);
-  const codeRef = useRef(null);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [currentEditor, setCurrentEditor] = useState<string>("");
+  const currentEditorRef = useRef<string>(currentEditor);
+  const [roomCreator, setRoomCreator] = useState<string | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const codeRef = useRef<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const userName = location.state?.userName || "User";
 
   // Track current dark mode based on document root class
   const getIsDark = () => document?.documentElement.classList.contains("dark");
-  const [isDark, setIsDark] = useState(getIsDark());
+  const [isDark, setIsDark] = useState<boolean>(getIsDark());
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: First load only
   useEffect(() => {
@@ -49,13 +64,15 @@ export default function EditorPageModern() {
   }, []);
 
   // UI state
-  const [serverStatus, setServerStatus] = useState("connecting"); // 'connecting', 'connected', 'disconnected'
-  const [connectionMessage, setConnectionMessage] = useState(
+  const [serverStatus, setServerStatus] = useState<
+    "connecting" | "connected" | "disconnected"
+  >("connecting");
+  const [connectionMessage, setConnectionMessage] = useState<string>(
     "Connecting to server..."
   );
-  const [wrapLines, setWrapLines] = useState(false);
-  const [showParticipants, setShowParticipants] = useState(false);
-  const [zen, setZen] = useState(false);
+  const [wrapLines, setWrapLines] = useState<boolean>(false);
+  const [showParticipants, setShowParticipants] = useState<boolean>(false);
+  const [zen, setZen] = useState<boolean>(false);
 
   // Derived
   const isOwner = userName === roomCreator;
@@ -89,22 +106,25 @@ export default function EditorPageModern() {
 
   const copyRoomId = async () => {
     try {
-      await navigator.clipboard.writeText(id);
+      await navigator.clipboard.writeText(id || "");
       toast.success("Room Id copied to clipboard");
     } catch {
       toast.error("Failed to copy Room Id");
     }
   };
 
-  const copyCode = async () => {
+  const copyCode = async (): Promise<string | undefined> => {
     try {
       if (!codeRef.current) {
-        return toast.error("No code to copy");
+        toast.error("No code to copy");
+        return;
       }
       await navigator.clipboard.writeText(codeRef.current);
       toast.success("Code copied to clipboard");
+      return codeRef.current;
     } catch {
       toast.error("Failed to copy code , please try again");
+      return;
     }
   };
 
@@ -115,7 +135,7 @@ export default function EditorPageModern() {
     navigate("/");
   };
 
-  const fontSizeChange = (change) => {
+  const fontSizeChange = (change: number) => {
     const root = document.documentElement;
     const currentSize = Number.parseInt(
       getComputedStyle(root).getPropertyValue("--editor-font-size") || "16px",
@@ -125,36 +145,41 @@ export default function EditorPageModern() {
     root.style.setProperty("--editor-font-size", `${newSize}px`);
   };
 
-  const toggleEditable = () => {
+  const toggleEditable = (): void => {
     if (currentEditor === userName) {
       setCurrentEditor("");
       toast.success("Editor is now read-only");
-      socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-        roomId: id,
-        currenteditor: "",
-      });
+      if (socketRef.current) {
+        socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+          roomId: id,
+          currenteditor: "",
+        });
+      }
     } else {
       if (!isOwner) {
-        return toast.error(
-          "Only the room creator can change the editable state"
-        );
+        toast.error("Only the room creator can change the editable state");
+        return;
       }
       setCurrentEditor(userName);
       toast.success("Editor is now editable");
-      socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-        roomId: id,
-        currenteditor: userName,
-      });
+      if (socketRef.current) {
+        socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+          roomId: id,
+          currenteditor: userName,
+        });
+      }
     }
   };
 
-  const handleGrantEditor = (username) => {
+  const handleGrantEditor = (username: string) => {
     setCurrentEditor(username);
     toast.success(`${username} can now edit the code`);
-    socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-      roomId: id,
-      currenteditor: username,
-    });
+    if (socketRef.current) {
+      socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+        roomId: id,
+        currenteditor: username,
+      });
+    }
   };
 
   // Keep ref in sync
@@ -174,34 +199,71 @@ export default function EditorPageModern() {
 
         socketRef.current = await initSocket();
 
-        socketRef.current.on("connect", () => {
-          setServerStatus("connected");
-          setConnectionMessage("Connected!");
-        });
+        if (socketRef.current) {
+          socketRef.current.on("connect", () => {
+            setServerStatus("connected");
+            setConnectionMessage("Connected!");
+          });
 
-        socketRef.current.on("connect_error", handleErrors);
-        socketRef.current.on("connect_failed", handleErrors);
-        socketRef.current.on("disconnect", () => {
-          setServerStatus("disconnected");
-          setConnectionMessage("Connection lost - Reconnecting...");
-        });
+          socketRef.current.on("connect_error", handleErrors);
+          socketRef.current.on("connect_failed", handleErrors);
+          socketRef.current.on("disconnect", () => {
+            setServerStatus("disconnected");
+            setConnectionMessage("Connection lost - Reconnecting...");
+          });
 
-        socketRef.current.emit(ACTIONS.JOIN, {
-          roomId: id,
-          userName,
-        });
+          socketRef.current.emit(ACTIONS.JOIN, {
+            roomId: id,
+            userName,
+          });
 
-        socketRef.current.on(
-          ACTIONS.JOINED,
-          ({ clients: joinedClients, username, socketId, roomcreator }) => {
-            setClients(joinedClients);
-            setRoomCreator(roomcreator);
-            if (
-              username === userName &&
-              roomcreator === username &&
-              sessionStorage.getItem("admin") !== roomcreator &&
-              joinedClients.length !== 1
-            ) {
+          socketRef.current.on(
+            ACTIONS.JOINED,
+            ({
+              clients: joinedClients,
+              username,
+              socketId,
+              roomcreator,
+            }: {
+              clients: Client[];
+              username: string;
+              socketId: string;
+              roomcreator: string;
+            }) => {
+              setClients(joinedClients);
+              setRoomCreator(roomcreator);
+              if (
+                username === userName &&
+                roomcreator === username &&
+                sessionStorage.getItem("admin") !== roomcreator &&
+                joinedClients.length !== 1
+              ) {
+                toast.error(
+                  `${username} is already in the ${id} room.\nPlease try another UserName!`
+                );
+                navigate("/", {
+                  state: { id },
+                });
+              }
+              if (roomCreator === username || joinedClients.length === 1) {
+                sessionStorage.setItem("admin", username);
+              }
+              if (username !== userName) {
+                toast.success(`${username} joined the room`);
+                if (codeRef.current && socketRef.current) {
+                  socketRef.current.emit(ACTIONS.SYNC_CODE, {
+                    socketId,
+                    code: codeRef.current,
+                    currenteditor: currentEditorRef.current,
+                  });
+                }
+              }
+            }
+          );
+
+          socketRef.current.on(
+            ACTIONS.DUPLICATE_USER,
+            ({ username }: { username: string }) => {
               toast.error(
                 `${username} is already in the ${id} room.\nPlease try another UserName!`
               );
@@ -209,62 +271,48 @@ export default function EditorPageModern() {
                 state: { id },
               });
             }
-            if (roomCreator === username || joinedClients.length === 1) {
-              sessionStorage.setItem("admin", username);
-            }
-            if (username !== userName) {
-              toast.success(`${username} joined the room`);
-              if (codeRef.current) {
-                socketRef.current.emit(ACTIONS.SYNC_CODE, {
-                  socketId,
-                  code: codeRef.current,
-                  currenteditor: currentEditorRef.current,
-                });
+          );
+
+          socketRef.current.on(
+            ACTIONS.DISCONNECTED,
+            ({
+              socketId,
+              username,
+            }: {
+              socketId: string;
+              username: string;
+            }) => {
+              toast.success(`${username} left the room`);
+              setClients((prev) =>
+                prev.filter((client) => client.socketId !== socketId)
+              );
+              if (currentEditor === username) {
+                setCurrentEditor("");
+                if (socketRef.current) {
+                  socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+                    roomId: id,
+                    currenteditor: "",
+                  });
+                }
               }
             }
-          }
-        );
-
-        socketRef.current.on(ACTIONS.DUPLICATE_USER, ({ username }) => {
-          toast.error(
-            `${username} is already in the ${id} room.\nPlease try another UserName!`
           );
-          navigate("/", {
-            state: { id },
-          });
-        });
 
-        socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
-          toast.success(`${username} left the room`);
-          setClients((prev) =>
-            prev.filter((client) => client.socketId !== socketId)
+          socketRef.current.on(
+            ACTIONS.SET_CURRENT_EDITOR,
+            ({ currenteditor }: { currenteditor: string }) => {
+              if (currenteditor === userName) {
+                toast.success("You are now the editor");
+              }
+              if (currenteditor === "" && userName === roomCreator) {
+                toast.success(
+                  `${currentEditorRef.current} have released control`
+                );
+              }
+              setCurrentEditor(currenteditor);
+            }
           );
-          if (currentEditor === username) {
-            setCurrentEditor("");
-            socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-              roomId: id,
-              currenteditor: "",
-            });
-          }
-        });
-
-        socketRef.current.on(
-          ACTIONS.SET_CURRENT_EDITOR,
-          ({ currenteditor }) => {
-            if (currenteditor === userName) {
-              toast.success("You are now the editor");
-            }
-            if (currenteditor === "" && userName === roomCreator) {
-              toast.success(
-                `${currentEditorRef.current} have released control`
-              );
-            }
-            setCurrentEditor(currenteditor);
-            return () => {
-              socketRef.current.off(ACTIONS.SET_CURRENT_EDITOR);
-            };
-          }
-        );
+        }
       } catch (_error) {
         setServerStatus("disconnected");
         setConnectionMessage("Failed to connect to server");
@@ -281,9 +329,6 @@ export default function EditorPageModern() {
 
     return () => {
       if (socketRef.current) {
-        socketRef.current.off(ACTIONS.JOINED);
-        socketRef.current.off(ACTIONS.DISCONNECTED);
-        socketRef.current.off(ACTIONS.SET_CURRENT_EDITOR);
         socketRef.current.disconnect();
       }
     };
@@ -403,7 +448,7 @@ export default function EditorPageModern() {
                           fgColor="#000"
                           name={username}
                           round="8px"
-                          size={32}
+                          size="32"
                         />
                         {crown ? (
                           <span
@@ -625,19 +670,20 @@ export default function EditorPageModern() {
 
             {/* Editor wrapper takes full available space */}
             <div
-              className={`editor-host h-full w-full ${wrapLines ? "wrap-on" : "no-wrap"}`}
+              className={`editor-host h-full w-full ${
+                wrapLines ? "wrap-on" : "no-wrap"
+              }`}
             >
               <EditorWrapper
-                copyCode={copyCode}
                 currentEditor={currentEditor}
                 darkMode={isDark}
                 editable={userName === currentEditor || isOwner}
-                onCodeChange={(code) => {
+                onCodeChange={(code: string) => {
                   codeRef.current = code;
                 }}
-                roomId={id}
+                roomId={id || ""}
                 setCurrentEditor={setCurrentEditor}
-                socketRef={socketRef}
+                socketRef={socketRef as RefObject<Socket>}
                 wrap={wrapLines}
               />
             </div>

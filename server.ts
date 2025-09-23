@@ -2,13 +2,16 @@ import http from "node:http";
 import path, { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import cors from "cors";
-import express from "express";
 import type { Request, Response } from "express";
-import { Server } from "socket.io";
+import express from "express";
 import type { Socket } from "socket.io";
-import { ACTIONS } from "./src/utils/constants";
+import { Server } from "socket.io";
+import { ACTIONS } from "./src/utils/constants.ts";
+import { pathToFileURL } from "node:url";
 
-const __filename = fileURLToPath(import.meta.url);
+// Use import.meta.url if available (ESM), otherwise use process.argv[1]
+const currentFile = import.meta.url || pathToFileURL(process.argv[1] || 'server.ts').href;
+const __filename = fileURLToPath(currentFile);
 const __dirname = dirname(__filename);
 
 const app = express();
@@ -37,7 +40,10 @@ const allowedOrigins = new Set(
 const ROOM_CLEANUP_DELAY_MS = 500;
 
 // allow requests with no origin (like mobile apps, curl, or server-to-server)
-const corsOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+const corsOrigin = (
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void
+) => {
   if (!origin) {
     return callback(null, true);
   }
@@ -94,65 +100,82 @@ const getAllconnectedClients = (roomId: string) =>
   }));
 
 io.on("connection", (socket: Socket) => {
-  socket.on(ACTIONS.JOIN, ({ roomId, userName }: { roomId: string; userName: string }) => {
-    userSocketMap.set(socket.id, userName);
+  socket.on(
+    ACTIONS.JOIN,
+    ({ roomId, userName }: { roomId: string; userName: string }) => {
+      userSocketMap.set(socket.id, userName);
 
-    socket.join(roomId);
-    let roomCreator: string | undefined;
-    if (roomCreatorMap.has(roomId)) {
-      roomCreator = roomCreatorMap.get(roomId);
-    } else {
-      roomCreatorMap.set(roomId, userName);
-      roomCreator = userName;
+      socket.join(roomId);
+      let roomCreator: string | undefined;
+      if (roomCreatorMap.has(roomId)) {
+        roomCreator = roomCreatorMap.get(roomId);
+      } else {
+        roomCreatorMap.set(roomId, userName);
+        roomCreator = userName;
+      }
+
+      const clients = getAllconnectedClients(roomId);
+      if (
+        clients.length > 1 &&
+        clients.filter((client) => client.username === userName).length > 1
+      ) {
+        userSocketMap.delete(socket.id);
+        socket.emit(ACTIONS.DUPLICATE_USER, {
+          username: userName,
+        });
+        socket.leave(roomId);
+        socket.disconnect();
+        return;
+      }
+
+      // Broadcast editable state to all clients in the room
+      for (const { socketId } of clients) {
+        io.to(socketId).emit(ACTIONS.JOINED, {
+          clients,
+          username: userName,
+          socketId: socket.id,
+          roomcreator: roomCreator,
+        });
+      }
     }
+  );
 
-    const clients = getAllconnectedClients(roomId);
-    if (
-      clients.length > 1 &&
-      clients.filter((client) => client.username === userName).length > 1
-    ) {
-      userSocketMap.delete(socket.id);
-      socket.emit(ACTIONS.DUPLICATE_USER, {
-        username: userName,
-      });
-      socket.leave(roomId);
-      socket.disconnect();
-      return;
+  socket.on(
+    ACTIONS.CODE_CHANGE,
+    ({
+      roomId,
+      code,
+      currenteditor,
+    }: {
+      roomId: string;
+      code: string;
+      currenteditor: string;
+    }) => {
+      socket.in(roomId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor });
     }
+  );
 
-    // Broadcast editable state to all clients in the room
-    for (const { socketId } of clients) {
-      io.to(socketId).emit(ACTIONS.JOINED, {
-        clients,
-        username: userName,
-        socketId: socket.id,
-        roomcreator: roomCreator,
-      });
+  socket.on(
+    ACTIONS.SYNC_CODE,
+    ({
+      socketId,
+      code,
+      currenteditor,
+    }: {
+      socketId: string;
+      code: string;
+      currenteditor: string;
+    }) => {
+      io.to(socketId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor });
     }
-  });
+  );
 
-  socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code, currenteditor }: {
-    roomId: string;
-    code: string;
-    currenteditor: string;
-  }) => {
-    socket.in(roomId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor });
-  });
-
-  socket.on(ACTIONS.SYNC_CODE, ({ socketId, code, currenteditor }: {
-    socketId: string;
-    code: string;
-    currenteditor: string;
-  }) => {
-    io.to(socketId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor });
-  });
-
-  socket.on(ACTIONS.SET_CURRENT_EDITOR, ({ roomId, currenteditor }: {
-    roomId: string;
-    currenteditor: string;
-  }) => {
-    socket.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
-  });
+  socket.on(
+    ACTIONS.SET_CURRENT_EDITOR,
+    ({ roomId, currenteditor }: { roomId: string; currenteditor: string }) => {
+      socket.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
+    }
+  );
 
   socket.on("disconnecting", () => {
     const rooms = [...socket.rooms];
@@ -189,4 +212,6 @@ app.get("*", (req: Request, res: Response) => {
 const PORT = 3000;
 server.listen(PORT, "0.0.0.0", () => {
   // Server started successfully
+  // biome-ignore lint/suspicious/noConsole: Needed
+  console.log(`Server is running on port ${PORT}`);
 });

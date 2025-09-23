@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useLocation, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
-import AppShell from "@/components/AppShell.jsx";
+import AppShell from "@/components/AppShell";
 import { Button } from "@/components/ui/button.jsx";
 import {
   Card,
@@ -16,10 +16,10 @@ import { Input } from "@/components/ui/input.jsx";
 import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
 
 export default function HomePageModern() {
-  const [roomId, setRoomId] = useState("");
-  const [userName, setUserName] = useState("");
-  const [isCheckingServer, setIsCheckingServer] = useState(false);
-  const [serverStatusMessage, setServerStatusMessage] = useState("");
+  const [roomId, setRoomId] = useState<string>("");
+  const [userName, setUserName] = useState<string>("");
+  const [isCheckingServer, setIsCheckingServer] = useState<boolean>(false);
+  const [serverStatusMessage, setServerStatusMessage] = useState<string>("");
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,11 +32,11 @@ export default function HomePageModern() {
     wakeUpServer();
   }, [location.state]);
 
-  const handleHealthCheck = (attempt, maxRetries) => {
+  const handleHealthCheck = (attempt: number, maxRetries: number) => {
     setServerStatusMessage(`Waking up server... (${attempt}/${maxRetries})`);
   };
 
-  const createnewroom = (e) => {
+  const createnewroom = (e?: FormEvent) => {
     e?.preventDefault?.();
     const id = uuidv4();
     setRoomId(id);
@@ -48,7 +48,7 @@ export default function HomePageModern() {
     setUserName(n);
   };
 
-  const handleRoomIdChange = (e) => {
+  const handleRoomIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.value.length <= 256) {
       setRoomId(e.target.value);
     }
@@ -68,7 +68,7 @@ export default function HomePageModern() {
     }
   };
 
-  const joinRoom = async (e) => {
+  const joinRoom = async (e?: FormEvent) => {
     e?.preventDefault?.();
     if (!roomId.trim()) {
       toast.error("Room id is required");
@@ -112,7 +112,7 @@ export default function HomePageModern() {
     }
   };
 
-  const onKeyDown = (e) => {
+  const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       joinRoom(e);
     }
@@ -154,7 +154,7 @@ export default function HomePageModern() {
         </div>
 
         <div className="order-1 md:order-2">
-          <Card className="mx-auto w-full max-w-md">
+          <Card className="mx-auto w-full max-w-md border border-primary">
             <CardHeader>
               <CardTitle>Join a room</CardTitle>
               <CardDescription>

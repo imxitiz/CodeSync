@@ -1,4 +1,6 @@
-export default {
+import type { ModernTheme } from "../themes";
+
+const t3ChatTheme: ModernTheme = {
   name: "t3-chat",
   modes: {
     light: {
@@ -139,3 +141,5 @@ export default {
   },
   defaultMode: "dark",
 };
+
+export default t3ChatTheme;

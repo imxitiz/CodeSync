@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import type { EditorProps } from "./Editor";
 
 // Dynamically import the Editor component to avoid SSR issues with CodeMirror
-const Editor = lazy(() => import("./Editor.jsx"));
+const Editor = lazy(() => import("./Editor"));
 
 // Loading component for the editor
-const EditorLoading = () => (
+const EditorLoading: React.FC = () => (
   <div
     style={{
       display: "flex",
@@ -61,8 +62,8 @@ const EditorLoading = () => (
   </div>
 );
 
-const EditorWrapper = (props) => {
-  const [isClient, setIsClient] = useState(false);
+const EditorWrapper: React.FC<EditorProps> = (props) => {
+  const [isClient, setIsClient] = useState<boolean>(false);
 
   useEffect(() => {
     // Only render the editor on the client side

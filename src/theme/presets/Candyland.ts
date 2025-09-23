@@ -1,4 +1,6 @@
-export default {
+import type { ModernTheme } from "../themes";
+
+const candylandTheme: ModernTheme = {
   name: "candyland",
   modes: {
     light: {
@@ -135,3 +137,5 @@ export default {
   },
   defaultMode: "dark",
 };
+
+export default candylandTheme;

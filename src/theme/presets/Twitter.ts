@@ -1,4 +1,6 @@
-export default {
+import type { ModernTheme } from "../themes";
+
+const twitterTheme: ModernTheme = {
   name: "twitter",
   modes: {
     light: {
@@ -133,3 +135,5 @@ export default {
   },
   defaultMode: "dark",
 };
+
+export default twitterTheme;

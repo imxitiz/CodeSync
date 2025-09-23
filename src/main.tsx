@@ -1,20 +1,13 @@
-import { lazy, StrictMode, Suspense, ReactNode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot as createReactRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ClientOnly, ViteReactSSG } from "vite-react-ssg";
 import "./index.css";
-import HomePageModern from "@/pages/HomePageModern/HomePageModern.jsx";
+import HomePageModern from "@/pages/HomePageModern/HomePageModern.tsx";
 import {
   detectAndHandleServiceWorkerCache,
   setupHydrationErrorRecovery,
 } from "@/utils/swDetection";
-
-// Extend Window interface for custom properties
-declare global {
-  interface Window {
-    __SW_CACHE_LOAD__?: boolean;
-  }
-}
 
 // Setup error recovery immediately
 setupHydrationErrorRecovery();
@@ -27,7 +20,7 @@ const routes = [
   {
     path: "editor/:id",
     lazy: () =>
-      import("@/pages/EditorPageModern/EditorPageModern.jsx").then((mod) => ({
+      import("@/pages/EditorPageModern/EditorPageModern.tsx").then((mod) => ({
         Component: () => <ClientOnly>{() => <mod.default />}</ClientOnly>,
       })),
   },
@@ -36,7 +29,7 @@ const routes = [
 // Fallback React Router App for client-side rendering
 function ClientApp() {
   const EditorPageModern = lazy(
-    () => import("@/pages/EditorPageModern/EditorPageModern.jsx")
+    () => import("@/pages/EditorPageModern/EditorPageModern.tsx")
   );
 
   return (
@@ -66,7 +59,8 @@ function initializeApp() {
       // Strategy 2: Check for existing hydration issues
       const hasHydrationIssues =
         typeof window !== "undefined" &&
-        (window.__SW_CACHE_LOAD__ ||
+        ((window as Window & { __SW_CACHE_LOAD__?: boolean })
+          .__SW_CACHE_LOAD__ ||
           (window.performance &&
             (
               window.performance.getEntriesByType(
@@ -112,23 +106,7 @@ function initializeApp() {
       }
     };
 
-    const createSsgApp = () => {
-      return ViteReactSSG({
-        routes,
-        wrapper: ({ children }: { children: ReactNode }) => (
-          <StrictMode>{children}</StrictMode>
-        ),
-        onError: (_error: unknown) => {
-          // On SSG error, fall back to client-side rendering
-          setTimeout(() => {
-            (
-              window as Window & { __SW_CACHE_LOAD__?: boolean }
-            ).__SW_CACHE_LOAD__ = true; // Mark for client render
-            window.location.replace(window.location.href);
-          }, 100);
-        },
-      } as any);
-    };
+    const createSsgApp = () => ViteReactSSG({ routes });
 
     if (shouldForceClientRender()) {
       setupClientRender();

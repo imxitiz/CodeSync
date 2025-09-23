@@ -1,4 +1,6 @@
-export default {
+import type { ModernTheme } from "../themes";
+
+const systemTheme: ModernTheme = {
   name: "System",
   modes: {
     light: {
@@ -70,3 +72,5 @@ export default {
   },
   defaultMode: "dark",
 };
+
+export default systemTheme;

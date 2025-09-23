@@ -23,15 +23,29 @@ const PRESETS_DIR = path.join(__dirname, "..", "src", "theme", "presets");
 const themeNameRegex = /^[a-z0-9-]+$/i;
 const urlRegex = /^https?:\/\//i;
 
-// Ensure presets directory exists
-if (!fs.existsSync(PRESETS_DIR)) {
-  fs.mkdirSync(PRESETS_DIR, { recursive: true });
-}
+// Type definitions
+type ThemeData = {
+  name?: string;
+  cssVars?: {
+    theme?: Record<string, string>;
+    light?: Record<string, string>;
+    dark?: Record<string, string>;
+  };
+};
+
+type ThemeObject = {
+  name: string;
+  modes: {
+    light?: Record<string, string>;
+    dark?: Record<string, string>;
+  };
+  defaultMode: "light" | "dark";
+};
 
 /**
  * Fetch theme from URL
  */
-async function fetchTheme(url) {
+async function fetchTheme(url: string): Promise<ThemeData | null> {
   try {
     console.log(`Fetching: ${url}`);
     const response = await fetch(url, {
@@ -45,10 +59,13 @@ async function fetchTheme(url) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data: ThemeData = await response.json();
     return data;
   } catch (error) {
-    console.error(`Failed to fetch ${url}:`, error.message);
+    console.error(
+      `Failed to fetch ${url}:`,
+      error instanceof Error ? error.message : String(error)
+    );
     return null;
   }
 }
@@ -56,9 +73,9 @@ async function fetchTheme(url) {
 /**
  * Generate theme object from tweakcn data
  */
-function generateThemeObject(data, baseName) {
+function generateThemeObject(data: ThemeData, baseName: string): ThemeObject {
   const themeTokens = data.cssVars?.theme || {};
-  const modes = {};
+  const modes: ThemeObject["modes"] = {};
 
   if (data.cssVars?.light) {
     modes.light = { ...themeTokens, ...data.cssVars.light };
@@ -85,14 +102,14 @@ function generateThemeObject(data, baseName) {
 /**
  * Generate JavaScript file content
  */
-function generateFileContent(themeObject) {
+function generateFileContent(themeObject: ThemeObject): string {
   return `export default ${JSON.stringify(themeObject, null, 2)};`;
 }
 
 /**
  * Save theme to file
  */
-function saveTheme(themeObject, filename) {
+function saveTheme(themeObject: ThemeObject, filename: string): void {
   const filePath = path.join(PRESETS_DIR, filename);
   const content = generateFileContent(themeObject);
 
@@ -103,7 +120,7 @@ function saveTheme(themeObject, filename) {
 /**
  * Extract theme name from URL
  */
-function extractThemeName(data) {
+function extractThemeName(data: ThemeData): string {
   const match = data.name?.match(themeNameRegex);
   return match ? match[0] : "custom-theme";
 }
@@ -111,7 +128,7 @@ function extractThemeName(data) {
 /**
  * Main function
  */
-async function main() {
+async function main(): Promise<void> {
   const urls = process.argv.slice(2);
 
   if (urls.length === 0) {
@@ -129,7 +146,7 @@ async function main() {
   console.log(`📥 Downloading ${urls.length} theme(s)...\n`);
 
   for (const input of urls) {
-    let url;
+    let url: string;
     // If input looks like a URL, use it as-is
     if (urlRegex.test(input)) {
       url = input;

@@ -1,8 +1,8 @@
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
-import { VitePWA } from "vite-plugin-pwa";
+import { defineConfig, type UserConfig } from "vite";
+import { VitePWA, type VitePWAOptions } from "vite-plugin-pwa";
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -137,16 +137,16 @@ export default defineConfig({
       devOptions: {
         enabled: false, // Disable PWA in development to avoid conflicts
       },
-    }),
+    } as VitePWAOptions),
   ],
   // SSG configuration
   ssgOptions: {
     script: "async",
-    formatting: "minify",
+    formatting: "none",
   },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
-});
+} as UserConfig);

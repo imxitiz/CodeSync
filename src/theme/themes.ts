@@ -4,7 +4,38 @@
 export const THEME_STORAGE_KEY = "codesync.theme";
 export const CUSTOM_THEMES_STORAGE_KEY = "codesync.customThemes";
 
-function slugify(name) {
+// Type definitions
+export type ThemeTokens = {
+  [key: string]: string;
+};
+
+export type LegacyTheme = {
+  name?: string;
+  mode?: "light" | "dark";
+  tokens: ThemeTokens;
+};
+
+export type ModernTheme = {
+  name: string;
+  modes: {
+    light: ThemeTokens;
+    dark: ThemeTokens;
+  };
+  defaultMode: "light" | "dark";
+};
+
+export type Theme = LegacyTheme | ModernTheme;
+
+// Type guard functions
+export function isModernTheme(theme: Theme): theme is ModernTheme {
+  return "modes" in theme && "defaultMode" in theme;
+}
+
+export function isLegacyTheme(theme: Theme): theme is LegacyTheme {
+  return "tokens" in theme && !("modes" in theme);
+}
+
+function slugify(name: string | null | undefined): string {
   return (
     String(name || "")
       .toLowerCase()
@@ -16,27 +47,28 @@ function slugify(name) {
 
 // Build preset themes from files in ./presets
 // Each preset file must export default: { name, mode: "light"|"dark", tokens: {...} }
-const presetModules = import.meta.glob("./presets/*.js", {
+// biome-ignore lint/suspicious/noExplicitAny: Vite glob requires any type for dynamic imports
+const presetModules = (import.meta as any).glob("./presets/*.ts", {
   eager: true,
   import: "default",
-});
+}) as Record<string, Theme>;
 
 const JS_FILE_REGEX = /\.js$/i;
 /**
  * Create a key for the theme using file name or theme name+mode.
  * Keeps "system" stable for the consolidated system theme.
  */
-function keyFromTheme(filePath, theme) {
-  const fileBase = filePath.split("/").pop().replace(JS_FILE_REGEX, "");
+function keyFromTheme(filePath: string, theme: Theme): string {
+  const fileBase = filePath.split("/").pop()?.replace(JS_FILE_REGEX, "") || "";
   if (fileBase === "system") {
     return "system";
   }
   const base = theme?.name ? slugify(theme.name) : slugify(fileBase);
-  return theme?.mode ? `${base}-${theme.mode}` : base;
+  return isLegacyTheme(theme) && theme?.mode ? `${base}-${theme.mode}` : base;
 }
 
-function buildPresetThemes() {
-  const out = {};
+function buildPresetThemes(): Record<string, Theme> {
+  const out: Record<string, Theme> = {};
   for (const [path, theme] of Object.entries(presetModules)) {
     if (!theme || typeof theme !== "object") {
       continue;
@@ -50,7 +82,10 @@ function buildPresetThemes() {
 export const presetThemes = buildPresetThemes();
 
 // Apply theme with specific mode - enhanced for service worker compatibility
-export function applyTheme(theme, mode = null) {
+export function applyTheme(
+  theme: Theme | null | undefined,
+  mode: string | null = null
+): void {
   // Enhanced checks for service worker cached content
   if (!theme) {
     return;
@@ -76,7 +111,10 @@ export function applyTheme(theme, mode = null) {
   const root = document.documentElement;
 
   // Determine which mode to use
-  const activeMode = mode || theme.defaultMode || "dark";
+  const activeMode: "light" | "dark" =
+    (mode as "light" | "dark") ||
+    (isModernTheme(theme) ? theme.defaultMode : theme.mode) ||
+    "dark";
 
   // Toggle dark mode class for Tailwind variant utilities
   if (activeMode === "dark") {
@@ -86,15 +124,20 @@ export function applyTheme(theme, mode = null) {
   }
 
   // Get tokens for the active mode
-  const tokens = theme.modes?.[activeMode] || theme.tokens || {};
+  const tokens = isModernTheme(theme)
+    ? theme.modes?.[activeMode] || {}
+    : theme.tokens || {};
 
   for (const key of Object.keys(tokens)) {
-    root.style.setProperty(`--${key}`, tokens[key]);
+    const value = tokens[key];
+    if (value !== undefined) {
+      root.style.setProperty(`--${key}`, value);
+    }
   }
 }
 
 // Load custom themes saved in localStorage
-export function loadCustomThemes() {
+export function loadCustomThemes(): Record<string, Theme> {
   if (typeof window === "undefined") {
     return {};
   }
@@ -116,7 +159,7 @@ export function loadCustomThemes() {
   }
 }
 
-export function saveCustomThemes(customThemes) {
+export function saveCustomThemes(customThemes: Record<string, Theme>): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -134,12 +177,12 @@ export function saveCustomThemes(customThemes) {
   } catch (_error) {}
 }
 
-export function getAllThemes() {
+export function getAllThemes(): Record<string, Theme> {
   // Merge preset themes (from files) with custom themes (from localStorage)
   return { ...presetThemes, ...loadCustomThemes() };
 }
 
-export function getStoredThemeKey() {
+export function getStoredThemeKey(): string | null {
   // return null if not set to allow system preference default via ThemeProvider (system-auto)
   if (typeof window === "undefined") {
     return null;
@@ -157,7 +200,7 @@ export function getStoredThemeKey() {
   }
 }
 
-export function setStoredThemeKey(key) {
+export function setStoredThemeKey(key: string | null): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -188,23 +231,28 @@ export function getSystemMode() {
 
 // Parse CSS variables exported from tweakcn (.css content)
 // Returns { lightTokens, darkTokens }
-export function parseCssVariables(cssText) {
-  const extractBlock = (selector) => {
+export function parseCssVariables(cssText: string): {
+  lightTokens: ThemeTokens;
+  darkTokens: ThemeTokens;
+} {
+  const extractBlock = (selector: string): string => {
     const re = new RegExp(`${selector}\\s*\\{([\\s\\S]*?)\\}`, "m");
     const m = cssText.match(re);
-    return m ? m[1] : "";
+    return m ? m[1] || "" : "";
   };
 
-  const parseVars = (block) => {
-    const vars = {};
+  const parseVars = (block: string): ThemeTokens => {
+    const vars: ThemeTokens = {};
     const re = /--([a-z0-9-]+)\s*:\s*([^;]+);/gi;
-    let match;
+    let match: RegExpExecArray | null;
     while (true) {
       match = re.exec(block);
       if (!match) {
         break;
       }
-      vars[match[1]] = match[2].trim();
+      if (match[1] && match[2]) {
+        vars[match[1]] = match[2].trim();
+      }
     }
     return vars;
   };
@@ -219,10 +267,13 @@ export function parseCssVariables(cssText) {
 }
 
 // Build single theme from tweakcn CSS string with both light and dark modes
-export function createThemeFromCss(baseName, cssText) {
+export function createThemeFromCss(
+  baseName: string,
+  cssText: string
+): ModernTheme {
   const { lightTokens, darkTokens } = parseCssVariables(cssText);
 
-  const modes = {};
+  const modes: { light?: ThemeTokens; dark?: ThemeTokens } = {};
 
   if (Object.keys(lightTokens).length) {
     modes.light = lightTokens;
@@ -241,16 +292,20 @@ export function createThemeFromCss(baseName, cssText) {
 
   return {
     name: baseName,
-    modes,
+    modes: modes as { light: ThemeTokens; dark: ThemeTokens },
     defaultMode: modes.dark ? "dark" : "light",
   };
 }
 
 // Legacy function for backward compatibility - creates separate themes
-export function createThemesFromCss(baseName, cssText, includeDark = true) {
+export function createThemesFromCss(
+  baseName: string,
+  cssText: string,
+  includeDark = true
+): Record<string, LegacyTheme> {
   const theme = createThemeFromCss(baseName, cssText);
-  const themes = {};
-  const safe = (s) =>
+  const themes: Record<string, LegacyTheme> = {};
+  const safe = (s: string | null | undefined): string =>
     String(s || "custom")
       .toLowerCase()
       .replace(/[^a-z0-9-]+/g, "-")

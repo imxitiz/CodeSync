@@ -10,17 +10,66 @@ import {
   SelectTrigger,
   SelectValue,
   SelectViewport,
-} from "@/components/ui/select.jsx";
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useTheme } from "@/theme/ThemeProvider.jsx";
+import { useTheme } from "@/theme/ThemeProvider";
 import {
   applyTheme,
   createThemeFromCss,
   getSystemMode,
   presetThemes,
-} from "@/theme/themes.js";
+} from "@/theme/themes";
 
-function slugify(name) {
+// Type definitions for theme system
+type ThemeTokens = {
+  [key: string]: string;
+};
+
+type LegacyTheme = {
+  name?: string;
+  mode: "light" | "dark";
+  tokens: ThemeTokens;
+};
+
+type ModernTheme = {
+  name: string;
+  modes: {
+    light: ThemeTokens;
+    dark: ThemeTokens;
+  };
+  defaultMode: "light" | "dark";
+};
+
+type Theme = LegacyTheme | ModernTheme;
+
+// Type guard functions
+function isModernTheme(theme: Theme): theme is ModernTheme {
+  return "modes" in theme && "defaultMode" in theme;
+}
+
+type ThemeContextValue = {
+  themeKey: string;
+  currentMode: string;
+  setThemeKey: (key: string) => void;
+  setCurrentMode: (mode: string) => void;
+  themes: Record<string, Theme>;
+  addCustomTheme: (key: string, theme: Theme) => void;
+  removeCustomTheme: (key: string) => void;
+};
+
+type ThemeSwitcherProps = {
+  className?: string;
+};
+
+type ThemeItem = {
+  key: string;
+  name: string;
+  mode: string;
+  availableModes: string[];
+  isCustom: boolean;
+};
+
+function slugify(name: string | null | undefined): string {
   return (
     String(name || "")
       .toLowerCase()
@@ -30,7 +79,7 @@ function slugify(name) {
   );
 }
 
-export function ThemeSwitcher({ className }) {
+export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
   const {
     themeKey,
     currentMode,
@@ -39,13 +88,13 @@ export function ThemeSwitcher({ className }) {
     themes,
     addCustomTheme,
     removeCustomTheme,
-  } = useTheme();
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const [_prevThemeKey, _setPrevThemeKey] = useState(themeKey);
-  const [previewMode, setPreviewMode] = useState("dark"); // 'dark' | 'light' for preview/import default
-  const [_siteMode, setSiteMode] = useState(() => {
+  } = useTheme() as ThemeContextValue;
+  const [open, setOpen] = useState<boolean>(false);
+  const [text, setText] = useState<string>("");
+  const [isPreviewing, setIsPreviewing] = useState<boolean>(false);
+  const [_prevThemeKey, _setPrevThemeKey] = useState<string>(themeKey);
+  const [previewMode, setPreviewMode] = useState<"dark" | "light">("dark");
+  const [_siteMode, setSiteMode] = useState<"light" | "dark">(() => {
     if (typeof window === "undefined" || !document?.documentElement) {
       return "light";
     }
@@ -53,26 +102,27 @@ export function ThemeSwitcher({ className }) {
       ? "dark"
       : "light";
   });
-  const [selectOpen, setSelectOpen] = useState(false); // Track if select dropdown is open
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef(null);
-  const trackRef = useRef(null);
+  const [selectOpen, setSelectOpen] = useState<boolean>(false);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
 
   // Get current theme info
   const currentTheme = themes[themeKey] || themes.system;
-  const availableModes = currentTheme?.modes
-    ? Object.keys(currentTheme.modes)
-    : [currentTheme?.mode || "light"];
+  const availableModes =
+    currentTheme && isModernTheme(currentTheme)
+      ? Object.keys(currentTheme.modes)
+      : [currentTheme?.mode || "light"];
   const canSwitchModes = availableModes.length > 1;
 
   // Handle drag functionality
-  const handleMouseDown = (e) => {
+  const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
     e.preventDefault();
   };
 
   const handleMouseMove = useCallback(
-    (e) => {
+    (e: MouseEvent) => {
       if (!(isDragging && trackRef.current)) {
         return;
       }
@@ -99,18 +149,21 @@ export function ThemeSwitcher({ className }) {
   }, []);
 
   // Touch events for mobile
-  const handleTouchStart = (e) => {
+  const handleTouchStart = (e: React.TouchEvent) => {
     setIsDragging(true);
     e.preventDefault();
   };
 
   const handleTouchMove = useCallback(
-    (e) => {
+    (e: TouchEvent) => {
       if (!(isDragging && trackRef.current)) {
         return;
       }
 
       const touch = e.touches[0];
+      if (!touch) {
+        return;
+      }
       const rect = trackRef.current.getBoundingClientRect();
       const x = touch.clientX - rect.left;
       const percentage = x / rect.width;
@@ -146,18 +199,19 @@ export function ThemeSwitcher({ className }) {
       }
 
       previewJsonTheme(raw);
-    } catch (e) {
-      toast.error(`Preview failed. ${e?.message || ""}`);
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : "";
+      toast.error(`Preview failed. ${errorMessage}`);
     }
   };
 
-  const isCssContent = (content) =>
+  const isCssContent = (content: string): boolean =>
     content.startsWith(":root") ||
     content.includes(":root {") ||
     content.includes(".dark") ||
     content.includes("--background:");
 
-  const previewCssTheme = (cssContent) => {
+  const previewCssTheme = (cssContent: string): void => {
     const baseName = "Preview";
     const theme = createThemeFromCss(baseName, cssContent);
     const modeToUse = previewMode === "dark" ? "dark" : "light";
@@ -165,7 +219,7 @@ export function ThemeSwitcher({ className }) {
     setIsPreviewing(true);
   };
 
-  const previewJsonTheme = (jsonContent) => {
+  const previewJsonTheme = (jsonContent: string): void => {
     const parsed = JSON.parse(jsonContent);
     if (!parsed || typeof parsed !== "object") {
       throw new Error("Invalid JSON");
@@ -180,7 +234,7 @@ export function ThemeSwitcher({ className }) {
     if (parsed.cssVars && (parsed.cssVars.light || parsed.cssVars.dark)) {
       const baseName = parsed.name || "Preview";
       const themeTokens = parsed.cssVars.theme || {};
-      const modes = {};
+      const modes: { light?: ThemeTokens; dark?: ThemeTokens } = {};
 
       if (parsed.cssVars.light) {
         modes.light = { ...themeTokens, ...parsed.cssVars.light };
@@ -196,9 +250,9 @@ export function ThemeSwitcher({ className }) {
         modes.light = { ...modes.dark };
       }
 
-      const theme = {
+      const theme: ModernTheme = {
         name: baseName,
-        modes,
+        modes: modes as { light: ThemeTokens; dark: ThemeTokens },
         defaultMode: previewMode === "dark" ? "dark" : "light",
       };
 
@@ -211,6 +265,7 @@ export function ThemeSwitcher({ className }) {
     toast.error("Nothing to preview. Provide valid CSS variables or JSON.");
   };
 
+  // @ts-expect-error
   useEffect(() => {
     if (isDragging && typeof window !== "undefined" && document) {
       document.addEventListener("mousemove", handleMouseMove);
@@ -251,20 +306,10 @@ export function ThemeSwitcher({ className }) {
     return () => observer.disconnect();
   }, []);
 
-  const _toggleSiteMode = () => {
-    if (typeof window === "undefined" || !document?.documentElement) {
-      return;
-    }
-
-    const root = document.documentElement;
-    root.classList.toggle("dark");
-    setSiteMode(root.classList.contains("dark") ? "dark" : "light");
-  };
-
-  const items = useMemo(() => {
-    const base = Object.entries(themes).map(([key, t]) => {
+  const items = useMemo((): ThemeItem[] => {
+    const base = Object.entries(themes).map(([key, t]): ThemeItem => {
       // Handle new theme format with modes
-      if (t?.modes) {
+      if (isModernTheme(t)) {
         const modes = Object.keys(t.modes);
         const currentThemeMode =
           currentMode === "auto" ? t.defaultMode || "dark" : currentMode;
@@ -298,7 +343,9 @@ export function ThemeSwitcher({ className }) {
     ];
   }, [themes, currentMode]);
 
-  const onFilePick = async (e) => {
+  const onFilePick = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ): Promise<void> => {
     const file = e.target.files?.[0];
     if (!file) {
       return;
@@ -331,8 +378,7 @@ export function ThemeSwitcher({ className }) {
             if (data.cssVars && (data.cssVars.light || data.cssVars.dark)) {
               const baseName = data.name || "custom";
               const themeTokens = data.cssVars.theme || {};
-              const _created = {};
-              const modes = {};
+              const modes: { light?: ThemeTokens; dark?: ThemeTokens } = {};
 
               if (data.cssVars.light) {
                 modes.light = { ...themeTokens, ...data.cssVars.light };
@@ -349,9 +395,9 @@ export function ThemeSwitcher({ className }) {
               }
 
               const key = slugify(baseName);
-              const theme = {
+              const theme: ModernTheme = {
                 name: baseName,
-                modes,
+                modes: modes as { light: ThemeTokens; dark: ThemeTokens },
                 defaultMode: previewMode === "dark" ? "dark" : "light",
               };
 
@@ -433,9 +479,8 @@ export function ThemeSwitcher({ className }) {
       if (parsed.cssVars && (parsed.cssVars.light || parsed.cssVars.dark)) {
         // Accept tweakcn registry format
         const baseName = parsed.name || "custom";
-        const _created = {};
         const themeTokens = parsed.cssVars.theme || {};
-        const modes = {};
+        const modes: { light?: ThemeTokens; dark?: ThemeTokens } = {};
 
         if (parsed.cssVars.light) {
           modes.light = { ...themeTokens, ...parsed.cssVars.light };
@@ -452,9 +497,9 @@ export function ThemeSwitcher({ className }) {
         }
 
         const key = slugify(baseName);
-        const theme = {
+        const theme: ModernTheme = {
           name: baseName,
-          modes,
+          modes: modes as { light: ThemeTokens; dark: ThemeTokens },
           defaultMode: previewMode === "dark" ? "dark" : "light",
         };
 
@@ -494,8 +539,9 @@ export function ThemeSwitcher({ className }) {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-    } catch (err) {
-      toast.error(`Import failed. ${err?.message || ""}`);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "";
+      toast.error(`Import failed. ${errorMessage}`);
     }
   };
 
@@ -684,9 +730,7 @@ export function ThemeSwitcher({ className }) {
                   // Close only; keep preview applied (not persisted)
                   setOpen(false);
                 }}
-                size="sm"
                 type="button"
-                variant="destructive"
               >
                 <X className="h-4 w-4" />
               </button>

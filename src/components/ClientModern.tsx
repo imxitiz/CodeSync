@@ -4,17 +4,24 @@ import Avatar from "react-avatar";
 import { FaCrown } from "react-icons/fa";
 import { FiEdit2 } from "react-icons/fi";
 
+export type ClientModernProps = {
+  username: string;
+  roomcreator: string | null;
+  currentEditor: string;
+  canGrantEdit?: boolean;
+};
+
 export default function ClientModern({
   username,
   roomcreator,
   currentEditor,
   canGrantEdit = false,
-}) {
-  const colorRef = useRef(randomColor());
+}: ClientModernProps) {
+  const colorRef = useRef<string>(randomColor());
   const isOwner = username === roomcreator;
   const isEditor = username === currentEditor;
 
-  let titleText;
+  let titleText: string;
   if (canGrantEdit) {
     titleText = "Click to grant editor";
   } else if (isEditor) {
@@ -45,7 +52,7 @@ export default function ClientModern({
             fgColor="#000"
             name={username}
             round="12px"
-            size={40}
+            size="40"
           />
           {isOwner && (
             <span
