@@ -15,4 +15,9 @@ export const ACTIONS = {
   EDIT_REVOKED: "edit-revoked",
   SET_CURRENT_EDITOR: "set_current_editor",
   DUPLICATE_USER: "duplicate-user",
-};
+} as const;
+
+export type ACTIONS = (typeof ACTIONS)[keyof typeof ACTIONS];
+
+export const BACKEND_API_URL: string =
+  import.meta.env.VITE_BACKEND_API_URL || "http://localhost:3000";

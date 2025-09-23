@@ -15,4 +15,6 @@ export const ACTIONS = {
   EDIT_REVOKED: "edit-revoked",
   SET_CURRENT_EDITOR: "set_current_editor",
   DUPLICATE_USER: "duplicate-user",
-};
+} as const;
+
+export type ACTIONS_TYPE = (typeof ACTIONS)[keyof typeof ACTIONS];

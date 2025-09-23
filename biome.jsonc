@@ -1,6 +1,10 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "extends": ["ultracite"],
+  "files": {
+    "includes": ["src/**/*", "server.ts", "action.ts", "scripts/**/*"],
+    "ignoreUnknown": true
+  },
   "linter": {
     "rules": {
       "style": {
@@ -20,7 +24,21 @@
         "noStaticElementInteractions": "off",
         "noNoninteractiveElementInteractions": "off",
         "useKeyWithClickEvents": "off"
+      },
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+        "useExhaustiveDependencies": "warn"
       }
     }
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 80,
+    "attributePosition": "auto"
   }
 }
