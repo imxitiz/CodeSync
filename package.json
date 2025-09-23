@@ -6,7 +6,7 @@
   "scripts": {
     "dev:front": "vite",
     "dev": "npm run build:frontend && npm run server:prod",
-    "build": "npm run build:backend && npm run build:frontend",
+    "build": "npm run build:frontend && npm run build:backend",
     "build:frontend": "vite-react-ssg build",
     "build:backend": "mkdir -p dist && tsc server.ts --outDir dist --module esnext --target es2020 --moduleResolution bundler --skipLibCheck --types node && cp action.js dist/action.js && cp package.json dist/package.json",
     "build:ssg": "vite-react-ssg build",
