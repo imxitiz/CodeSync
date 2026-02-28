@@ -12,8 +12,8 @@ const EditorLoading: React.FC = () => (
       alignItems: "center",
       justifyContent: "center",
       height: "100%",
-      background: "#282a36",
-      color: "#f8f8f2",
+      background: "var(--card, #1a1a1a)",
+      color: "var(--foreground, #f8f8f2)",
       fontFamily: "monospace",
       fontSize: "14px",
     }}
@@ -36,7 +36,7 @@ const EditorLoading: React.FC = () => (
         style={{
           width: "40px",
           height: "4px",
-          background: "#44475a",
+          background: "var(--muted, #44475a)",
           borderRadius: "2px",
           overflow: "hidden",
           margin: "0 auto",
@@ -46,7 +46,7 @@ const EditorLoading: React.FC = () => (
           style={{
             width: "100%",
             height: "100%",
-            background: "linear-gradient(90deg, #ff79c6, #bd93f9, #50fa7b)",
+            background: "var(--primary, #888)",
             animation: "loading 1.5s infinite ease-in-out",
             borderRadius: "2px",
           }}

@@ -120,41 +120,42 @@ export default function HomePageModern() {
 
   return (
     <AppShell className="relative">
-      <section className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-8 px-3 py-10 md:grid-cols-2 md:py-16">
-        <div className="order-2 md:order-1">
-          <h1 className="text-balance bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text font-semibold text-3xl text-transparent tracking-tight sm:text-4xl md:text-5xl">
+      <div className="flex min-h-full flex-col">
+      <section className="mx-auto grid w-full max-w-5xl flex-1 grid-cols-1 content-center items-center gap-6 px-4 py-8 md:grid-cols-2 md:gap-12 md:py-0">
+        <div>
+          <h1 className="text-balance font-semibold text-foreground text-2xl tracking-tight sm:text-3xl md:text-4xl lg:text-5xl">
             Collaborate in real-time.
             <br />
             Share code with one link.
           </h1>
-          <p className="mt-3 max-w-prose text-pretty text-muted-foreground text-sm sm:text-base">
+          <p className="mt-3 max-w-prose text-pretty text-muted-foreground text-sm leading-relaxed sm:text-base">
             Create a room, share the link, and start collaborating instantly. No
             setup, just productive pairing with live presence and editor
-            control. Fully themeable with light, dark, and custom palettes.
+            control.
           </p>
 
           <ul className="mt-5 grid gap-2 text-muted-foreground text-sm sm:grid-cols-2">
             <li className="flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-primary" />
+              <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
               One-click join via link
             </li>
             <li className="flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-primary" />
+              <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
               Editor handoff control
             </li>
             <li className="flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-primary" />
+              <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
               Accessible, keyboard-friendly
             </li>
             <li className="flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-primary" />
+              <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
               Import themes from tweakcn
             </li>
           </ul>
         </div>
 
-        <div className="order-1 md:order-2">
-          <Card className="mx-auto w-full max-w-md border border-primary drop-shadow-md drop-shadow-primary">
+        <div>
+          <Card className="mx-auto w-full max-w-md border">
             <CardHeader>
               <CardTitle>Join a room</CardTitle>
               <CardDescription>
@@ -261,9 +262,9 @@ export default function HomePageModern() {
         </div>
       </section>
 
-      <footer className="pointer-events-none fixed inset-x-0 bottom-3 grid place-items-center px-3">
-        <div className="pointer-events-auto inline-flex items-center gap-2 rounded-full border bg-background/80 px-3 py-1.5 text-xs shadow-sm backdrop-blur">
-          <span className="text-muted-foreground">
+      <footer className="shrink-0 py-4 text-center">
+        <div className="inline-flex items-center gap-2 text-muted-foreground text-xs">
+          <span>
             Built with ❤️ by{" "}
             <a
               className="underline underline-offset-2 hover:text-foreground"
@@ -274,10 +275,8 @@ export default function HomePageModern() {
               Sachin Thapa
             </a>
           </span>
-          <span aria-hidden="true" className="text-muted-foreground">
-            ·
-          </span>
-          <span className="text-muted-foreground">
+          <span aria-hidden="true">·</span>
+          <span>
             Maintainers:{" "}
             <a
               className="underline underline-offset-2 hover:text-foreground"
@@ -290,6 +289,7 @@ export default function HomePageModern() {
           </span>
         </div>
       </footer>
+      </div>
     </AppShell>
   );
 }

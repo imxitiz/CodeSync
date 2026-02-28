@@ -443,6 +443,7 @@ export default function EditorPageModern() {
                   {compactAvatars.slice.map(({ socketId, username }) => {
                     const crown = username === roomCreator;
                     const pencil = username === currentEditor;
+                    const me = username === userName;
                     return (
                       <div className="relative" key={socketId}>
                         <Avatar
@@ -451,6 +452,9 @@ export default function EditorPageModern() {
                           round="8px"
                           size="28"
                         />
+                        {me && (
+                          <span className="-bottom-0.5 -right-0.5 absolute size-2.5 rounded-full border-2 border-card bg-primary" title="You" />
+                        )}
                         {crown ? (
                           <span
                             className="-right-1 -top-1 pointer-events-none absolute inline-flex size-4 items-center justify-center rounded-full bg-amber-400 text-amber-950 shadow-sm ring-1 ring-border"
@@ -654,6 +658,7 @@ export default function EditorPageModern() {
                           <ClientModern
                             canGrantEdit={isOwner}
                             currentEditor={currentEditor}
+                            isMe={username === userName}
                             roomcreator={roomCreator}
                             username={username}
                           />

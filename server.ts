@@ -21,7 +21,9 @@ const normalize = (origin: string) => origin.replace(TRAILING_SLASH_REGEX, "");
 
 const defaultOrigins = [
   "http://localhost:5173",
+  "http://localhost:5174",
   "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
   "http://127.0.0.1:5500",
   "http://localhost:3000",
 ];
@@ -37,6 +39,10 @@ const allowedOrigins = new Set(
   [...defaultOrigins, ...envOrigins.filter((o) => o !== "*")].map(normalize)
 );
 
+// Also allow any localhost port in development
+const LOCALHOST_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const isDev = process.env.NODE_ENV !== "production";
+
 const ROOM_CLEANUP_DELAY_MS = 500;
 
 // allow requests with no origin (like mobile apps, curl, or server-to-server)
@@ -48,6 +54,9 @@ const corsOrigin = (
     return callback(null, true);
   }
   if (allowAll) {
+    return callback(null, true);
+  }
+  if (isDev && LOCALHOST_REGEX.test(normalize(origin))) {
     return callback(null, true);
   }
   if (allowedOrigins.has(normalize(origin))) {
