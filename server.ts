@@ -102,6 +102,19 @@ app.get("/api/info", (_req: Request, res: Response) => {
 const userSocketMap = new Map<string, string>();
 const roomCreatorMap = new Map<string, string>();
 
+// --- Room code persistence ---
+// Stores the latest code for each room so it can be restored if all users
+// disconnect and rejoin within the TTL window.
+type RoomCodeEntry = {
+  code: string;
+  currentEditor: string;
+  updatedAt: number;
+};
+
+const roomCodeStore = new Map<string, RoomCodeEntry>();
+const roomCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const ROOM_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 const getAllconnectedClients = (roomId: string) =>
   [...(io.sockets.adapter.rooms.get(roomId) || [])].map((socketId) => ({
     socketId,
@@ -123,6 +136,13 @@ io.on("connection", (socket: Socket) => {
         roomCreator = userName;
       }
 
+      // Cancel any pending cleanup timer for this room (user rejoined in time)
+      const existingTimer = roomCleanupTimers.get(roomId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+        roomCleanupTimers.delete(roomId);
+      }
+
       const clients = getAllconnectedClients(roomId);
       if (
         clients.length > 1 &&
@@ -135,6 +155,15 @@ io.on("connection", (socket: Socket) => {
         socket.leave(roomId);
         socket.disconnect();
         return;
+      }
+
+      // If this is the first client and there is stored code, restore it
+      const storedCode = roomCodeStore.get(roomId);
+      if (clients.length === 1 && storedCode) {
+        socket.emit(ACTIONS.CODE_CHANGE, {
+          code: storedCode.code,
+          currenteditor: storedCode.currentEditor,
+        });
       }
 
       // Broadcast editable state to all clients in the room
@@ -160,6 +189,12 @@ io.on("connection", (socket: Socket) => {
       code: string;
       currenteditor: string;
     }) => {
+      // Persist the latest code for this room
+      roomCodeStore.set(roomId, {
+        code,
+        currentEditor: currenteditor,
+        updatedAt: Date.now(),
+      });
       socket.in(roomId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor });
     }
   );
@@ -198,6 +233,15 @@ io.on("connection", (socket: Socket) => {
       setTimeout(() => {
         if (io.sockets.adapter.rooms.get(room) === undefined) {
           roomCreatorMap.delete(room);
+
+          // Schedule code cleanup after TTL (code survives brief disconnects)
+          if (roomCodeStore.has(room)) {
+            const timer = setTimeout(() => {
+              roomCodeStore.delete(room);
+              roomCleanupTimers.delete(room);
+            }, ROOM_CODE_TTL_MS);
+            roomCleanupTimers.set(room, timer);
+          }
         }
       }, ROOM_CLEANUP_DELAY_MS);
     }

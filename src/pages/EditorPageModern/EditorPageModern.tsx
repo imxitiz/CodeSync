@@ -11,6 +11,7 @@ import ClientModern from "@/components/ClientModern";
 import EditorWrapper from "@/components/EditorWrapper";
 import { Button } from "@/components/ui/button";
 import { ACTIONS } from "@/utils/constants";
+import { saveRoom } from "@/utils/roomHistory";
 import { initSocket } from "@/utils/socket";
 
 type Client = {
@@ -213,6 +214,11 @@ export default function EditorPageModern() {
             roomId: id,
             userName,
           });
+
+          // Persist room to local history for quick rejoin later
+          if (id) {
+            saveRoom(id, userName);
+          }
 
           socketRef.current.on(
             ACTIONS.JOINED,
