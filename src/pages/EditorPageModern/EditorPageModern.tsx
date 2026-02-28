@@ -1148,7 +1148,7 @@ export default function EditorPageModern() {
                               <ClientModern
                                 activeTab={
                                   userActiveTabs[username]
-                                    ? getTabName(userActiveTabs[username] || "")
+                                    ? getTabName(userActiveTabs[username] ?? "")
                                     : activeTab?.name
                                 }
                                 canGrantEdit={isOwner}
@@ -1196,7 +1196,7 @@ export default function EditorPageModern() {
                                       : "ghost"
                                   }
                                 >
-                                  ⚙
+                                  <span aria-label="Manage permissions">⚙</span>
                                 </Button>
                               )}
                             </div>
