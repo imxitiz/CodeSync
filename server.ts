@@ -107,7 +107,7 @@ const roomCreatorMap = new Map<string, string>();
 // disconnect and rejoin within the TTL window.
 type RoomCodeEntry = {
   code: string;
-  currentEditor: string;
+  currenteditor: string;
   updatedAt: number;
 };
 
@@ -162,7 +162,7 @@ io.on("connection", (socket: Socket) => {
       if (clients.length === 1 && storedCode) {
         socket.emit(ACTIONS.CODE_CHANGE, {
           code: storedCode.code,
-          currenteditor: storedCode.currentEditor,
+          currenteditor: storedCode.currenteditor,
         });
       }
 
@@ -192,7 +192,7 @@ io.on("connection", (socket: Socket) => {
       // Persist the latest code for this room
       roomCodeStore.set(roomId, {
         code,
-        currentEditor: currenteditor,
+        currenteditor,
         updatedAt: Date.now(),
       });
       socket.in(roomId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor });
