@@ -26,6 +26,7 @@ export type EditorProps = {
   setCurrentEditor: (editor: string) => void;
   wrap?: boolean;
   darkMode?: boolean;
+  fontSize?: number;
 };
 
 // Added "wrap" prop to control line wrapping (true = wrap at viewport width)
@@ -39,6 +40,7 @@ const Editor: React.FC<EditorProps> = ({
   setCurrentEditor,
   wrap = false,
   darkMode = true,
+  fontSize = 16,
 }) => {
   const [code, setCode] = useState<string>("");
 
@@ -80,13 +82,22 @@ const Editor: React.FC<EditorProps> = ({
 
   const themeExt = darkMode ? dracula : lightTheme;
 
+  // Extension that sets font-size and triggers CodeMirror re-measure on change
+  const fontSizeTheme = useMemo(
+    () =>
+      EditorView.theme({
+        "&": { fontSize: `${fontSize}px` },
+      }),
+    [fontSize]
+  );
+
   const extensions = useMemo(() => {
-    const base = [javascript({ jsx: true }), themeExt];
+    const base = [javascript({ jsx: true }), themeExt, fontSizeTheme];
     if (wrap) {
       base.push(EditorView.lineWrapping);
     }
     return base;
-  }, [wrap, themeExt]);
+  }, [wrap, themeExt, fontSizeTheme]);
 
   const handleChange = (value: string): void => {
     if (!editable) {

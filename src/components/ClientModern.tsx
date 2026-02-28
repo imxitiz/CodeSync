@@ -9,6 +9,7 @@ export type ClientModernProps = {
   roomcreator: string | null;
   currentEditor: string;
   canGrantEdit?: boolean;
+  isMe?: boolean;
 };
 
 export default function ClientModern({
@@ -16,6 +17,7 @@ export default function ClientModern({
   roomcreator,
   currentEditor,
   canGrantEdit = false,
+  isMe = false,
 }: ClientModernProps) {
   const colorRef = useRef<string>(randomColor());
   const isOwner = username === roomcreator;
@@ -34,11 +36,14 @@ export default function ClientModern({
 
   return (
     <li
-      aria-label={`${username}${isOwner ? " (owner)" : ""}${
+      aria-label={`${username}${isMe ? " (you)" : ""}${isOwner ? " (owner)" : ""}${
         isEditor ? " (editor)" : ""
       }`}
       className={[
-        "group relative flex items-center justify-between rounded-md border bg-card/60 px-3 py-2 text-card-foreground shadow-xs transition-colors",
+        "group relative flex items-center justify-between rounded-md border px-3 py-2 text-card-foreground shadow-xs transition-colors",
+        isMe
+          ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
+          : "border-border bg-card/60",
         canGrantEdit
           ? "cursor-pointer hover:bg-accent/50"
           : "hover:bg-accent/40",
@@ -72,7 +77,14 @@ export default function ClientModern({
           )}
         </div>
         <div className="min-w-0">
-          <p className="truncate font-medium text-sm">{username}</p>
+          <p className="truncate font-medium text-sm">
+            {username}
+            {isMe && (
+              <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 font-medium text-primary text-xs">
+                You
+              </span>
+            )}
+          </p>
           <p className="truncate text-muted-foreground text-xs">
             {isOwner ? "Owner" : "Participant"}
           </p>

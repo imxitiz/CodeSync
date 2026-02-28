@@ -9,12 +9,6 @@ export type ThemeTokens = {
   [key: string]: string;
 };
 
-export type LegacyTheme = {
-  name?: string;
-  mode?: "light" | "dark";
-  tokens: ThemeTokens;
-};
-
 export type ModernTheme = {
   name: string;
   modes: {
@@ -24,16 +18,13 @@ export type ModernTheme = {
   defaultMode: "light" | "dark";
 };
 
-export type Theme = LegacyTheme | ModernTheme;
+export type Theme = ModernTheme;
 
 // Type guard functions
 export function isModernTheme(theme: Theme): theme is ModernTheme {
   return "modes" in theme && "defaultMode" in theme;
 }
 
-export function isLegacyTheme(theme: Theme): theme is LegacyTheme {
-  return "tokens" in theme && !("modes" in theme);
-}
 
 function slugify(name: string | null | undefined): string {
   return (
@@ -64,7 +55,7 @@ function keyFromTheme(filePath: string, theme: Theme): string {
     return "system";
   }
   const base = theme?.name ? slugify(theme.name) : slugify(fileBase);
-  return isLegacyTheme(theme) && theme?.mode ? `${base}-${theme.mode}` : base;
+  return base;
 }
 
 function buildPresetThemes(): Record<string, Theme> {
@@ -113,7 +104,7 @@ export function applyTheme(
   // Determine which mode to use
   const activeMode: "light" | "dark" =
     (mode as "light" | "dark") ||
-    (isModernTheme(theme) ? theme.defaultMode : theme.mode) ||
+    theme.defaultMode ||
     "dark";
 
   // Toggle dark mode class for Tailwind variant utilities
@@ -124,9 +115,7 @@ export function applyTheme(
   }
 
   // Get tokens for the active mode
-  const tokens = isModernTheme(theme)
-    ? theme.modes?.[activeMode] || {}
-    : theme.tokens || {};
+  const tokens = theme.modes?.[activeMode] || {}
 
   for (const key of Object.keys(tokens)) {
     const value = tokens[key];
@@ -295,37 +284,4 @@ export function createThemeFromCss(
     modes: modes as { light: ThemeTokens; dark: ThemeTokens },
     defaultMode: modes.dark ? "dark" : "light",
   };
-}
-
-// Legacy function for backward compatibility - creates separate themes
-export function createThemesFromCss(
-  baseName: string,
-  cssText: string,
-  includeDark = true
-): Record<string, LegacyTheme> {
-  const theme = createThemeFromCss(baseName, cssText);
-  const themes: Record<string, LegacyTheme> = {};
-  const safe = (s: string | null | undefined): string =>
-    String(s || "custom")
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-
-  if (theme.modes.light) {
-    themes[`${safe(baseName)}-light`] = {
-      name: `${baseName} Light`,
-      mode: "light",
-      tokens: theme.modes.light,
-    };
-  }
-
-  if (includeDark && theme.modes.dark) {
-    themes[`${safe(baseName)}-dark`] = {
-      name: `${baseName} Dark`,
-      mode: "dark",
-      tokens: theme.modes.dark,
-    };
-  }
-
-  return themes;
 }

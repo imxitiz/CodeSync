@@ -27,11 +27,11 @@ export default function AppShell({ children, className }: AppShellProps) {
         Skip to content
       </a>
 
-      <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60">
         <div className="mx-auto max-w-7xl px-3 sm:px-4">
           <div className="flex h-14 items-center justify-between">
             <a
-              className="group -mx-1.5 inline-flex flex-shrink-0 items-center gap-2.5 rounded-md px-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="group -mx-1.5 inline-flex shrink-0 items-center gap-2.5 rounded-md px-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               href="/"
             >
               <div
@@ -88,7 +88,7 @@ export default function AppShell({ children, className }: AppShellProps) {
             <div className="mx-auto max-w-7xl px-3 py-4">
               <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <ThemeSwitcher />
                   </div>
                 </div>
@@ -99,7 +99,7 @@ export default function AppShell({ children, className }: AppShellProps) {
       </header>
 
       <main
-        className={cn("h-[calc(100svh-56px)] overflow-hidden", className)}
+        className={cn("h-[calc(100svh-56px)] overflow-auto", className)}
         id="content"
       >
         {children}
