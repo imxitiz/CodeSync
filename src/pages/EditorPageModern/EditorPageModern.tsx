@@ -3,7 +3,7 @@ import Avatar from "react-avatar";
 import toast from "react-hot-toast";
 import { FaCrown } from "react-icons/fa";
 import { FaRegCopy } from "react-icons/fa6";
-import { FiEdit2, FiLogOut } from "react-icons/fi";
+import { FiEdit2, FiLogOut, FiUsers } from "react-icons/fi";
 import { MdTextDecrease, MdTextIncrease } from "react-icons/md";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import AppShell from "@/components/AppShell";
@@ -70,7 +70,10 @@ export default function EditorPageModern() {
   const [connectionMessage, setConnectionMessage] = useState<string>(
     "Connecting to server..."
   );
-  const [wrapLines, setWrapLines] = useState<boolean>(false);
+  const [fontSize, setFontSize] = useState(16);
+  const [wrapLines, setWrapLines] = useState<boolean>(
+    () => typeof window !== "undefined" && window.innerWidth < 640
+  );
   const [showParticipants, setShowParticipants] = useState<boolean>(false);
   const [zen, setZen] = useState<boolean>(false);
 
@@ -136,13 +139,7 @@ export default function EditorPageModern() {
   };
 
   const fontSizeChange = (change: number) => {
-    const root = document.documentElement;
-    const currentSize = Number.parseInt(
-      getComputedStyle(root).getPropertyValue("--editor-font-size") || "16px",
-      10
-    );
-    const newSize = Math.max(8, Math.min(currentSize + change, 36));
-    root.style.setProperty("--editor-font-size", `${newSize}px`);
+    setFontSize((prev) => Math.max(8, Math.min(prev + change, 36)));
   };
 
   const toggleEditable = (): void => {
@@ -350,7 +347,7 @@ export default function EditorPageModern() {
 
   // UI
   return (
-    <AppShell className="relative">
+    <AppShell className="relative overflow-hidden">
       {/* Prevent page-level scroll; only internal regions may scroll */}
       <div className="h-full w-full overflow-hidden bg-background">
         {/* CodeMirror scroller rules */}
@@ -370,7 +367,6 @@ export default function EditorPageModern() {
             width: 100% !important;
             min-height: 0 !important;
             min-width: 0 !important;
-            font-size: var(--editor-font-size, 16px);
             line-height: 1.6;
             background: var(--card);
             /* do NOT set overflow here; scroller handles it */
@@ -411,28 +407,33 @@ export default function EditorPageModern() {
         <div className="flex h-full flex-col overflow-hidden">
           {/* Top bar (hidden in Zen) */}
           {!zen && (
-            <div className="sticky top-0 z-35 flex items-center justify-between gap-2 overflow-x-scroll border-b bg-background/90 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+            <div className="sticky top-0 z-35 flex items-center gap-1 overflow-x-auto border-b bg-background/90 px-2 py-1.5 backdrop-blur sm:gap-2 sm:px-3 supports-backdrop-filter:bg-background/70">
               {/* Left: room info */}
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-sm">
-                  Room:
-                  <span className="ms-2 inline-flex items-center rounded-md border bg-secondary px-2 py-0.5 font-medium text-secondary-foreground text-xs">
-                    {id}
-                  </span>
-                </p>
-                <p className="mt-0.5 truncate text-muted-foreground text-xs">
-                  Welcome,
-                  <span className="ms-1 inline-flex items-center rounded-md bg-accent px-1.5 py-0.5 text-[11px] text-accent-foreground">
-                    {userName}
-                  </span>
-                  {serverStatus !== "connected" ? (
+              <div className="min-w-0 shrink-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-sm">Room</span>
+                  <button
+                    className="inline-flex cursor-pointer items-center gap-1 rounded-md border bg-secondary px-2 py-0.5 font-mono text-[11px] text-secondary-foreground transition-colors hover:bg-secondary/80"
+                    onClick={copyRoomId}
+                    title="Click to copy room ID"
+                    type="button"
+                  >
+                    {id && id.length > 12 ? `${id.slice(0, 8)}…` : id}
+                    <FaRegCopy className="size-3 opacity-50" />
+                  </button>
+                </div>
+                <p className="mt-0.5 flex items-center gap-1 text-muted-foreground text-xs">
+                  <span className="truncate max-w-[120px]">{userName}</span>
+                  {serverStatus === "connected" ? (
+                    <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" title="Connected" />
+                  ) : (
                     <span
                       aria-live="polite"
-                      className="ms-2 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-200"
+                      className="inline-flex shrink-0 items-center rounded-md border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-200"
                     >
                       {connectionMessage}
                     </span>
-                  ) : null}
+                  )}
                 </p>
               </div>
 
@@ -448,22 +449,22 @@ export default function EditorPageModern() {
                           fgColor="#000"
                           name={username}
                           round="8px"
-                          size="32"
+                          size="28"
                         />
                         {crown ? (
                           <span
-                            className="-right-1.5 -top-1.5 pointer-events-none absolute inline-flex size-5 items-center justify-center rounded-full bg-amber-400 text-amber-950 shadow-sm ring-1 ring-border"
+                            className="-right-1 -top-1 pointer-events-none absolute inline-flex size-4 items-center justify-center rounded-full bg-amber-400 text-amber-950 shadow-sm ring-1 ring-border"
                             title="Owner"
                           >
-                            <FaCrown className="size-3.5" />
+                            <FaCrown className="size-2.5" />
                           </span>
                         ) : null}
                         {pencil ? (
                           <span
-                            className="-left-1.5 -bottom-1.5 pointer-events-none absolute inline-flex size-5 items-center justify-center rounded-full bg-emerald-400 text-emerald-950 shadow-sm ring-1 ring-border"
+                            className="-left-1 -bottom-1 pointer-events-none absolute inline-flex size-4 items-center justify-center rounded-full bg-emerald-400 text-emerald-950 shadow-sm ring-1 ring-border"
                             title="Editor"
                           >
-                            <FiEdit2 className="size-3.5" />
+                            <FiEdit2 className="size-2.5" />
                           </span>
                         ) : null}
                       </div>
@@ -472,7 +473,7 @@ export default function EditorPageModern() {
                   {compactAvatars.extra > 0 && (
                     <button
                       aria-label="Show all participants"
-                      className="ms-1 cursor-pointer rounded-md border bg-background px-2 py-1 text-foreground text-xs hover:bg-accent"
+                      className="ms-1 cursor-pointer rounded-md border bg-background px-1.5 py-0.5 text-foreground text-xs hover:bg-accent"
                       onClick={() => setShowParticipants(true)}
                       title="Show all participants"
                       type="button"
@@ -483,99 +484,106 @@ export default function EditorPageModern() {
                 </div>
               </div>
 
-              {/* Right: tools */}
-              <div className="flex items-center gap-1">
-                <Button
-                  onClick={() => fontSizeChange(2)}
-                  size="sm"
-                  title="Increase editor text size"
-                  variant="outline"
-                >
-                  <MdTextIncrease />
-                </Button>
-                <Button
-                  onClick={() => fontSizeChange(-2)}
-                  size="sm"
-                  title="Decrease editor text size"
-                  variant="outline"
-                >
-                  <MdTextDecrease />
-                </Button>
-
-                <Button
-                  onClick={() => setWrapLines((v) => !v)}
-                  size="sm"
-                  title="Toggle line wrap"
-                  variant={wrapLines ? "secondary" : "outline"}
-                >
-                  {wrapLines ? "Wrap: On" : "Wrap: Off"}
-                </Button>
-
-                <Button
-                  onClick={copyCode}
-                  size="sm"
-                  title="Copy code"
-                  variant="outline"
-                >
-                  <FaRegCopy />{" "}
-                  <span className="hidden sm:inline-block">Copy</span>
-                </Button>
-
-                <Button
-                  onClick={copyRoomId}
-                  size="sm"
-                  title="Copy room id"
-                  variant="outline"
-                >
-                  ID
-                </Button>
-
-                {(currentEditor === userName ||
-                  (isOwner && currentEditor !== "")) && (
+              {/* Right: tools — grouped with separators */}
+              <div className="ml-auto flex shrink-0 items-center">
+                {/* Editor display controls */}
+                <div className="flex items-center gap-0.5">
                   <Button
-                    onClick={toggleEditable}
+                    onClick={() => fontSizeChange(2)}
                     size="sm"
-                    title={
-                      currentEditor === userName
-                        ? "Release Control"
-                        : "Take Control"
-                    }
-                    variant={
-                      currentEditor === userName ? "secondary" : "default"
-                    }
+                    title="Increase editor text size"
+                    variant="ghost"
                   >
-                    {currentEditor === userName ? "Release" : "Take"}
+                    <MdTextIncrease />
                   </Button>
-                )}
+                  <Button
+                    onClick={() => fontSizeChange(-2)}
+                    size="sm"
+                    title="Decrease editor text size"
+                    variant="ghost"
+                  >
+                    <MdTextDecrease />
+                  </Button>
+                  <Button
+                    className="hidden sm:inline-flex"
+                    onClick={() => setWrapLines((v) => !v)}
+                    size="sm"
+                    title="Toggle line wrap"
+                    variant={wrapLines ? "secondary" : "ghost"}
+                  >
+                    {wrapLines ? "Wrap" : "Wrap"}
+                  </Button>
+                </div>
 
-                <Button
-                  className="hidden sm:inline-flex"
-                  onClick={() => setShowParticipants(true)}
-                  size="sm"
-                  title="Toggle participants"
-                  variant="ghost"
-                >
-                  People
-                </Button>
+                {/* Separator */}
+                <div aria-hidden="true" className="mx-1.5 hidden h-5 w-px bg-border sm:block" />
 
-                <Button
-                  onClick={() => setZen((v) => !v)}
-                  size="sm"
-                  title={zen ? "Exit Zen mode" : "Enter Zen mode"}
-                  variant={zen ? "secondary" : "outline"}
-                >
-                  {zen ? "Exit Zen" : "Zen"}
-                </Button>
+                {/* Code actions */}
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    onClick={copyCode}
+                    size="sm"
+                    title="Copy code"
+                    variant="ghost"
+                  >
+                    <FaRegCopy />
+                    <span className="hidden sm:inline-block">Copy</span>
+                  </Button>
 
-                <Button
-                  onClick={leaveRoom}
-                  size="sm"
-                  title="Leave room"
-                  variant="destructive"
-                >
-                  <FiLogOut />{" "}
-                  <span className="hidden sm:inline-block">Leave</span>
-                </Button>
+                  {(currentEditor === userName ||
+                    (isOwner && currentEditor !== "")) && (
+                    <Button
+                      onClick={toggleEditable}
+                      size="sm"
+                      title={
+                        currentEditor === userName
+                          ? "Release Control"
+                          : "Take Control"
+                      }
+                      variant={
+                        currentEditor === userName ? "secondary" : "default"
+                      }
+                    >
+                      {currentEditor === userName ? "Release" : "Take"}
+                    </Button>
+                  )}
+                </div>
+
+                {/* Separator */}
+                <div aria-hidden="true" className="mx-1.5 hidden h-5 w-px bg-border sm:block" />
+
+                {/* Room actions */}
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    onClick={() => setShowParticipants(true)}
+                    size="sm"
+                    title="Toggle participants"
+                    variant="ghost"
+                  >
+                    <FiUsers />
+                    <span className="hidden sm:inline-block">People</span>
+                  </Button>
+
+                  <Button
+                    className="hidden sm:inline-flex"
+                    onClick={() => setZen((v) => !v)}
+                    size="sm"
+                    title={zen ? "Exit Zen mode" : "Enter Zen mode"}
+                    variant={zen ? "secondary" : "ghost"}
+                  >
+                    Zen
+                  </Button>
+
+                  <Button
+                    onClick={leaveRoom}
+                    size="sm"
+                    title="Leave room"
+                    variant="destructive"
+                  >
+                    <FiLogOut />
+                    <span className="hidden sm:inline-block">Leave</span>
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -678,6 +686,7 @@ export default function EditorPageModern() {
                 currentEditor={currentEditor}
                 darkMode={isDark}
                 editable={userName === currentEditor || isOwner}
+                fontSize={fontSize}
                 onCodeChange={(code: string) => {
                   codeRef.current = code;
                 }}
