@@ -102,6 +102,85 @@ app.get("/api/info", (_req: Request, res: Response) => {
 const userSocketMap = new Map<string, string>();
 const roomCreatorMap = new Map<string, string>();
 
+// Multi-tab state: roomId -> { tabId -> { name, code } }
+type TabData = { name: string; code: string };
+const roomTabsMap = new Map<string, Map<string, TabData>>();
+
+// Track which tab each socket is viewing: socketId -> tabId
+const userActiveTabMap = new Map<string, string>();
+
+// Permissions per room per user: roomId -> { username -> permissions }
+type UserPermissions = {
+  canEdit: boolean;
+  canCreateTab: boolean;
+  canDeleteTab: boolean;
+  canRenameTab: boolean;
+};
+const roomPermissionsMap = new Map<
+  string,
+  Map<string, UserPermissions>
+>();
+
+const DEFAULT_PERMISSIONS: UserPermissions = {
+  canEdit: false,
+  canCreateTab: false,
+  canDeleteTab: false,
+  canRenameTab: false,
+};
+
+const OWNER_PERMISSIONS: UserPermissions = {
+  canEdit: true,
+  canCreateTab: true,
+  canDeleteTab: true,
+  canRenameTab: true,
+};
+
+const DEFAULT_TAB_ID = "tab-main";
+const DEFAULT_TAB_NAME = "main.js";
+
+const getOrCreateRoomTabs = (roomId: string): Map<string, TabData> => {
+  let tabs = roomTabsMap.get(roomId);
+  if (!tabs) {
+    tabs = new Map<string, TabData>();
+    tabs.set(DEFAULT_TAB_ID, { name: DEFAULT_TAB_NAME, code: "" });
+    roomTabsMap.set(roomId, tabs);
+  }
+  return tabs;
+};
+
+const getOrCreateRoomPermissions = (
+  roomId: string
+): Map<string, UserPermissions> => {
+  let perms = roomPermissionsMap.get(roomId);
+  if (!perms) {
+    perms = new Map<string, UserPermissions>();
+    roomPermissionsMap.set(roomId, perms);
+  }
+  return perms;
+};
+
+const serializeTabs = (
+  tabs: Map<string, TabData>
+): { id: string; name: string; code: string }[] =>
+  [...tabs.entries()].map(([id, { name, code }]) => ({ id, name, code }));
+
+const serializePermissions = (
+  perms: Map<string, UserPermissions>
+): Record<string, UserPermissions> => Object.fromEntries(perms);
+
+const getUserActiveTabs = (
+  roomId: string
+): { username: string; activeTabId: string }[] => {
+  const room = io.sockets.adapter.rooms.get(roomId);
+  if (!room) return [];
+  return [...room]
+    .map((sid) => ({
+      username: userSocketMap.get(sid) || "",
+      activeTabId: userActiveTabMap.get(sid) || DEFAULT_TAB_ID,
+    }))
+    .filter((u) => u.username);
+};
+
 const getAllconnectedClients = (roomId: string) =>
   [...(io.sockets.adapter.rooms.get(roomId) || [])].map((socketId) => ({
     socketId,
@@ -137,6 +216,20 @@ io.on("connection", (socket: Socket) => {
         return;
       }
 
+      // Ensure tabs and permissions exist for the room
+      const tabs = getOrCreateRoomTabs(roomId);
+      const perms = getOrCreateRoomPermissions(roomId);
+
+      // Set owner permissions if this is the creator
+      if (roomCreator === userName) {
+        perms.set(userName, { ...OWNER_PERMISSIONS });
+      } else if (!perms.has(userName)) {
+        perms.set(userName, { ...DEFAULT_PERMISSIONS });
+      }
+
+      // Set default active tab for this socket
+      userActiveTabMap.set(socket.id, DEFAULT_TAB_ID);
+
       // Broadcast editable state to all clients in the room
       for (const { socketId } of clients) {
         io.to(socketId).emit(ACTIONS.JOINED, {
@@ -146,6 +239,14 @@ io.on("connection", (socket: Socket) => {
           roomcreator: roomCreator,
         });
       }
+
+      // Send tab data and permissions to the joining user
+      socket.emit(ACTIONS.TAB_SYNC, {
+        tabs: serializeTabs(tabs),
+        activeTabId: DEFAULT_TAB_ID,
+        userActiveTabs: getUserActiveTabs(roomId),
+        permissions: serializePermissions(perms),
+      });
     }
   );
 
@@ -153,14 +254,26 @@ io.on("connection", (socket: Socket) => {
     ACTIONS.CODE_CHANGE,
     ({
       roomId,
+      tabId,
       code,
       currenteditor,
     }: {
       roomId: string;
+      tabId: string;
       code: string;
       currenteditor: string;
     }) => {
-      socket.in(roomId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor });
+      // Store code on server
+      const tabs = roomTabsMap.get(roomId);
+      if (tabs) {
+        const tab = tabs.get(tabId);
+        if (tab) {
+          tab.code = code;
+        }
+      }
+      socket
+        .in(roomId)
+        .emit(ACTIONS.CODE_CHANGE, { tabId, code, currenteditor });
     }
   );
 
@@ -170,12 +283,18 @@ io.on("connection", (socket: Socket) => {
       socketId,
       code,
       currenteditor,
+      tabId,
     }: {
       socketId: string;
       code: string;
       currenteditor: string;
+      tabId: string;
     }) => {
-      io.to(socketId).emit(ACTIONS.CODE_CHANGE, { code, currenteditor });
+      io.to(socketId).emit(ACTIONS.CODE_CHANGE, {
+        tabId,
+        code,
+        currenteditor,
+      });
     }
   );
 
@@ -183,6 +302,95 @@ io.on("connection", (socket: Socket) => {
     ACTIONS.SET_CURRENT_EDITOR,
     ({ roomId, currenteditor }: { roomId: string; currenteditor: string }) => {
       socket.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
+    }
+  );
+
+  // Tab management events
+  socket.on(
+    ACTIONS.TAB_CREATE,
+    ({
+      roomId,
+      tabId,
+      name,
+    }: {
+      roomId: string;
+      tabId: string;
+      name: string;
+    }) => {
+      const tabs = roomTabsMap.get(roomId);
+      if (tabs) {
+        tabs.set(tabId, { name, code: "" });
+      }
+      io.in(roomId).emit(ACTIONS.TAB_CREATE, { tabId, name });
+    }
+  );
+
+  socket.on(
+    ACTIONS.TAB_CLOSE,
+    ({ roomId, tabId }: { roomId: string; tabId: string }) => {
+      const tabs = roomTabsMap.get(roomId);
+      if (tabs && tabs.size > 1) {
+        tabs.delete(tabId);
+        io.in(roomId).emit(ACTIONS.TAB_CLOSE, { tabId });
+      }
+    }
+  );
+
+  socket.on(
+    ACTIONS.TAB_RENAME,
+    ({
+      roomId,
+      tabId,
+      name,
+    }: {
+      roomId: string;
+      tabId: string;
+      name: string;
+    }) => {
+      const tabs = roomTabsMap.get(roomId);
+      if (tabs) {
+        const tab = tabs.get(tabId);
+        if (tab) {
+          tab.name = name;
+        }
+      }
+      io.in(roomId).emit(ACTIONS.TAB_RENAME, { tabId, name });
+    }
+  );
+
+  socket.on(
+    ACTIONS.TAB_SWITCH,
+    ({
+      roomId,
+      tabId,
+      username,
+    }: {
+      roomId: string;
+      tabId: string;
+      username: string;
+    }) => {
+      userActiveTabMap.set(socket.id, tabId);
+      socket.in(roomId).emit(ACTIONS.TAB_SWITCH, { username, tabId });
+    }
+  );
+
+  socket.on(
+    ACTIONS.PERMISSIONS_UPDATE,
+    ({
+      roomId,
+      username,
+      permissions,
+    }: {
+      roomId: string;
+      username: string;
+      permissions: UserPermissions;
+    }) => {
+      const perms = getOrCreateRoomPermissions(roomId);
+      perms.set(username, permissions);
+      io.in(roomId).emit(ACTIONS.PERMISSIONS_UPDATE, {
+        username,
+        permissions,
+      });
     }
   );
 
@@ -198,9 +406,12 @@ io.on("connection", (socket: Socket) => {
       setTimeout(() => {
         if (io.sockets.adapter.rooms.get(room) === undefined) {
           roomCreatorMap.delete(room);
+          roomTabsMap.delete(room);
+          roomPermissionsMap.delete(room);
         }
       }, ROOM_CLEANUP_DELAY_MS);
     }
+    userActiveTabMap.delete(socket.id);
     userSocketMap.delete(socket.id);
     // socket.leave() doesn't take arguments in Socket.IO v4
   });
