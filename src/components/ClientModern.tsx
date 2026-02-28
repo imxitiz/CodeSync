@@ -10,7 +10,7 @@ export type ClientModernProps = {
   currentEditor: string;
   canGrantEdit?: boolean;
   isMe?: boolean;
-  activeTab?: string;
+  activeTab?: string | undefined;
 };
 
 export default function ClientModern({

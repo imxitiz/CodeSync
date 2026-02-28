@@ -116,10 +116,7 @@ type UserPermissions = {
   canDeleteTab: boolean;
   canRenameTab: boolean;
 };
-const roomPermissionsMap = new Map<
-  string,
-  Map<string, UserPermissions>
->();
+const roomPermissionsMap = new Map<string, Map<string, UserPermissions>>();
 
 const DEFAULT_PERMISSIONS: UserPermissions = {
   canEdit: false,
@@ -172,7 +169,9 @@ const getUserActiveTabs = (
   roomId: string
 ): { username: string; activeTabId: string }[] => {
   const room = io.sockets.adapter.rooms.get(roomId);
-  if (!room) return [];
+  if (!room) {
+    return [];
+  }
   return [...room]
     .map((sid) => ({
       username: userSocketMap.get(sid) || "",

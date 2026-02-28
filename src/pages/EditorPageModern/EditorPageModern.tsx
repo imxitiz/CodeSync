@@ -10,14 +10,7 @@ import Avatar from "react-avatar";
 import toast from "react-hot-toast";
 import { FaCrown } from "react-icons/fa";
 import { FaRegCopy } from "react-icons/fa6";
-import {
-  FiEdit2,
-  FiEye,
-  FiLogOut,
-  FiPlus,
-  FiUsers,
-  FiX,
-} from "react-icons/fi";
+import { FiEdit2, FiEye, FiLogOut, FiPlus, FiUsers, FiX } from "react-icons/fi";
 import { MdTextDecrease, MdTextIncrease } from "react-icons/md";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import AppShell from "@/components/AppShell";
@@ -90,9 +83,9 @@ export default function EditorPageModern() {
   const tabsRef = useRef<Tab[]>(tabs);
 
   // Track which tab each user is on: username -> tabId
-  const [userActiveTabs, setUserActiveTabs] = useState<
-    Record<string, string>
-  >({});
+  const [userActiveTabs, setUserActiveTabs] = useState<Record<string, string>>(
+    {}
+  );
 
   // Follow mode: username being followed (null = not following)
   const [followingUser, setFollowingUser] = useState<string | null>(null);
@@ -199,7 +192,7 @@ export default function EditorPageModern() {
 
   const copyCode = async (): Promise<string | undefined> => {
     try {
-      if (!activeTab || !activeTab.code) {
+      if (!activeTab?.code) {
         toast.error("No code to copy");
         return;
       }
@@ -262,7 +255,7 @@ export default function EditorPageModern() {
 
   // Tab management
   const handleCreateTab = () => {
-    if (!isOwner && !myPermissions.canCreateTab) {
+    if (!(isOwner || myPermissions.canCreateTab)) {
       toast.error("You don't have permission to create tabs");
       return;
     }
@@ -286,7 +279,7 @@ export default function EditorPageModern() {
   };
 
   const handleCloseTab = (tabId: string) => {
-    if (!isOwner && !myPermissions.canDeleteTab) {
+    if (!(isOwner || myPermissions.canDeleteTab)) {
       toast.error("You don't have permission to delete tabs");
       return;
     }
@@ -329,12 +322,14 @@ export default function EditorPageModern() {
   };
 
   const handleRenameTab = (tabId: string, newName: string) => {
-    if (!isOwner && !myPermissions.canRenameTab) {
+    if (!(isOwner || myPermissions.canRenameTab)) {
       toast.error("You don't have permission to rename tabs");
       return;
     }
     const trimmed = newName.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      return;
+    }
     setTabs((prev) =>
       prev.map((t) => (t.id === tabId ? { ...t, name: trimmed } : t))
     );
@@ -513,7 +508,9 @@ export default function EditorPageModern() {
             }) => {
               if (syncTabs && syncTabs.length > 0) {
                 setTabs(syncTabs);
-                setActiveTabId(syncActiveTabId || syncTabs[0]?.id || DEFAULT_TAB_ID);
+                setActiveTabId(
+                  syncActiveTabId || syncTabs[0]?.id || DEFAULT_TAB_ID
+                );
               }
               if (syncUserActiveTabs) {
                 const map: Record<string, string> = {};
@@ -563,9 +560,7 @@ export default function EditorPageModern() {
                 }
               }
               // Stop following if the user left
-              setFollowingUser((prev) =>
-                prev === username ? null : prev
-              );
+              setFollowingUser((prev) => (prev === username ? null : prev));
               // Remove from user active tabs
               setUserActiveTabs((prev) => {
                 const next = { ...prev };
@@ -595,7 +590,9 @@ export default function EditorPageModern() {
             ACTIONS.TAB_CREATE,
             ({ tabId, name }: { tabId: string; name: string }) => {
               setTabs((prev) => {
-                if (prev.some((t) => t.id === tabId)) return prev;
+                if (prev.some((t) => t.id === tabId)) {
+                  return prev;
+                }
                 return [...prev, { id: tabId, name, code: "" }];
               });
             }
@@ -606,7 +603,9 @@ export default function EditorPageModern() {
             ({ tabId }: { tabId: string }) => {
               setTabs((prev) => {
                 const filtered = prev.filter((t) => t.id !== tabId);
-                if (filtered.length === 0) return prev;
+                if (filtered.length === 0) {
+                  return prev;
+                }
                 return filtered;
               });
               setActiveTabId((prev) => {
@@ -632,13 +631,7 @@ export default function EditorPageModern() {
 
           socketRef.current.on(
             ACTIONS.TAB_SWITCH,
-            ({
-              username,
-              tabId,
-            }: {
-              username: string;
-              tabId: string;
-            }) => {
+            ({ username, tabId }: { username: string; tabId: string }) => {
               setUserActiveTabs((prev) => ({
                 ...prev,
                 [username]: tabId,
@@ -704,7 +697,9 @@ export default function EditorPageModern() {
   const tabUserCounts = useMemo(() => {
     const counts: Record<string, string[]> = {};
     for (const [uname, tabIdVal] of Object.entries(userActiveTabs)) {
-      if (uname === userName) continue;
+      if (uname === userName) {
+        continue;
+      }
       if (!counts[tabIdVal]) {
         counts[tabIdVal] = [];
       }
@@ -775,7 +770,7 @@ export default function EditorPageModern() {
         <div className="flex h-full flex-col overflow-hidden">
           {/* Top bar (hidden in Zen) */}
           {!zen && (
-            <div className="sticky top-0 z-35 flex items-center gap-1 overflow-x-auto border-b bg-background/90 px-2 py-1.5 backdrop-blur sm:gap-2 sm:px-3 supports-backdrop-filter:bg-background/70">
+            <div className="sticky top-0 z-35 flex items-center gap-1 overflow-x-auto border-b bg-background/90 px-2 py-1.5 backdrop-blur supports-backdrop-filter:bg-background/70 sm:gap-2 sm:px-3">
               {/* Left: room info */}
               <div className="min-w-0 shrink-0">
                 <div className="flex items-center gap-1.5">
@@ -791,9 +786,12 @@ export default function EditorPageModern() {
                   </button>
                 </div>
                 <p className="mt-0.5 flex items-center gap-1 text-muted-foreground text-xs">
-                  <span className="truncate max-w-[120px]">{userName}</span>
+                  <span className="max-w-[120px] truncate">{userName}</span>
                   {serverStatus === "connected" ? (
-                    <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" title="Connected" />
+                    <span
+                      className="size-1.5 shrink-0 rounded-full bg-emerald-500"
+                      title="Connected"
+                    />
                   ) : (
                     <span
                       aria-live="polite"
@@ -821,7 +819,10 @@ export default function EditorPageModern() {
                           size="28"
                         />
                         {me && (
-                          <span className="-bottom-0.5 -right-0.5 absolute size-2.5 rounded-full border-2 border-card bg-primary" title="You" />
+                          <span
+                            className="-bottom-0.5 -right-0.5 absolute size-2.5 rounded-full border-2 border-card bg-primary"
+                            title="You"
+                          />
                         )}
                         {crown ? (
                           <span
@@ -888,7 +889,10 @@ export default function EditorPageModern() {
                 </div>
 
                 {/* Separator */}
-                <div aria-hidden="true" className="mx-1.5 hidden h-5 w-px bg-border sm:block" />
+                <div
+                  aria-hidden="true"
+                  className="mx-1.5 hidden h-5 w-px bg-border sm:block"
+                />
 
                 {/* Code actions */}
                 <div className="flex items-center gap-0.5">
@@ -922,7 +926,10 @@ export default function EditorPageModern() {
                 </div>
 
                 {/* Separator */}
-                <div aria-hidden="true" className="mx-1.5 hidden h-5 w-px bg-border sm:block" />
+                <div
+                  aria-hidden="true"
+                  className="mx-1.5 hidden h-5 w-px bg-border sm:block"
+                />
 
                 {/* Room actions */}
                 <div className="flex items-center gap-0.5">
@@ -1141,9 +1148,7 @@ export default function EditorPageModern() {
                               <ClientModern
                                 activeTab={
                                   userActiveTabs[username]
-                                    ? getTabName(
-                                        userActiveTabs[username] || ""
-                                      )
+                                    ? getTabName(userActiveTabs[username] || "")
                                     : activeTab?.name
                                 }
                                 canGrantEdit={isOwner}
@@ -1294,9 +1299,7 @@ function PermissionsEditor({
 
   return (
     <div className="mt-1 ml-12 rounded-md border bg-background/50 p-3">
-      <p className="mb-2 font-medium text-xs">
-        Permissions for {username}
-      </p>
+      <p className="mb-2 font-medium text-xs">Permissions for {username}</p>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <label className="flex cursor-pointer items-center gap-2">
           <input
