@@ -22,8 +22,6 @@ import {
 } from "@/utils/constants";
 import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
 
-const TRAILING_SLASH = /\/+$/;
-
 export default function HomePageModern() {
   const [roomId, setRoomId] = useState<string>("");
   const [userName, setUserName] = useState<string>("");
@@ -82,7 +80,7 @@ export default function HomePageModern() {
   };
 
   const saveCustomBackend = () => {
-    const trimmed = customBackendInput.trim().replace(TRAILING_SLASH, "");
+    const trimmed = customBackendInput.trim();
     if (!trimmed) {
       toast.error("Please enter a backend URL");
       return;
@@ -92,7 +90,7 @@ export default function HomePageModern() {
       return;
     }
     setCustomBackendUrl(trimmed);
-    setCustomBackendInput(trimmed);
+    setCustomBackendInput(getBackendUrl());
     setIsCustomBackend(true);
     toast.success("Custom backend URL saved");
     wakeUpServer();
