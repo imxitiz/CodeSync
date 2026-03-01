@@ -3,7 +3,7 @@
  * This helps wake up sleeping servers (like on Render) before establishing socket connections
  */
 
-import { BACKEND_API_URL } from "./constants";
+import { getBackendUrl } from "./constants";
 
 /**
  * Health check response type
@@ -20,7 +20,7 @@ type HealthResponse = {
  * @returns Promise<boolean> - True if server is healthy, false otherwise
  */
 export const checkServerHealth = async (timeout = 10_000): Promise<boolean> => {
-  const backendUrl = BACKEND_API_URL;
+  const backendUrl = getBackendUrl();
   const healthUrl = `${backendUrl}/api/health`;
 
   try {
@@ -117,5 +117,5 @@ export const waitForServerHealth = async (
  */
 export const wakeUpServer = (): void => {
   // Simple fire-and-forget request to wake up server
-  fetch(`${BACKEND_API_URL}/api/health`).catch(() => {});
+  fetch(`${getBackendUrl()}/api/health`).catch(() => {});
 };
