@@ -7,19 +7,36 @@ import { ACTIONS } from "../../action";
 
 type CodeChangeData = {
   roomId: string;
+  tabId: string;
   code: string;
   currenteditor: string;
 };
 
 type Socket = {
   emit: (event: string, data: CodeChangeData) => void;
-  on: (event: string, callback: (data: CodeChangeData) => void) => void;
-  off: (event: string, callback: (data: CodeChangeData) => void) => void;
+  on: (
+    event: string,
+    callback: (data: {
+      tabId: string;
+      code: string;
+      currenteditor?: string;
+    }) => void
+  ) => void;
+  off: (
+    event: string,
+    callback: (data: {
+      tabId: string;
+      code: string;
+      currenteditor?: string;
+    }) => void
+  ) => void;
 };
 
 export type EditorProps = {
   socketRef: RefObject<Socket>;
   roomId: string;
+  tabId: string;
+  initialCode?: string;
   onCodeChange: (code: string) => void;
   editable: boolean;
   currentEditor: string;
@@ -34,6 +51,8 @@ export type EditorProps = {
 const Editor: React.FC<EditorProps> = ({
   socketRef,
   roomId,
+  tabId,
+  initialCode = "",
   onCodeChange,
   editable,
   currentEditor,
@@ -42,7 +61,7 @@ const Editor: React.FC<EditorProps> = ({
   darkMode = true,
   fontSize = 16,
 }) => {
-  const [code, setCode] = useState<string>("");
+  const [code, setCode] = useState<string>(initialCode);
 
   // Minimal light theme that follows CSS variables (no external theme needed)
   const lightTheme = useMemo(
@@ -109,6 +128,7 @@ const Editor: React.FC<EditorProps> = ({
       onCodeChange(value);
       socketRef.current.emit(ACTIONS.CODE_CHANGE, {
         roomId,
+        tabId,
         code: value,
         currenteditor: currentEditor,
       });
@@ -119,28 +139,48 @@ const Editor: React.FC<EditorProps> = ({
   useEffect(() => {
     if (socketRef.current) {
       const handleCodeChange = ({
+        tabId: incomingTabId,
         code: newCode,
         currenteditor,
       }: {
+        tabId: string;
         code: string;
-        currenteditor: string;
+        currenteditor?: string;
       }) => {
-        if (newCode !== null && newCode !== code) {
+        // Only update if the incoming change is for our active tab
+        if (incomingTabId === tabId && newCode !== null && newCode !== code) {
           setCode(newCode);
           onCodeChange(newCode);
         }
-        setCurrentEditor(currenteditor);
+        if (currenteditor !== undefined) {
+          setCurrentEditor(currenteditor);
+        }
+      };
+
+      const handleTabCode = ({
+        tabId: incomingTabId,
+        code: newCode,
+      }: {
+        tabId: string;
+        code: string;
+      }) => {
+        if (incomingTabId === tabId && newCode !== null && newCode !== code) {
+          setCode(newCode);
+          onCodeChange(newCode);
+        }
       };
 
       socketRef.current.on(ACTIONS.CODE_CHANGE, handleCodeChange);
+      socketRef.current.on(ACTIONS.TAB_CODE, handleTabCode);
 
       return () => {
         if (socketRef.current) {
           socketRef.current.off(ACTIONS.CODE_CHANGE, handleCodeChange);
+          socketRef.current.off(ACTIONS.TAB_CODE, handleTabCode);
         }
       };
     }
-  }, [code, onCodeChange, socketRef, setCurrentEditor]);
+  }, [code, onCodeChange, socketRef, setCurrentEditor, tabId]);
 
   return (
     <CodeMirror

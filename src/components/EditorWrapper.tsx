@@ -1,6 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { EditorProps } from "./Editor";
 
+// Re-export EditorProps for consumers
+export type { EditorProps } from "./Editor";
+
 // Dynamically import the Editor component to avoid SSR issues with CodeMirror
 const Editor = lazy(() => import("./Editor"));
 
