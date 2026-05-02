@@ -97,7 +97,7 @@ export const getBackendUrl = (): string => {
   return custom || BACKEND_API_URL;
 };
 
-export const isValidBackendUrl = (value: string): boolean =>
+export const isValidBackendOrigin = (value: string): boolean =>
   Boolean(normalizeBackendUrl(value));
 
 /**

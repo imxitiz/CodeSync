@@ -18,14 +18,16 @@ import {
   clearCustomBackendUrl,
   getBackendUrl,
   hasCustomBackendUrl,
-  isValidBackendUrl,
+  isValidBackendOrigin,
   setCustomBackendUrl,
 } from "@/utils/constants";
 import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
 
 const advancedSettingsId = "advanced-settings-panel";
-const backendHelpText =
-  "Enter only the server origin (e.g., http://localhost:3000) with no path, query, or credentials. Requests go to /api and Socket.IO on this origin, which must allow CORS.";
+const backendHelpText = [
+  "Enter only the server origin (e.g., http://localhost:3000) with no path, query, or credentials.",
+  "Requests go to /api and Socket.IO on this origin, which must allow CORS.",
+].join(" ");
 
 export default function HomePageModern() {
   const [roomId, setRoomId] = useState<string>("");
@@ -84,7 +86,7 @@ export default function HomePageModern() {
       toast.error("Please enter a backend URL");
       return;
     }
-    if (!isValidBackendUrl(trimmed)) {
+    if (!isValidBackendOrigin(trimmed)) {
       toast.error(
         "Invalid URL. Use an http(s) origin like http://localhost:3000 with no path, query, or credentials."
       );
