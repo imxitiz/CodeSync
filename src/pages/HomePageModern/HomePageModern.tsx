@@ -28,15 +28,9 @@ export default function HomePageModern() {
   const [userName, setUserName] = useState<string>("");
   const [isCheckingServer, setIsCheckingServer] = useState<boolean>(false);
   const [serverStatusMessage, setServerStatusMessage] = useState<string>("");
-  const [isCustomBackend, setIsCustomBackend] = useState<boolean>(() =>
-    hasCustomBackendUrl()
-  );
-  const [showAdvanced, setShowAdvanced] = useState<boolean>(() =>
-    hasCustomBackendUrl()
-  );
-  const [customBackendInput, setCustomBackendInput] = useState<string>(() =>
-    hasCustomBackendUrl() ? getBackendUrl() : ""
-  );
+  const [isCustomBackend, setIsCustomBackend] = useState<boolean>(false);
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+  const [customBackendInput, setCustomBackendInput] = useState<string>("");
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,6 +42,15 @@ export default function HomePageModern() {
     }
     wakeUpServer();
   }, [location.state]);
+
+  useEffect(() => {
+    const hasCustom = hasCustomBackendUrl();
+    if (hasCustom) {
+      setIsCustomBackend(true);
+      setShowAdvanced(true);
+      setCustomBackendInput(getBackendUrl());
+    }
+  }, []);
 
   const handleHealthCheck = (attempt: number, maxRetries: number) => {
     setServerStatusMessage(`Waking up server... (${attempt}/${maxRetries})`);
