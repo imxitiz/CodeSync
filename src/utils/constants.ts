@@ -37,11 +37,7 @@ const normalizeBackendUrl = (value: string | null): string | null => {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return null;
     }
-    if (
-      parsed.pathname !== "/" ||
-      parsed.search !== "" ||
-      parsed.hash !== ""
-    ) {
+    if (parsed.pathname !== "/" || parsed.search !== "" || parsed.hash !== "") {
       return null;
     }
     if (parsed.username || parsed.password) {
@@ -126,6 +122,5 @@ export const clearCustomBackendUrl = (): void => {
 /**
  * Check if a custom backend URL is currently set.
  */
-export const hasCustomBackendUrl = (): boolean => {
-  return Boolean(normalizeBackendUrl(readCustomBackendUrl()));
-};
+export const hasCustomBackendUrl = (): boolean =>
+  Boolean(normalizeBackendUrl(readCustomBackendUrl()));
