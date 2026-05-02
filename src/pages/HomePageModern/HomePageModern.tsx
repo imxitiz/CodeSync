@@ -82,7 +82,9 @@ export default function HomePageModern() {
       return;
     }
     if (!isValidBackendUrl(trimmed)) {
-      toast.error("Use a valid http(s) origin without a path");
+      toast.error(
+        "Use a valid http(s) origin (e.g., http://localhost:3000) without a path or query"
+      );
       return;
     }
     setCustomBackendUrl(trimmed);
@@ -350,8 +352,10 @@ export default function HomePageModern() {
                         </div>
                       )}
                       <p className="text-[11px] text-muted-foreground">
-                        Use the server origin (no path). Requests go to /api and
-                        Socket.IO on this origin, which must allow CORS.
+                        Enter only the server origin (e.g.,
+                        http://localhost:3000) with no path, query, or
+                        credentials. Requests go to /api and Socket.IO on this
+                        origin, which must allow CORS.
                       </p>
                     </div>
                   )}
