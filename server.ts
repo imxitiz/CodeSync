@@ -459,6 +459,14 @@ io.on("connection", (socket: Socket) => {
       username: string;
       permissions: UserPermissions;
     }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) {
+        return;
+      }
+      const roomCreator = roomCreatorMap.get(roomId);
+      if (roomCreator !== userName) {
+        return;
+      }
       const perms = getOrCreateRoomPermissions(roomId);
       perms.set(username, permissions);
       io.in(roomId).emit(ACTIONS.PERMISSIONS_UPDATE, {
