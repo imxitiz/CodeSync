@@ -25,6 +25,8 @@ import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
 
 export default function HomePageModern() {
   const advancedSettingsId = "advanced-settings-panel";
+  const backendHelpText =
+    "Enter only the server origin (e.g., http://localhost:3000) with no path, query, or credentials. Requests go to /api and Socket.IO on this origin, which must allow CORS.";
   const [roomId, setRoomId] = useState<string>("");
   const [userName, setUserName] = useState<string>("");
   const [isCheckingServer, setIsCheckingServer] = useState<boolean>(false);
@@ -83,7 +85,7 @@ export default function HomePageModern() {
     }
     if (!isValidBackendUrl(trimmed)) {
       toast.error(
-        "Use a valid http(s) origin (e.g., http://localhost:3000) without path, query, or credentials"
+        "Invalid URL. Use an http(s) origin like http://localhost:3000 with no path, query, or credentials."
       );
       return;
     }
@@ -352,10 +354,7 @@ export default function HomePageModern() {
                         </div>
                       )}
                       <p className="text-[11px] text-muted-foreground">
-                        Enter only the server origin (e.g.,
-                        http://localhost:3000) with no path, query, or
-                        credentials. Requests go to /api and Socket.IO on this
-                        origin, which must allow CORS.
+                        {backendHelpText}
                       </p>
                     </div>
                   )}
