@@ -632,7 +632,19 @@ export default function EditorPageModern() {
                   const remaining = tabsRef.current.filter(
                     (t) => t.id !== tabId
                   );
-                  return remaining[0]?.id || DEFAULT_TAB_ID;
+                  const nextTabId = remaining[0]?.id || DEFAULT_TAB_ID;
+                  setUserActiveTabs((current) => ({
+                    ...current,
+                    [userName]: nextTabId,
+                  }));
+                  if (socketRef.current) {
+                    socketRef.current.emit(ACTIONS.TAB_SWITCH, {
+                      roomId: id,
+                      tabId: nextTabId,
+                      username: userName,
+                    });
+                  }
+                  return nextTabId;
                 }
                 return prev;
               });
