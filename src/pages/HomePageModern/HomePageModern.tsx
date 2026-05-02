@@ -23,10 +23,11 @@ import {
 } from "@/utils/constants";
 import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
 
+const advancedSettingsId = "advanced-settings-panel";
+const backendHelpText =
+  "Enter only the server origin (e.g., http://localhost:3000) with no path, query, or credentials. Requests go to /api and Socket.IO on this origin, which must allow CORS.";
+
 export default function HomePageModern() {
-  const advancedSettingsId = "advanced-settings-panel";
-  const backendHelpText =
-    "Enter only the server origin (e.g., http://localhost:3000) with no path, query, or credentials. Requests go to /api and Socket.IO on this origin, which must allow CORS.";
   const [roomId, setRoomId] = useState<string>("");
   const [userName, setUserName] = useState<string>("");
   const [isCheckingServer, setIsCheckingServer] = useState<boolean>(false);
