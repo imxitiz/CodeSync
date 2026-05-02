@@ -137,6 +137,14 @@ export default function EditorPageModern() {
     permissions[userName] || DEFAULT_PERMISSIONS;
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
 
+  const applyActiveTab = useCallback(
+    (tabId: string) => {
+      setActiveTabId(tabId);
+      setUserActiveTabs((prev) => ({ ...prev, [userName]: tabId }));
+    },
+    [userName]
+  );
+
   // Keep refs in sync
   useEffect(() => {
     tabsRef.current = tabs;
@@ -264,7 +272,7 @@ export default function EditorPageModern() {
     const name = `file-${tabs.length + 1}.js`;
     const newTab: Tab = { id: tabId, name, code: "" };
     setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(tabId);
+    applyActiveTab(tabId);
     if (socketRef.current) {
       socketRef.current.emit(ACTIONS.TAB_CREATE, {
         roomId: id,
@@ -292,7 +300,7 @@ export default function EditorPageModern() {
       const filtered = prev.filter((t) => t.id !== tabId);
       if (activeTabId === tabId && filtered.length > 0) {
         const newActive = filtered[0]?.id || DEFAULT_TAB_ID;
-        setActiveTabId(newActive);
+        applyActiveTab(newActive);
         if (socketRef.current) {
           socketRef.current.emit(ACTIONS.TAB_SWITCH, {
             roomId: id,
@@ -312,7 +320,10 @@ export default function EditorPageModern() {
   };
 
   const handleSwitchTab = (tabId: string) => {
-    setActiveTabId(tabId);
+    if (tabId === activeTabId) {
+      return;
+    }
+    applyActiveTab(tabId);
     if (socketRef.current) {
       socketRef.current.emit(ACTIONS.TAB_SWITCH, {
         roomId: id,
@@ -359,7 +370,7 @@ export default function EditorPageModern() {
     if (followingUser && userActiveTabs[followingUser]) {
       const targetTab = userActiveTabs[followingUser];
       if (targetTab && targetTab !== activeTabId) {
-        setActiveTabId(targetTab);
+        applyActiveTab(targetTab);
         if (socketRef.current) {
           socketRef.current.emit(ACTIONS.TAB_SWITCH, {
             roomId: id,
@@ -369,7 +380,14 @@ export default function EditorPageModern() {
         }
       }
     }
-  }, [followingUser, userActiveTabs, activeTabId, id, userName]);
+  }, [
+    followingUser,
+    userActiveTabs,
+    activeTabId,
+    id,
+    userName,
+    applyActiveTab,
+  ]);
 
   const toggleFollow = (username: string) => {
     if (followingUser === username) {
@@ -381,7 +399,7 @@ export default function EditorPageModern() {
       // Immediately switch to their tab
       const targetTab = userActiveTabs[username];
       if (targetTab && targetTab !== activeTabId) {
-        setActiveTabId(targetTab);
+        applyActiveTab(targetTab);
         if (socketRef.current) {
           socketRef.current.emit(ACTIONS.TAB_SWITCH, {
             roomId: id,
