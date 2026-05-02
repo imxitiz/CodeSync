@@ -434,17 +434,13 @@ io.on("connection", (socket: Socket) => {
 
   socket.on(
     ACTIONS.TAB_SWITCH,
-    ({
-      roomId,
-      tabId,
-      username,
-    }: {
-      roomId: string;
-      tabId: string;
-      username: string;
-    }) => {
+    ({ roomId, tabId }: { roomId: string; tabId: string }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) {
+        return;
+      }
       userActiveTabMap.set(socket.id, tabId);
-      socket.in(roomId).emit(ACTIONS.TAB_SWITCH, { username, tabId });
+      socket.in(roomId).emit(ACTIONS.TAB_SWITCH, { username: userName, tabId });
     }
   );
 
