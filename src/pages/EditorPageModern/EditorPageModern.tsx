@@ -13,6 +13,7 @@ import { FaRegCopy } from "react-icons/fa6";
 import { FiEdit2, FiEye, FiLogOut, FiPlus, FiUsers, FiX } from "react-icons/fi";
 import { MdTextDecrease, MdTextIncrease } from "react-icons/md";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { v4 as uuidv4 } from "uuid";
 import AppShell from "@/components/AppShell";
 import ClientModern from "@/components/ClientModern";
 import EditorWrapper from "@/components/EditorWrapper";
@@ -259,7 +260,7 @@ export default function EditorPageModern() {
       toast.error("You don't have permission to create tabs");
       return;
     }
-    const tabId = `tab-${Date.now()}`;
+    const tabId = `tab-${uuidv4()}`;
     const name = `file-${tabs.length + 1}.js`;
     const newTab: Tab = { id: tabId, name, code: "" };
     setTabs((prev) => [...prev, newTab]);
