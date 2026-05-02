@@ -19,7 +19,7 @@ type Socket = {
     callback: (data: {
       tabId: string;
       code: string;
-      currenteditor: string;
+      currenteditor?: string;
     }) => void
   ) => void;
   off: (
@@ -27,7 +27,7 @@ type Socket = {
     callback: (data: {
       tabId: string;
       code: string;
-      currenteditor: string;
+      currenteditor?: string;
     }) => void
   ) => void;
 };
@@ -145,21 +145,38 @@ const Editor: React.FC<EditorProps> = ({
       }: {
         tabId: string;
         code: string;
-        currenteditor: string;
+        currenteditor?: string;
       }) => {
         // Only update if the incoming change is for our active tab
         if (incomingTabId === tabId && newCode !== null && newCode !== code) {
           setCode(newCode);
           onCodeChange(newCode);
         }
-        setCurrentEditor(currenteditor);
+        if (currenteditor !== undefined) {
+          setCurrentEditor(currenteditor);
+        }
+      };
+
+      const handleTabCode = ({
+        tabId: incomingTabId,
+        code: newCode,
+      }: {
+        tabId: string;
+        code: string;
+      }) => {
+        if (incomingTabId === tabId && newCode !== null && newCode !== code) {
+          setCode(newCode);
+          onCodeChange(newCode);
+        }
       };
 
       socketRef.current.on(ACTIONS.CODE_CHANGE, handleCodeChange);
+      socketRef.current.on(ACTIONS.TAB_CODE, handleTabCode);
 
       return () => {
         if (socketRef.current) {
           socketRef.current.off(ACTIONS.CODE_CHANGE, handleCodeChange);
+          socketRef.current.off(ACTIONS.TAB_CODE, handleTabCode);
         }
       };
     }

@@ -329,6 +329,24 @@ io.on("connection", (socket: Socket) => {
   );
 
   socket.on(
+    ACTIONS.TAB_CODE_REQUEST,
+    ({ roomId, tabId }: { roomId: string; tabId: string }) => {
+      if (!socket.rooms.has(roomId)) {
+        return;
+      }
+      const tabs = roomTabsMap.get(roomId);
+      if (!tabs) {
+        return;
+      }
+      const tab = tabs.get(tabId);
+      if (!tab) {
+        return;
+      }
+      socket.emit(ACTIONS.TAB_CODE, { tabId, code: tab.code });
+    }
+  );
+
+  socket.on(
     ACTIONS.SET_CURRENT_EDITOR,
     ({ roomId, currenteditor }: { roomId: string; currenteditor: string }) => {
       const userName = userSocketMap.get(socket.id);

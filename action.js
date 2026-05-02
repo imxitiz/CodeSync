@@ -20,5 +20,7 @@ export const ACTIONS = {
   TAB_RENAME: "tab-rename",
   TAB_SWITCH: "tab-switch",
   TAB_SYNC: "tab-sync",
+  TAB_CODE_REQUEST: "tab-code-request",
+  TAB_CODE: "tab-code",
   PERMISSIONS_UPDATE: "permissions-update",
 };

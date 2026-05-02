@@ -90,6 +90,9 @@ export default function EditorPageModern() {
 
   // Follow mode: username being followed (null = not following)
   const [followingUser, setFollowingUser] = useState<string | null>(null);
+  const [followMode, setFollowMode] = useState<"auto" | "manual" | "off">(
+    "auto"
+  );
 
   // Per-user permissions: username -> permissions
   const [permissions, setPermissions] = useState<
@@ -176,6 +179,20 @@ export default function EditorPageModern() {
     const extra = Math.max(0, sortedClients.length - slice.length);
     return { slice, extra };
   }, [sortedClients]);
+
+  const autoFollowTarget = useMemo(() => {
+    if (!roomCreator) {
+      return null;
+    }
+    const ownerActive = clients.some((client) => client.username === roomCreator);
+    if (ownerActive && roomCreator !== userName) {
+      return roomCreator;
+    }
+    if (currentEditor && currentEditor !== userName) {
+      return currentEditor;
+    }
+    return null;
+  }, [roomCreator, clients, currentEditor, userName]);
 
   // Get tab name by id for display
   const getTabName = useCallback(
@@ -367,6 +384,19 @@ export default function EditorPageModern() {
     [activeTabId]
   );
 
+  useEffect(() => {
+    if (followMode !== "auto") {
+      return;
+    }
+    if (!autoFollowTarget) {
+      setFollowingUser(null);
+      return;
+    }
+    if (followingUser !== autoFollowTarget) {
+      setFollowingUser(autoFollowTarget);
+    }
+  }, [followMode, autoFollowTarget, followingUser]);
+
   // Follow mode: auto-switch tab when followed user switches
   useEffect(() => {
     if (followingUser && userActiveTabs[followingUser]) {
@@ -391,11 +421,26 @@ export default function EditorPageModern() {
     applyActiveTab,
   ]);
 
+  useEffect(() => {
+    if (!socketRef.current || !id) {
+      return;
+    }
+    if (!activeTabId) {
+      return;
+    }
+    socketRef.current.emit(ACTIONS.TAB_CODE_REQUEST, {
+      roomId: id,
+      tabId: activeTabId,
+    });
+  }, [activeTabId, id]);
+
   const toggleFollow = (username: string) => {
-    if (followingUser === username) {
+    if (followingUser === username && followMode === "manual") {
+      setFollowMode("off");
       setFollowingUser(null);
       toast.success("Stopped following");
     } else {
+      setFollowMode("manual");
       setFollowingUser(username);
       toast.success(`Following ${username}`);
       // Immediately switch to their tab
@@ -658,6 +703,15 @@ export default function EditorPageModern() {
             ({ tabId, name }: { tabId: string; name: string }) => {
               setTabs((prev) =>
                 prev.map((t) => (t.id === tabId ? { ...t, name } : t))
+              );
+            }
+          );
+
+          socketRef.current.on(
+            ACTIONS.TAB_CODE,
+            ({ tabId, code }: { tabId: string; code: string }) => {
+              setTabs((prev) =>
+                prev.map((t) => (t.id === tabId ? { ...t, code } : t))
               );
             }
           );
@@ -979,6 +1033,7 @@ export default function EditorPageModern() {
                   {followingUser && (
                     <Button
                       onClick={() => {
+                        setFollowMode("off");
                         setFollowingUser(null);
                         toast.success("Stopped following");
                       }}
