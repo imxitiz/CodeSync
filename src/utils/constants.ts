@@ -23,7 +23,35 @@ export const BACKEND_API_URL: string =
   import.meta.env.VITE_BACKEND_API_URL || "http://localhost:3000";
 
 const CUSTOM_BACKEND_KEY = "codesync_custom_backend_url";
-const TRAILING_SLASH_REGEX = /\/+$/;
+
+const normalizeBackendUrl = (value: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    if (
+      parsed.pathname !== "/" ||
+      parsed.search !== "" ||
+      parsed.hash !== ""
+    ) {
+      return null;
+    }
+    if (parsed.username || parsed.password) {
+      return null;
+    }
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+};
 
 const readCustomBackendUrl = (): string | null => {
   if (typeof window === "undefined") {
@@ -69,19 +97,23 @@ const removeCustomBackendUrl = (): void => {
  * otherwise falls back to the default BACKEND_API_URL.
  */
 export const getBackendUrl = (): string => {
-  const custom = readCustomBackendUrl();
+  const custom = normalizeBackendUrl(readCustomBackendUrl());
   return custom || BACKEND_API_URL;
 };
 
+export const isValidBackendUrl = (value: string): boolean =>
+  Boolean(normalizeBackendUrl(value));
+
 /**
  * Set a custom backend URL (stored in localStorage).
- * The URL is normalized by trimming whitespace and removing trailing slashes.
+ * Only accepts http(s) origins without a path, query, or hash.
  */
 export const setCustomBackendUrl = (url: string): void => {
-  const trimmed = url.trim().replace(TRAILING_SLASH_REGEX, "");
-  if (trimmed) {
-    writeCustomBackendUrl(trimmed);
+  const normalized = normalizeBackendUrl(url);
+  if (!normalized) {
+    return;
   }
+  writeCustomBackendUrl(normalized);
 };
 
 /**
@@ -95,5 +127,5 @@ export const clearCustomBackendUrl = (): void => {
  * Check if a custom backend URL is currently set.
  */
 export const hasCustomBackendUrl = (): boolean => {
-  return Boolean(readCustomBackendUrl());
+  return Boolean(normalizeBackendUrl(readCustomBackendUrl()));
 };

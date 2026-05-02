@@ -18,6 +18,7 @@ import {
   clearCustomBackendUrl,
   getBackendUrl,
   hasCustomBackendUrl,
+  isValidBackendUrl,
   setCustomBackendUrl,
 } from "@/utils/constants";
 import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
@@ -70,23 +71,14 @@ export default function HomePageModern() {
     }
   };
 
-  const isValidUrl = (url: string): boolean => {
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol === "http:" || parsed.protocol === "https:";
-    } catch {
-      return false;
-    }
-  };
-
   const saveCustomBackend = () => {
     const trimmed = customBackendInput.trim();
     if (!trimmed) {
       toast.error("Please enter a backend URL");
       return;
     }
-    if (!isValidUrl(trimmed)) {
-      toast.error("Please enter a valid URL (http:// or https://)");
+    if (!isValidBackendUrl(trimmed)) {
+      toast.error("Use a valid http(s) origin without a path");
       return;
     }
     setCustomBackendUrl(trimmed);
@@ -352,8 +344,8 @@ export default function HomePageModern() {
                         </div>
                       )}
                       <p className="text-[11px] text-muted-foreground">
-                        Point to a different backend server for testing. The
-                        target server must allow CORS from this origin.
+                        Use the server origin (no path). Requests go to /api and
+                        Socket.IO on this origin, which must allow CORS.
                       </p>
                     </div>
                   )}
