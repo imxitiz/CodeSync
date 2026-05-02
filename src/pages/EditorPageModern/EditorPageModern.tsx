@@ -1230,7 +1230,7 @@ export default function EditorPageModern() {
                                       : "ghost"
                                   }
                                 >
-                                  <span>⚙</span>
+                                  <span aria-hidden="true">⚙</span>
                                 </Button>
                               )}
                             </div>
