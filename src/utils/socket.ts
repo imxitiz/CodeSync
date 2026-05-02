@@ -1,6 +1,6 @@
 import type { Socket } from "socket.io-client";
 import { io } from "socket.io-client";
-import { BACKEND_API_URL } from "./constants";
+import { getBackendUrl } from "./constants";
 
 export const initSocket = (): Socket => {
   const options: {
@@ -15,5 +15,5 @@ export const initSocket = (): Socket => {
     transports: ["websocket"],
   };
 
-  return io(BACKEND_API_URL, options);
+  return io(getBackendUrl(), options);
 };
