@@ -25,16 +25,51 @@ export const BACKEND_API_URL: string =
 const CUSTOM_BACKEND_KEY = "codesync_custom_backend_url";
 const TRAILING_SLASH_REGEX = /\/+$/;
 
+const readCustomBackendUrl = (): string | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  if (!window.localStorage) {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(CUSTOM_BACKEND_KEY);
+  } catch {
+    return null;
+  }
+};
+
+const writeCustomBackendUrl = (value: string): void => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (!window.localStorage) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(CUSTOM_BACKEND_KEY, value);
+  } catch {}
+};
+
+const removeCustomBackendUrl = (): void => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (!window.localStorage) {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(CUSTOM_BACKEND_KEY);
+  } catch {}
+};
+
 /**
  * Get the effective backend URL.
  * Returns the user-configured custom URL from localStorage if set,
  * otherwise falls back to the default BACKEND_API_URL.
  */
 export const getBackendUrl = (): string => {
-  if (typeof window === "undefined") {
-    return BACKEND_API_URL;
-  }
-  const custom = localStorage.getItem(CUSTOM_BACKEND_KEY);
+  const custom = readCustomBackendUrl();
   return custom || BACKEND_API_URL;
 };
 
@@ -45,7 +80,7 @@ export const getBackendUrl = (): string => {
 export const setCustomBackendUrl = (url: string): void => {
   const trimmed = url.trim().replace(TRAILING_SLASH_REGEX, "");
   if (trimmed) {
-    localStorage.setItem(CUSTOM_BACKEND_KEY, trimmed);
+    writeCustomBackendUrl(trimmed);
   }
 };
 
@@ -53,15 +88,12 @@ export const setCustomBackendUrl = (url: string): void => {
  * Clear the custom backend URL, reverting to the default.
  */
 export const clearCustomBackendUrl = (): void => {
-  localStorage.removeItem(CUSTOM_BACKEND_KEY);
+  removeCustomBackendUrl();
 };
 
 /**
  * Check if a custom backend URL is currently set.
  */
 export const hasCustomBackendUrl = (): boolean => {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  return Boolean(localStorage.getItem(CUSTOM_BACKEND_KEY));
+  return Boolean(readCustomBackendUrl());
 };
