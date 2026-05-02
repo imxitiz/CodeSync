@@ -361,6 +361,16 @@ io.on("connection", (socket: Socket) => {
       tabId: string;
       name: string;
     }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) {
+        return;
+      }
+      const roomCreator = roomCreatorMap.get(roomId);
+      const perms = getOrCreateRoomPermissions(roomId);
+      const userPerms = perms.get(userName) || DEFAULT_PERMISSIONS;
+      if (roomCreator !== userName && !userPerms.canCreateTab) {
+        return;
+      }
       const tabs = roomTabsMap.get(roomId);
       if (tabs) {
         tabs.set(tabId, { name, code: "" });
@@ -372,6 +382,16 @@ io.on("connection", (socket: Socket) => {
   socket.on(
     ACTIONS.TAB_CLOSE,
     ({ roomId, tabId }: { roomId: string; tabId: string }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) {
+        return;
+      }
+      const roomCreator = roomCreatorMap.get(roomId);
+      const perms = getOrCreateRoomPermissions(roomId);
+      const userPerms = perms.get(userName) || DEFAULT_PERMISSIONS;
+      if (roomCreator !== userName && !userPerms.canDeleteTab) {
+        return;
+      }
       const tabs = roomTabsMap.get(roomId);
       if (tabs && tabs.size > 1) {
         tabs.delete(tabId);
@@ -391,6 +411,16 @@ io.on("connection", (socket: Socket) => {
       tabId: string;
       name: string;
     }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) {
+        return;
+      }
+      const roomCreator = roomCreatorMap.get(roomId);
+      const perms = getOrCreateRoomPermissions(roomId);
+      const userPerms = perms.get(userName) || DEFAULT_PERMISSIONS;
+      if (roomCreator !== userName && !userPerms.canRenameTab) {
+        return;
+      }
       const tabs = roomTabsMap.get(roomId);
       if (tabs) {
         const tab = tabs.get(tabId);
