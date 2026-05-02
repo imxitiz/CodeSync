@@ -83,7 +83,7 @@ export default function HomePageModern() {
     }
     if (!isValidBackendUrl(trimmed)) {
       toast.error(
-        "Use a valid http(s) origin (e.g., http://localhost:3000) without a path or query"
+        "Use a valid http(s) origin (e.g., http://localhost:3000) without path, query, or credentials"
       );
       return;
     }

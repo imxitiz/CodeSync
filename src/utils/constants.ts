@@ -37,7 +37,7 @@ const normalizeBackendUrl = (value: string | null): string | null => {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return null;
     }
-    if (parsed.pathname !== "/" || parsed.search !== "" || parsed.hash !== "") {
+    if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
       return null;
     }
     if (parsed.username || parsed.password) {
