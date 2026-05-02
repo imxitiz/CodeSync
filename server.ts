@@ -109,6 +109,9 @@ const roomTabsMap = new Map<string, Map<string, TabData>>();
 // Track which tab each socket is viewing: socketId -> tabId
 const userActiveTabMap = new Map<string, string>();
 
+// Track current editor per room: roomId -> username
+const roomCurrentEditorMap = new Map<string, string>();
+
 // Permissions per room per user: roomId -> { username -> permissions }
 type UserPermissions = {
   canEdit: boolean;
@@ -154,6 +157,13 @@ const getOrCreateRoomPermissions = (
     roomPermissionsMap.set(roomId, perms);
   }
   return perms;
+};
+
+const getRoomCurrentEditor = (roomId: string): string =>
+  roomCurrentEditorMap.get(roomId) || "";
+
+const setRoomCurrentEditor = (roomId: string, editor: string) => {
+  roomCurrentEditorMap.set(roomId, editor);
 };
 
 const serializeTabs = (
@@ -218,6 +228,9 @@ io.on("connection", (socket: Socket) => {
       // Ensure tabs and permissions exist for the room
       const tabs = getOrCreateRoomTabs(roomId);
       const perms = getOrCreateRoomPermissions(roomId);
+      if (!roomCurrentEditorMap.has(roomId)) {
+        setRoomCurrentEditor(roomId, "");
+      }
 
       // Set owner permissions if this is the creator
       if (roomCreator === userName) {
@@ -255,13 +268,29 @@ io.on("connection", (socket: Socket) => {
       roomId,
       tabId,
       code,
-      currenteditor,
     }: {
       roomId: string;
       tabId: string;
       code: string;
-      currenteditor: string;
     }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) {
+        return;
+      }
+      const roomCreator = roomCreatorMap.get(roomId);
+      const perms = getOrCreateRoomPermissions(roomId);
+      const userPerms = perms.get(userName) || DEFAULT_PERMISSIONS;
+      const currentEditor = getRoomCurrentEditor(roomId);
+      const canEdit = roomCreator === userName || userPerms.canEdit;
+
+      if (!canEdit) {
+        return;
+      }
+
+      if (roomCreator !== userName && currentEditor !== userName) {
+        return;
+      }
+
       // Store code on server
       const tabs = roomTabsMap.get(roomId);
       if (tabs) {
@@ -270,9 +299,11 @@ io.on("connection", (socket: Socket) => {
           tab.code = code;
         }
       }
-      socket
-        .in(roomId)
-        .emit(ACTIONS.CODE_CHANGE, { tabId, code, currenteditor });
+      socket.in(roomId).emit(ACTIONS.CODE_CHANGE, {
+        tabId,
+        code,
+        currenteditor: getRoomCurrentEditor(roomId),
+      });
     }
   );
 
@@ -300,6 +331,20 @@ io.on("connection", (socket: Socket) => {
   socket.on(
     ACTIONS.SET_CURRENT_EDITOR,
     ({ roomId, currenteditor }: { roomId: string; currenteditor: string }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) {
+        return;
+      }
+      const roomCreator = roomCreatorMap.get(roomId);
+      const currentEditor = getRoomCurrentEditor(roomId);
+      const isOwner = roomCreator === userName;
+      const canRelease = currenteditor === "" && currentEditor === userName;
+
+      if (!(isOwner || canRelease)) {
+        return;
+      }
+
+      setRoomCurrentEditor(roomId, currenteditor);
       socket.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
     }
   );
@@ -407,8 +452,20 @@ io.on("connection", (socket: Socket) => {
           roomCreatorMap.delete(room);
           roomTabsMap.delete(room);
           roomPermissionsMap.delete(room);
+          roomCurrentEditorMap.delete(room);
         }
       }, ROOM_CLEANUP_DELAY_MS);
+    }
+    const userName = userSocketMap.get(socket.id);
+    if (userName) {
+      for (const room of rooms) {
+        if (getRoomCurrentEditor(room) === userName) {
+          setRoomCurrentEditor(room, "");
+          socket.in(room).emit(ACTIONS.SET_CURRENT_EDITOR, {
+            currenteditor: "",
+          });
+        }
+      }
     }
     userActiveTabMap.delete(socket.id);
     userSocketMap.delete(socket.id);
