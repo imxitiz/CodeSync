@@ -136,6 +136,8 @@ export default function EditorPageModern() {
   const myPermissions: UserPermissions =
     permissions[userName] || DEFAULT_PERMISSIONS;
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+  const canEditCode =
+    isOwner || (userName === currentEditor && myPermissions.canEdit);
 
   const applyActiveTab = useCallback(
     (tabId: string) => {
@@ -1212,6 +1214,7 @@ export default function EditorPageModern() {
                               {/* Permissions button (owner only, not for self) */}
                               {isOwner && username !== userName && (
                                 <Button
+                                  aria-label="Manage permissions"
                                   onClick={() =>
                                     setPermDialogUser(
                                       permDialogUser === username
@@ -1227,7 +1230,7 @@ export default function EditorPageModern() {
                                       : "ghost"
                                   }
                                 >
-                                  <span aria-label="Manage permissions">⚙</span>
+                                  <span>⚙</span>
                                 </Button>
                               )}
                             </div>
@@ -1276,7 +1279,7 @@ export default function EditorPageModern() {
                 <EditorWrapper
                   currentEditor={currentEditor}
                   darkMode={isDark}
-                  editable={userName === currentEditor || isOwner}
+                  editable={canEditCode}
                   fontSize={fontSize}
                   initialCode={activeTab.code}
                   key={activeTab.id}
