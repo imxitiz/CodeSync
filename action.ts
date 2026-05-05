@@ -23,4 +23,6 @@ export const ACTIONS = {
   TAB_CODE_REQUEST: "tab-code-request",
   TAB_CODE: "tab-code",
   PERMISSIONS_UPDATE: "permissions-update",
-};
+} as const;
+
+export type ACTIONS_TYPE = (typeof ACTIONS)[keyof typeof ACTIONS];
