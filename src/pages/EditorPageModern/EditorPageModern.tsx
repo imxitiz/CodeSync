@@ -62,7 +62,9 @@ export default function EditorPageModern() {
   const [currentEditor, setCurrentEditor] = useState<string>("");
   const currentEditorRef = useRef<string>(currentEditor);
   const [roomCreator, setRoomCreator] = useState<string | null>(null);
+  const roomCreatorRef = useRef<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const [socketReady, setSocketReady] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -134,6 +136,10 @@ export default function EditorPageModern() {
   useEffect(() => {
     currentEditorRef.current = currentEditor;
   }, [currentEditor]);
+
+  useEffect(() => {
+    roomCreatorRef.current = roomCreator;
+  }, [roomCreator]);
 
   const sortedClients = useMemo(
     () =>
@@ -399,6 +405,7 @@ export default function EditorPageModern() {
         if (!socket) {
           return;
         }
+        setSocketReady(true);
 
         socket.on("connect", () => {
           setServerStatus("connected");
@@ -418,7 +425,7 @@ export default function EditorPageModern() {
 
         socket.on(
           ACTIONS.JOINED,
-          ({ clients: joinedClients, username, socketId, roomcreator }) => {
+          ({ clients: joinedClients, username, roomcreator }) => {
             setClients(joinedClients);
             setRoomCreator(roomcreator);
             if (
@@ -432,22 +439,14 @@ export default function EditorPageModern() {
               );
               navigate("/", { state: { id } });
             }
-            if (roomCreator === username || joinedClients.length === 1) {
+            if (
+              roomCreatorRef.current === username ||
+              joinedClients.length === 1
+            ) {
               sessionStorage.setItem("admin", username);
             }
             if (username !== userName) {
               toast.success(`${username} joined the room`);
-              const currentTab = tabsRef.current.find(
-                (tab) => tab.id === activeTabId
-              );
-              if (currentTab) {
-                socket.emit(ACTIONS.SYNC_CODE, {
-                  socketId,
-                  code: currentTab.code,
-                  currenteditor: currentEditorRef.current,
-                  tabId: activeTabId,
-                });
-              }
             }
           }
         );
@@ -501,10 +500,6 @@ export default function EditorPageModern() {
           );
           if (currentEditorRef.current === username) {
             setCurrentEditor("");
-            socket.emit(ACTIONS.SET_CURRENT_EDITOR, {
-              roomId: id,
-              currenteditor: "",
-            });
           }
           setFollowingUser((prev) => (prev === username ? null : prev));
           setUserActiveTabs((prev) => {
@@ -518,7 +513,7 @@ export default function EditorPageModern() {
           if (currenteditor === userName) {
             toast.success("You are now the editor");
           }
-          if (currenteditor === "" && userName === roomCreator) {
+          if (currenteditor === "" && userName === roomCreatorRef.current) {
             toast.success(`${currentEditorRef.current} has released control`);
           }
           setCurrentEditor(currenteditor);
@@ -588,16 +583,9 @@ export default function EditorPageModern() {
     return () => {
       socketRef.current?.disconnect();
       socketRef.current = null;
+      setSocketReady(false);
     };
-  }, [
-    activeTabId,
-    handleCodeChange,
-    handleErrors,
-    id,
-    navigate,
-    roomCreator,
-    userName,
-  ]);
+  }, [handleCodeChange, handleErrors, id, navigate, userName]);
 
   return (
     <AppShell>
@@ -920,19 +908,25 @@ export default function EditorPageModern() {
             <div
               className={`editor-host h-full w-full ${wrapLines ? "wrap-on" : "no-wrap"}`}
             >
-              <EditorWrapper
-                activeTabId={activeTab?.id || DEFAULT_TAB_ID}
-                currentEditor={currentEditor}
-                darkMode={isDark}
-                editable={canEditCode}
-                fontSize={fontSize}
-                initialCode={activeTab?.code || ""}
-                onCodeChange={handleCodeChange}
-                roomId={id || ""}
-                setCurrentEditor={setCurrentEditor}
-                socketRef={socketRef as RefObject<Socket>}
-                wrap={wrapLines}
-              />
+              {socketReady ? (
+                <EditorWrapper
+                  activeTabId={activeTab?.id || DEFAULT_TAB_ID}
+                  currentEditor={currentEditor}
+                  darkMode={isDark}
+                  editable={canEditCode}
+                  fontSize={fontSize}
+                  initialCode={activeTab?.code || ""}
+                  onCodeChange={handleCodeChange}
+                  roomId={id || ""}
+                  setCurrentEditor={setCurrentEditor}
+                  socketRef={socketRef as RefObject<Socket>}
+                  wrap={wrapLines}
+                />
+              ) : (
+                <div className="grid h-full place-items-center text-muted-foreground text-sm">
+                  Connecting editor...
+                </div>
+              )}
             </div>
           </section>
         </div>

@@ -2,7 +2,7 @@ import { javascript } from "@codemirror/lang-javascript";
 import { EditorView } from "@codemirror/view";
 import { dracula } from "@uiw/codemirror-theme-dracula";
 import CodeMirror from "@uiw/react-codemirror";
-import { type RefObject, useEffect, useMemo, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { ACTIONS } from "../../action";
 
 type CodeChangeData = {
@@ -52,8 +52,20 @@ const Editor: React.FC<EditorProps> = ({
   fontSize = 16,
 }) => {
   const [code, setCode] = useState<string>(initialCode);
+  const activeTabIdRef = useRef(activeTabId);
+  const codeRef = useRef(initialCode);
+  const onCodeChangeRef = useRef(onCodeChange);
 
   useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
+
+  useEffect(() => {
+    onCodeChangeRef.current = onCodeChange;
+  }, [onCodeChange]);
+
+  useEffect(() => {
+    codeRef.current = initialCode;
     setCode(initialCode);
   }, [initialCode]);
 
@@ -115,6 +127,7 @@ const Editor: React.FC<EditorProps> = ({
       return;
     }
 
+    codeRef.current = value;
     setCode(value);
     onCodeChange(value, activeTabId);
     socketRef.current.emit(ACTIONS.CODE_CHANGE, {
@@ -136,9 +149,13 @@ const Editor: React.FC<EditorProps> = ({
       code: newCode,
       currenteditor,
     }: IncomingCodeChange) => {
-      const targetTabId = tabId || activeTabId;
-      onCodeChange(newCode, targetTabId);
-      if (targetTabId === activeTabId && newCode !== code) {
+      const targetTabId = tabId || activeTabIdRef.current;
+      onCodeChangeRef.current(newCode, targetTabId);
+      if (
+        targetTabId === activeTabIdRef.current &&
+        newCode !== codeRef.current
+      ) {
+        codeRef.current = newCode;
         setCode(newCode);
       }
       setCurrentEditor(currenteditor);
@@ -149,7 +166,7 @@ const Editor: React.FC<EditorProps> = ({
     return () => {
       socket.off(ACTIONS.CODE_CHANGE, handleCodeChange);
     };
-  }, [activeTabId, code, onCodeChange, socketRef, setCurrentEditor]);
+  }, [socketRef, setCurrentEditor]);
 
   return (
     <CodeMirror

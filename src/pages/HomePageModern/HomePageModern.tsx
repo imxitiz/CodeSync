@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { FiClock, FiTrash2, FiX } from "react-icons/fi";
+import { FiClock, FiInfo, FiTrash2, FiX } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import AppShell from "@/components/AppShell";
@@ -44,7 +44,7 @@ export default function HomePageModern() {
   const [isCheckingServer, setIsCheckingServer] = useState<boolean>(false);
   const [serverStatusMessage, setServerStatusMessage] = useState<string>("");
   const [recentRooms, setRecentRooms] = useState<RecentRoom[]>([]);
-  const [isHistoryEnabled, setIsHistoryEnabled] = useState(true);
+  const [isHistoryEnabled, setIsHistoryEnabled] = useState(false);
   const [isCustomBackend, setIsCustomBackend] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [customBackendInput, setCustomBackendInput] = useState("");
@@ -61,14 +61,16 @@ export default function HomePageModern() {
     const historyEnabled = isRoomHistoryEnabled();
     setIsHistoryEnabled(historyEnabled);
     setRecentRooms(historyEnabled ? getRecentRooms() : []);
+  }, [location.state]);
 
+  useEffect(() => {
     const hasCustom = hasCustomBackendUrl();
     if (hasCustom) {
       setIsCustomBackend(true);
       setShowAdvanced(true);
       setCustomBackendInput(getBackendUrl());
     }
-  }, [location.state]);
+  }, []);
 
   const formatTimeAgo = (timestamp: number): string => {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -348,13 +350,15 @@ export default function HomePageModern() {
                     aria-controls={advancedSettingsId}
                     aria-expanded={showAdvanced}
                     className="flex w-full cursor-pointer items-center justify-between text-left font-medium text-sm"
-                    onClick={() => setShowAdvanced((value) => !value)}
+                    onClick={() => setShowAdvanced(!showAdvanced)}
                     type="button"
                   >
-                    <span>Advanced settings</span>
-                    <span className="text-muted-foreground text-xs">
-                      {isCustomBackend ? "custom backend" : "default backend"}
-                    </span>
+                    <span>{showAdvanced ? "▼" : "▶"} Advanced Settings</span>
+                    {isCustomBackend && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary text-xs">
+                        custom
+                      </span>
+                    )}
                   </button>
                   {showAdvanced && (
                     <div className="mt-3 space-y-2" id={advancedSettingsId}>
@@ -368,8 +372,8 @@ export default function HomePageModern() {
                         <Input
                           aria-describedby="backend-help"
                           id="backend-url"
-                          onChange={(event) =>
-                            setCustomBackendInput(event.target.value)
+                          onChange={(e) =>
+                            setCustomBackendInput(e.target.value)
                           }
                           placeholder={BACKEND_API_URL}
                           spellCheck="false"
@@ -382,7 +386,12 @@ export default function HomePageModern() {
                         >
                           Save
                         </Button>
-                        {isCustomBackend && (
+                      </div>
+                      {isCustomBackend && (
+                        <div className="flex items-center justify-between gap-2 rounded-md border bg-background/70 px-3 py-2 text-xs">
+                          <span className="min-w-0 break-all text-muted-foreground">
+                            Using: {getBackendUrl()}
+                          </span>
                           <Button
                             onClick={resetBackendUrl}
                             size="sm"
@@ -391,19 +400,14 @@ export default function HomePageModern() {
                           >
                             Reset
                           </Button>
-                        )}
-                      </div>
+                        </div>
+                      )}
                       <p
                         className="text-muted-foreground text-xs"
                         id="backend-help"
                       >
                         {backendHelpText}
                       </p>
-                      {isCustomBackend && (
-                        <p className="break-all text-muted-foreground text-xs">
-                          Using: {getBackendUrl()}
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>
@@ -432,56 +436,58 @@ export default function HomePageModern() {
               </CardFooter>
             </Card>
 
-            <div className="mx-auto mt-3 w-full max-w-md rounded-md border bg-card px-3 py-2 text-sm">
-              <label className="flex cursor-pointer items-start gap-2">
-                <input
-                  checked={isHistoryEnabled}
-                  className="mt-1"
-                  onChange={(event) =>
-                    handleHistoryPreferenceChange(event.target.checked)
-                  }
-                  type="checkbox"
-                />
-                <span>
-                  <span className="block font-medium">
-                    Remember recent rooms
-                  </span>
-                  <span className="block text-muted-foreground text-xs">
-                    Stored only in this browser. Turn this off on shared
-                    devices; disabling clears saved room IDs and names.
-                  </span>
-                </span>
-              </label>
-            </div>
-
             {/* Recent Rooms — stored locally on this device only */}
-            {recentRooms.length > 0 && (
-              <div className="mx-auto mt-4 w-full max-w-md">
-                <div className="flex items-center justify-between px-1">
-                  <h3 className="flex items-center gap-1.5 font-medium text-muted-foreground text-xs">
-                    <FiClock className="size-3" />
-                    Recent rooms
-                    <span className="text-muted-foreground/60">
-                      (this device only)
-                    </span>
-                  </h3>
-                  <Button
-                    className="cursor-pointer"
-                    onClick={handleClearHistory}
-                    size="sm"
-                    title="Clear room history"
-                    type="button"
-                    variant="ghost"
+            <div className="mx-auto mt-3 w-full max-w-md rounded-lg border bg-card/80 p-2 shadow-sm">
+              <div className="flex items-center justify-between gap-2 px-1">
+                <h3 className="flex min-w-0 items-center gap-1.5 font-medium text-muted-foreground text-xs">
+                  <FiClock className="size-3 shrink-0" />
+                  <span>Recent rooms</span>
+                  <span className="text-muted-foreground/60">
+                    (this device only)
+                  </span>
+                  <span
+                    className="inline-flex text-muted-foreground/70"
+                    title="Room history is stored only in this browser. Enable it only on devices you trust; turning it off clears saved room IDs and names."
                   >
-                    <FiTrash2 className="size-3" />
-                    <span className="sr-only sm:not-sr-only">Clear</span>
-                  </Button>
+                    <FiInfo className="size-3" />
+                  </span>
+                </h3>
+                <div className="flex shrink-0 items-center gap-1">
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2 py-1 text-muted-foreground text-xs transition-colors hover:bg-accent"
+                    title="Toggle local recent room history"
+                  >
+                    <input
+                      checked={isHistoryEnabled}
+                      className="size-3 accent-current"
+                      onChange={(event) =>
+                        handleHistoryPreferenceChange(event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    Save
+                  </label>
+                  {recentRooms.length > 0 && (
+                    <Button
+                      className="h-7 cursor-pointer px-2"
+                      onClick={handleClearHistory}
+                      size="sm"
+                      title="Clear room history"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <FiTrash2 className="size-3" />
+                      <span className="sr-only sm:not-sr-only">Clear</span>
+                    </Button>
+                  )}
                 </div>
-                <ul className="mt-1.5 space-y-1">
+              </div>
+              {isHistoryEnabled && recentRooms.length > 0 && (
+                <ul className="mt-2 max-h-52 space-y-1 overflow-y-auto pr-1">
                   {recentRooms.map((room) => (
                     <li key={room.roomId}>
                       <div
-                        className="flex w-full cursor-pointer items-center gap-2 rounded-md border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                        className="flex w-full cursor-pointer items-center gap-2 rounded-md border bg-background/70 px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
                         onClick={() => handleSelectRecentRoom(room)}
                         title="Click to fill room details"
                       >
@@ -510,8 +516,8 @@ export default function HomePageModern() {
                     </li>
                   ))}
                 </ul>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </section>
 

@@ -9,7 +9,7 @@
 
 const STORAGE_KEY = "codesync_recent_rooms";
 const HISTORY_ENABLED_KEY = "codesync_recent_rooms_enabled";
-const MAX_ROOMS = 10;
+const MAX_ROOMS = 8;
 
 export type RecentRoom = {
   roomId: string;
@@ -33,7 +33,7 @@ export const isRoomHistoryEnabled = (): boolean => {
     return false;
   }
   try {
-    return localStorage.getItem(HISTORY_ENABLED_KEY) !== "false";
+    return localStorage.getItem(HISTORY_ENABLED_KEY) === "true";
   } catch {
     return false;
   }
