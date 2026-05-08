@@ -9,6 +9,12 @@ export type ThemeTokens = {
   [key: string]: string;
 };
 
+export type LegacyTheme = {
+  name?: string;
+  mode: "light" | "dark";
+  tokens: ThemeTokens;
+};
+
 export type ModernTheme = {
   name: string;
   modes: {
@@ -18,13 +24,12 @@ export type ModernTheme = {
   defaultMode: "light" | "dark";
 };
 
-export type Theme = ModernTheme;
+export type Theme = LegacyTheme | ModernTheme;
 
 // Type guard functions
 export function isModernTheme(theme: Theme): theme is ModernTheme {
   return "modes" in theme && "defaultMode" in theme;
 }
-
 
 function slugify(name: string | null | undefined): string {
   return (
@@ -104,7 +109,7 @@ export function applyTheme(
   // Determine which mode to use
   const activeMode: "light" | "dark" =
     (mode as "light" | "dark") ||
-    theme.defaultMode ||
+    (isModernTheme(theme) ? theme.defaultMode : theme.mode) ||
     "dark";
 
   // Toggle dark mode class for Tailwind variant utilities
@@ -115,7 +120,12 @@ export function applyTheme(
   }
 
   // Get tokens for the active mode
-  const tokens = theme.modes?.[activeMode] || {}
+  let tokens: ThemeTokens = {};
+  if (isModernTheme(theme)) {
+    tokens = theme.modes[activeMode];
+  } else if (theme.mode === activeMode) {
+    tokens = theme.tokens;
+  }
 
   for (const key of Object.keys(tokens)) {
     const value = tokens[key];

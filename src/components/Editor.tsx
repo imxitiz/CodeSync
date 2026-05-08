@@ -7,20 +7,29 @@ import { ACTIONS } from "../../action";
 
 type CodeChangeData = {
   roomId: string;
+  tabId: string;
+  code: string;
+  currenteditor: string;
+};
+
+type IncomingCodeChange = {
+  tabId?: string;
   code: string;
   currenteditor: string;
 };
 
 type Socket = {
   emit: (event: string, data: CodeChangeData) => void;
-  on: (event: string, callback: (data: CodeChangeData) => void) => void;
-  off: (event: string, callback: (data: CodeChangeData) => void) => void;
+  on: (event: string, callback: (data: IncomingCodeChange) => void) => void;
+  off: (event: string, callback: (data: IncomingCodeChange) => void) => void;
 };
 
 export type EditorProps = {
   socketRef: RefObject<Socket>;
   roomId: string;
-  onCodeChange: (code: string) => void;
+  activeTabId: string;
+  initialCode: string;
+  onCodeChange: (code: string, tabId: string) => void;
   editable: boolean;
   currentEditor: string;
   setCurrentEditor: (editor: string) => void;
@@ -29,11 +38,11 @@ export type EditorProps = {
   fontSize?: number;
 };
 
-// Added "wrap" prop to control line wrapping (true = wrap at viewport width)
-// Added "darkMode" prop to switch editor theme; light uses CSS variables for colors
 const Editor: React.FC<EditorProps> = ({
   socketRef,
   roomId,
+  activeTabId,
+  initialCode,
   onCodeChange,
   editable,
   currentEditor,
@@ -42,9 +51,12 @@ const Editor: React.FC<EditorProps> = ({
   darkMode = true,
   fontSize = 16,
 }) => {
-  const [code, setCode] = useState<string>("");
+  const [code, setCode] = useState<string>(initialCode);
 
-  // Minimal light theme that follows CSS variables (no external theme needed)
+  useEffect(() => {
+    setCode(initialCode);
+  }, [initialCode]);
+
   const lightTheme = useMemo(
     () =>
       EditorView.theme(
@@ -82,7 +94,6 @@ const Editor: React.FC<EditorProps> = ({
 
   const themeExt = darkMode ? dracula : lightTheme;
 
-  // Extension that sets font-size and triggers CodeMirror re-measure on change
   const fontSizeTheme = useMemo(
     () =>
       EditorView.theme({
@@ -100,47 +111,45 @@ const Editor: React.FC<EditorProps> = ({
   }, [wrap, themeExt, fontSizeTheme]);
 
   const handleChange = (value: string): void => {
-    if (!editable) {
+    if (!(editable && socketRef.current)) {
       return;
     }
 
-    if (editable && socketRef.current) {
-      setCode(value);
-      onCodeChange(value);
-      socketRef.current.emit(ACTIONS.CODE_CHANGE, {
-        roomId,
-        code: value,
-        currenteditor: currentEditor,
-      });
-    }
+    setCode(value);
+    onCodeChange(value, activeTabId);
+    socketRef.current.emit(ACTIONS.CODE_CHANGE, {
+      roomId,
+      tabId: activeTabId,
+      code: value,
+      currenteditor: currentEditor,
+    });
   };
 
-  // @ts-expect-error
   useEffect(() => {
-    if (socketRef.current) {
-      const handleCodeChange = ({
-        code: newCode,
-        currenteditor,
-      }: {
-        code: string;
-        currenteditor: string;
-      }) => {
-        if (newCode !== null && newCode !== code) {
-          setCode(newCode);
-          onCodeChange(newCode);
-        }
-        setCurrentEditor(currenteditor);
-      };
-
-      socketRef.current.on(ACTIONS.CODE_CHANGE, handleCodeChange);
-
-      return () => {
-        if (socketRef.current) {
-          socketRef.current.off(ACTIONS.CODE_CHANGE, handleCodeChange);
-        }
-      };
+    const socket = socketRef.current;
+    if (!socket) {
+      return;
     }
-  }, [code, onCodeChange, socketRef, setCurrentEditor]);
+
+    const handleCodeChange = ({
+      tabId,
+      code: newCode,
+      currenteditor,
+    }: IncomingCodeChange) => {
+      const targetTabId = tabId || activeTabId;
+      onCodeChange(newCode, targetTabId);
+      if (targetTabId === activeTabId && newCode !== code) {
+        setCode(newCode);
+      }
+      setCurrentEditor(currenteditor);
+    };
+
+    socket.on(ACTIONS.CODE_CHANGE, handleCodeChange);
+
+    return () => {
+      socket.off(ACTIONS.CODE_CHANGE, handleCodeChange);
+    };
+  }, [activeTabId, code, onCodeChange, socketRef, setCurrentEditor]);
 
   return (
     <CodeMirror
@@ -153,7 +162,6 @@ const Editor: React.FC<EditorProps> = ({
       extensions={extensions}
       height="100%"
       onChange={handleChange}
-      // theme prop left undefined for light; dark handled by dracula in extensions
       readOnly={!editable}
       style={{ height: "100%", width: "100%", minHeight: 0, minWidth: 0 }}
       theme={darkMode ? dracula : "light"}

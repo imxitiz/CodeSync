@@ -10,6 +10,7 @@ export type ClientModernProps = {
   currentEditor: string;
   canGrantEdit?: boolean;
   isMe?: boolean;
+  activeTab?: string | undefined;
 };
 
 export default function ClientModern({
@@ -18,6 +19,7 @@ export default function ClientModern({
   currentEditor,
   canGrantEdit = false,
   isMe = false,
+  activeTab,
 }: ClientModernProps) {
   const colorRef = useRef<string>(randomColor());
   const isOwner = username === roomcreator;
@@ -87,6 +89,7 @@ export default function ClientModern({
           </p>
           <p className="truncate text-muted-foreground text-xs">
             {isOwner ? "Owner" : "Participant"}
+            {activeTab ? ` · ${activeTab}` : ""}
           </p>
         </div>
       </div>

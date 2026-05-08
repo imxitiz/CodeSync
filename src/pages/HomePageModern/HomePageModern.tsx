@@ -14,13 +14,29 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  BACKEND_API_URL,
+  clearCustomBackendUrl,
+  getBackendUrl,
+  hasCustomBackendUrl,
+  isValidBackendOrigin,
+  setCustomBackendUrl,
+} from "@/utils/constants";
 import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
 import {
   clearRoomHistory,
   getRecentRooms,
+  isRoomHistoryEnabled,
   type RecentRoom,
   removeRoom,
+  setRoomHistoryEnabled,
 } from "@/utils/roomHistory";
+
+const advancedSettingsId = "advanced-settings-panel";
+const backendHelpText = [
+  "Enter only the server origin (e.g., http://localhost:3000) with no path, query, or credentials.",
+  "Requests go to /api and Socket.IO on this origin, which must allow CORS.",
+].join(" ");
 
 export default function HomePageModern() {
   const [roomId, setRoomId] = useState<string>("");
@@ -28,6 +44,10 @@ export default function HomePageModern() {
   const [isCheckingServer, setIsCheckingServer] = useState<boolean>(false);
   const [serverStatusMessage, setServerStatusMessage] = useState<string>("");
   const [recentRooms, setRecentRooms] = useState<RecentRoom[]>([]);
+  const [isHistoryEnabled, setIsHistoryEnabled] = useState(true);
+  const [isCustomBackend, setIsCustomBackend] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [customBackendInput, setCustomBackendInput] = useState("");
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,7 +58,16 @@ export default function HomePageModern() {
       setRoomId(id);
     }
     wakeUpServer();
-    setRecentRooms(getRecentRooms());
+    const historyEnabled = isRoomHistoryEnabled();
+    setIsHistoryEnabled(historyEnabled);
+    setRecentRooms(historyEnabled ? getRecentRooms() : []);
+
+    const hasCustom = hasCustomBackendUrl();
+    if (hasCustom) {
+      setIsCustomBackend(true);
+      setShowAdvanced(true);
+      setCustomBackendInput(getBackendUrl());
+    }
   }, [location.state]);
 
   const formatTimeAgo = (timestamp: number): string => {
@@ -74,6 +103,15 @@ export default function HomePageModern() {
     toast.success("Room history cleared");
   };
 
+  const handleHistoryPreferenceChange = (enabled: boolean) => {
+    setRoomHistoryEnabled(enabled);
+    setIsHistoryEnabled(enabled);
+    setRecentRooms(enabled ? getRecentRooms() : []);
+    toast.success(
+      enabled ? "Room history enabled" : "Room history disabled and cleared"
+    );
+  };
+
   const handleHealthCheck = (attempt: number, maxRetries: number) => {
     setServerStatusMessage(`Waking up server... (${attempt}/${maxRetries})`);
   };
@@ -94,6 +132,33 @@ export default function HomePageModern() {
     if (e.target.value.length <= 256) {
       setRoomId(e.target.value);
     }
+  };
+
+  const saveCustomBackend = () => {
+    const trimmed = customBackendInput.trim();
+    if (!trimmed) {
+      toast.error("Please enter a backend URL");
+      return;
+    }
+    if (!isValidBackendOrigin(trimmed)) {
+      toast.error(
+        "Invalid URL. Use an http(s) origin like http://localhost:3000 with no path, query, or credentials."
+      );
+      return;
+    }
+    setCustomBackendUrl(trimmed);
+    setCustomBackendInput(getBackendUrl());
+    setIsCustomBackend(true);
+    toast.success("Custom backend URL saved");
+    wakeUpServer();
+  };
+
+  const resetBackendUrl = () => {
+    clearCustomBackendUrl();
+    setCustomBackendInput("");
+    setIsCustomBackend(false);
+    toast.success("Reset to default backend");
+    wakeUpServer();
   };
 
   const pasteFromClipboard = async () => {
@@ -277,6 +342,71 @@ export default function HomePageModern() {
                     </Button>
                   </div>
                 </div>
+
+                <div className="rounded-md border bg-muted/20 p-3">
+                  <button
+                    aria-controls={advancedSettingsId}
+                    aria-expanded={showAdvanced}
+                    className="flex w-full cursor-pointer items-center justify-between text-left font-medium text-sm"
+                    onClick={() => setShowAdvanced((value) => !value)}
+                    type="button"
+                  >
+                    <span>Advanced settings</span>
+                    <span className="text-muted-foreground text-xs">
+                      {isCustomBackend ? "custom backend" : "default backend"}
+                    </span>
+                  </button>
+                  {showAdvanced && (
+                    <div className="mt-3 space-y-2" id={advancedSettingsId}>
+                      <label
+                        className="font-medium text-sm"
+                        htmlFor="backend-url"
+                      >
+                        Backend URL
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          aria-describedby="backend-help"
+                          id="backend-url"
+                          onChange={(event) =>
+                            setCustomBackendInput(event.target.value)
+                          }
+                          placeholder={BACKEND_API_URL}
+                          spellCheck="false"
+                          value={customBackendInput}
+                        />
+                        <Button
+                          onClick={saveCustomBackend}
+                          size="sm"
+                          type="button"
+                        >
+                          Save
+                        </Button>
+                        {isCustomBackend && (
+                          <Button
+                            onClick={resetBackendUrl}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            Reset
+                          </Button>
+                        )}
+                      </div>
+                      <p
+                        className="text-muted-foreground text-xs"
+                        id="backend-help"
+                      >
+                        {backendHelpText}
+                      </p>
+                      {isCustomBackend && (
+                        <p className="break-all text-muted-foreground text-xs">
+                          Using: {getBackendUrl()}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </CardContent>
               <CardFooter className="flex flex-col items-stretch gap-2">
                 <Button
@@ -301,6 +431,28 @@ export default function HomePageModern() {
                 </div>
               </CardFooter>
             </Card>
+
+            <div className="mx-auto mt-3 w-full max-w-md rounded-md border bg-card px-3 py-2 text-sm">
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  checked={isHistoryEnabled}
+                  className="mt-1"
+                  onChange={(event) =>
+                    handleHistoryPreferenceChange(event.target.checked)
+                  }
+                  type="checkbox"
+                />
+                <span>
+                  <span className="block font-medium">
+                    Remember recent rooms
+                  </span>
+                  <span className="block text-muted-foreground text-xs">
+                    Stored only in this browser. Turn this off on shared
+                    devices; disabling clears saved room IDs and names.
+                  </span>
+                </span>
+              </label>
+            </div>
 
             {/* Recent Rooms — stored locally on this device only */}
             {recentRooms.length > 0 && (
