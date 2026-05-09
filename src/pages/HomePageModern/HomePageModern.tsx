@@ -3,8 +3,8 @@ import toast from "react-hot-toast";
 import { FiClock, FiInfo, FiTrash2, FiX } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
-import AppShell from "@/components/AppShell";
-import { Button } from "@/components/ui/button";
+import AppShell from "../../components/AppShell";
+import { Button } from "../../components/ui/button";
 import {
   Card,
   CardContent,
@@ -12,8 +12,8 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+} from "../../components/ui/card";
+import { Input } from "../../components/ui/input";
 import {
   BACKEND_API_URL,
   clearCustomBackendUrl,
@@ -21,8 +21,8 @@ import {
   hasCustomBackendUrl,
   isValidBackendOrigin,
   setCustomBackendUrl,
-} from "@/utils/constants";
-import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
+} from "../../utils/constants";
+import { waitForServerHealth, wakeUpServer } from "../../utils/healthCheck";
 import {
   clearRoomHistory,
   getRecentRooms,
@@ -30,7 +30,7 @@ import {
   type RecentRoom,
   removeRoom,
   setRoomHistoryEnabled,
-} from "@/utils/roomHistory";
+} from "../../utils/roomHistory";
 
 const advancedSettingsId = "advanced-settings-panel";
 const backendHelpText = [

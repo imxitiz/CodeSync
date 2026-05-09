@@ -8,6 +8,7 @@ export const DEFAULT_PERMISSIONS: UserPermissions = {
   canCreateTab: false,
   canDeleteTab: false,
   canRenameTab: false,
+  allowedTabs: undefined,
 };
 
 export const OWNER_PERMISSIONS: UserPermissions = {
@@ -15,6 +16,7 @@ export const OWNER_PERMISSIONS: UserPermissions = {
   canCreateTab: true,
   canDeleteTab: true,
   canRenameTab: true,
+  allowedTabs: undefined,
 };
 
 export const normalizeEditorPermissions = (
@@ -29,6 +31,7 @@ export const normalizeEditorPermissions = (
     canCreateTab: permissions.canCreateTab,
     canDeleteTab: permissions.canDeleteTab,
     canRenameTab: permissions.canRenameTab,
+    allowedTabs: permissions.allowedTabs,
   };
 };
 
@@ -36,20 +39,20 @@ export const withEditorAccess = (
   permissions: UserPermissions = DEFAULT_PERMISSIONS
 ): UserPermissions =>
   normalizeEditorPermissions({
+    ...permissions,
     canEdit: true,
-    canCreateTab: permissions.canCreateTab || true,
-    canDeleteTab: permissions.canDeleteTab || false,
-    canRenameTab: permissions.canRenameTab || true,
+    // When making someone an editor, give them some sensible defaults if they don't have them
+    canCreateTab: permissions.canCreateTab ?? true,
+    canRenameTab: permissions.canRenameTab ?? true,
   });
 
 export const togglePermission = (
   permissions: UserPermissions,
   key: keyof UserPermissions
-): UserPermissions =>
-  normalizeEditorPermissions({
-    ...permissions,
-    [key]: !permissions[key],
-  });
+): UserPermissions => {
+  const next = { ...permissions, [key]: !permissions[key] };
+  return normalizeEditorPermissions(next as UserPermissions);
+};
 
 export const canShowTabPermissionControls = (
   permissions: UserPermissions
@@ -68,4 +71,15 @@ export const cascadePermissionRevocation = (
     }
   }
   return nextPermissions;
+};
+
+export const canUserEditTab = (
+  permissions: UserPermissions | undefined,
+  tabId: string,
+  isOwner: boolean
+): boolean => {
+  if (isOwner) return true;
+  if (!permissions?.canEdit) return false;
+  if (!permissions.allowedTabs) return true; // Undefined means all tabs
+  return permissions.allowedTabs.includes(tabId);
 };

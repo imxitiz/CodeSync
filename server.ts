@@ -114,6 +114,7 @@ type UserPermissions = {
   canCreateTab: boolean;
   canDeleteTab: boolean;
   canRenameTab: boolean;
+  allowedTabs?: string[];
 };
 
 const roomTabsMap = new Map<string, Map<string, TabData>>();
@@ -172,21 +173,23 @@ const normalizePermissions = (value: unknown): UserPermissions | null => {
     "canCreateTab",
     "canDeleteTab",
     "canRenameTab",
+    "allowedTabs",
   ];
 
   if (Object.keys(input).some((key) => !allowedKeys.includes(key))) {
     return null;
   }
 
-  if (allowedKeys.some((key) => typeof input[key] !== "boolean")) {
+  if (input.allowedTabs !== undefined && !Array.isArray(input.allowedTabs)) {
     return null;
   }
 
   return {
-    canEdit: input.canEdit,
-    canCreateTab: input.canCreateTab,
-    canDeleteTab: input.canDeleteTab,
-    canRenameTab: input.canRenameTab,
+    canEdit: !!input.canEdit,
+    canCreateTab: !!input.canCreateTab,
+    canDeleteTab: !!input.canDeleteTab,
+    canRenameTab: !!input.canRenameTab,
+    allowedTabs: Array.isArray(input.allowedTabs) ? input.allowedTabs.filter(t => typeof t === "string") : undefined,
   } as UserPermissions;
 };
 
@@ -281,7 +284,7 @@ const canManageTab = (
   const roomCreator = roomCreatorMap.get(roomId);
   const permissions = getOrCreateRoomPermissions(roomId);
   const userPermissions = permissions.get(userName) || DEFAULT_PERMISSIONS;
-  return roomCreator === userName || userPermissions[permission];
+  return roomCreator === userName || !!userPermissions[permission];
 };
 
 io.on("connection", (socket: Socket) => {
@@ -372,9 +375,12 @@ io.on("connection", (socket: Socket) => {
       const currentEditor = getRoomCurrentEditor(roomId);
       const canEdit = roomCreator === userName || userPermissions.canEdit;
 
+      const isTabAllowed = !userPermissions.allowedTabs || userPermissions.allowedTabs.includes(tabId);
+
       if (
         !canEdit ||
-        (roomCreator !== userName && currentEditor !== userName)
+        (roomCreator !== userName && currentEditor !== userName) ||
+        (roomCreator !== userName && !isTabAllowed)
       ) {
         return;
       }

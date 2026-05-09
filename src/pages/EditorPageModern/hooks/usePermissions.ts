@@ -5,8 +5,8 @@ import {
   cascadePermissionRevocation,
   normalizeEditorPermissions,
   withEditorAccess,
-} from "./permissions";
-import type { UserPermissions } from "./types";
+} from "../permissions";
+import type { UserPermissions } from "../types";
 
 export const usePermissions = (
   _roomId: string | undefined,

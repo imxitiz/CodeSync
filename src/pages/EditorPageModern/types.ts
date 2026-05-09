@@ -16,6 +16,7 @@ export type UserPermissions = {
   canCreateTab: boolean;
   canDeleteTab: boolean;
   canRenameTab: boolean;
+  allowedTabs?: string[] | undefined; // List of tab IDs the user can edit. If undefined/empty, can edit all if canEdit is true.
 };
 
 export type FollowMode = "auto" | "manual" | "off";

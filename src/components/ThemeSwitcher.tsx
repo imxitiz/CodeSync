@@ -10,9 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
   SelectViewport,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
-import { useTheme } from "@/theme/ThemeProvider";
+} from "./ui/select";
+import { cn } from "../lib/utils";
+import { useTheme } from "../theme/ThemeProvider";
 import {
   applyTheme,
   createThemeFromCss,
