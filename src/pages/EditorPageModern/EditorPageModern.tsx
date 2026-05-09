@@ -22,10 +22,10 @@ import {
 import { MdTextDecrease, MdTextIncrease } from "react-icons/md";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
-import AppShell from "@/components/AppShell";
-import EditorWrapper from "@/components/EditorWrapper";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import AppShell from "../../components/AppShell";
+import EditorWrapper from "../../components/EditorWrapper";
+import { Button } from "../../components/ui/button";
+import { cn } from "../../lib/utils";
 import {
   DEFAULT_PERMISSIONS,
   DEFAULT_TAB_ID,

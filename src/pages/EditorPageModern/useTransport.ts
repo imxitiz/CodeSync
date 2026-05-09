@@ -6,9 +6,9 @@ import {
 } from "react";
 import toast from "react-hot-toast";
 import type { NavigateFunction } from "react-router-dom";
-import { ACTIONS } from "@/utils/constants";
-import { saveRoom } from "@/utils/roomHistory";
-import { initSocket } from "@/utils/socket";
+import { ACTIONS } from "../../utils/constants";
+import { saveRoom } from "../../utils/roomHistory";
+import { initSocket } from "../../utils/socket";
 import type {
   Client,
   EditorServerStatus,

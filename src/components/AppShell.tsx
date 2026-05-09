@@ -1,8 +1,8 @@
 import { type ReactNode, useState } from "react";
 import { Toaster } from "react-hot-toast";
-import { ThemeSwitcher } from "@/components/ThemeSwitcher";
-import { cn } from "@/lib/utils";
-import { ThemeProvider } from "@/theme/ThemeProvider";
+import { ThemeSwitcher } from "./ThemeSwitcher";
+import { cn } from "../lib/utils";
+import { ThemeProvider } from "../theme/ThemeProvider";
 
 export type AppShellProps = {
   children: ReactNode;
