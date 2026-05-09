@@ -36,8 +36,10 @@ export const withEditorAccess = (
   permissions: UserPermissions = DEFAULT_PERMISSIONS
 ): UserPermissions =>
   normalizeEditorPermissions({
-    ...permissions,
     canEdit: true,
+    canCreateTab: permissions.canCreateTab || true,
+    canDeleteTab: permissions.canDeleteTab || false,
+    canRenameTab: permissions.canRenameTab || true,
   });
 
 export const togglePermission = (
@@ -52,3 +54,18 @@ export const togglePermission = (
 export const canShowTabPermissionControls = (
   permissions: UserPermissions
 ): boolean => permissions.canEdit;
+
+export const cascadePermissionRevocation = (
+  permissions: Record<string, UserPermissions>,
+  roomCreator: string | null
+): Record<string, UserPermissions> => {
+  const nextPermissions = { ...permissions };
+  for (const user of Object.keys(nextPermissions)) {
+    if (user !== roomCreator) {
+      nextPermissions[user] = {
+        ...DEFAULT_PERMISSIONS,
+      };
+    }
+  }
+  return nextPermissions;
+};
