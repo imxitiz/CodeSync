@@ -133,7 +133,9 @@ export function setupSocket(
           roomCreator = userName;
         }
 
-        const clients = existingClients;
+        // Build the full client list including the new socket
+        const newClientEntry = { socketId: socket.id, username: userName };
+        const allClients = [...existingClients, newClientEntry];
 
         const tabs = getOrCreateRoomTabs(roomId);
         const perms = getOrCreateRoomPermissions(roomId);
@@ -149,14 +151,23 @@ export function setupSocket(
 
         userActiveTabMap.set(socket.id, DEFAULT_TAB_ID);
 
-        for (const { socketId } of clients) {
+        // Notify existing clients that a new user joined
+        for (const { socketId } of existingClients) {
           io.to(socketId).emit(ACTIONS.JOINED, {
-            clients,
+            clients: allClients,
             username: userName,
             socketId: socket.id,
             roomcreator: roomCreator,
           });
         }
+
+        // Notify the joining socket itself so it receives room creator info
+        socket.emit(ACTIONS.JOINED, {
+          clients: allClients,
+          username: userName,
+          socketId: socket.id,
+          roomcreator: roomCreator,
+        });
 
         socket.emit(ACTIONS.TAB_SYNC, {
           tabs: serializeTabs(tabs),
