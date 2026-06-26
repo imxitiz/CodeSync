@@ -3,8 +3,8 @@ import { createRoot as createReactRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ClientOnly, ViteReactSSG } from "vite-react-ssg";
 import "./index.css";
-import HomePageModern from "@/pages/HomePageModern/HomePageModern.tsx";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import HomePageModern from "@/pages/HomePageModern/HomePageModern.tsx";
 import {
   detectAndHandleServiceWorkerCache,
   setupHydrationErrorRecovery,

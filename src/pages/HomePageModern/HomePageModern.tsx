@@ -14,6 +14,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import {
   BACKEND_API_URL,
   clearCustomBackendUrl,
@@ -228,333 +236,338 @@ export default function HomePageModern() {
   };
 
   return (
-    <AppShell className="relative">
-      <div className="flex min-h-full flex-col">
-        <section className="mx-auto grid w-full max-w-5xl flex-1 grid-cols-1 content-center items-center gap-6 px-4 py-8 md:grid-cols-2 md:gap-12 md:py-0">
-          <div>
-            <h1 className="text-balance font-semibold text-foreground text-2xl tracking-tight sm:text-3xl md:text-4xl lg:text-5xl">
-              Collaborate in real-time.
-              <br />
-              Share code with one link.
-            </h1>
-            <p className="mt-3 max-w-prose text-pretty text-muted-foreground text-sm leading-relaxed sm:text-base">
-              Create a room, share the link, and start collaborating instantly.
-              No setup, just productive pairing with live presence and editor
-              control.
-            </p>
+    <TooltipProvider delayDuration={300}>
+      <AppShell className="relative">
+        <div className="flex min-h-full flex-col">
+          <section className="mx-auto grid w-full max-w-5xl flex-1 grid-cols-1 content-center items-center gap-6 px-4 py-8 md:grid-cols-2 md:gap-12 md:py-0">
+            <div>
+              <h1 className="text-balance font-semibold text-2xl text-foreground tracking-tight sm:text-3xl md:text-4xl lg:text-5xl">
+                Collaborate in real-time.
+                <br />
+                Share code with one link.
+              </h1>
+              <p className="mt-3 max-w-prose text-pretty text-muted-foreground text-sm leading-relaxed sm:text-base">
+                Create a room, share the link, and start collaborating
+                instantly. No setup, just productive pairing with live presence
+                and editor control.
+              </p>
 
-            <ul className="mt-5 grid gap-2 text-muted-foreground text-sm sm:grid-cols-2">
-              <li className="flex items-center gap-2">
-                <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
-                One-click join via link
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
-                Editor handoff control
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
-                Accessible, keyboard-friendly
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
-                Import themes from tweakcn
-              </li>
-            </ul>
-          </div>
+              <ul className="mt-5 grid gap-2 text-muted-foreground text-sm sm:grid-cols-2">
+                <li className="flex items-center gap-2">
+                  <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
+                  One-click join via link
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
+                  Editor handoff control
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
+                  Accessible, keyboard-friendly
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
+                  Import themes from tweakcn
+                </li>
+              </ul>
+            </div>
 
-          <div>
-            <Card className="mx-auto w-full max-w-md border">
-              <CardHeader>
-                <CardTitle>Join a room</CardTitle>
-                <CardDescription>
-                  Paste an invite ID or create a new room to get started.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {serverStatusMessage && (
-                  <div className="rounded-md border border-border bg-accent/40 px-3 py-2 text-sm">
-                    {serverStatusMessage}
+            <div>
+              <Card className="mx-auto w-full max-w-md border">
+                <CardHeader>
+                  <CardTitle>Join a room</CardTitle>
+                  <CardDescription>
+                    Paste an invite ID or create a new room to get started.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {serverStatusMessage && (
+                    <div className="rounded-md border border-border bg-accent/40 px-3 py-2 text-sm">
+                      {serverStatusMessage}
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <label className="font-medium text-sm" htmlFor="room-id">
+                      Room ID
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        aria-describedby="room-help"
+                        aria-label="Room ID"
+                        autoCapitalize="off"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoFocus
+                        className="flex-1 cursor-text"
+                        id="room-id"
+                        inputMode="text"
+                        maxLength={256}
+                        onChange={handleRoomIdChange}
+                        onKeyDown={onKeyDown}
+                        placeholder="Enter or paste room id"
+                        spellCheck="false"
+                        value={roomId}
+                      />
+                      <Button
+                        className="cursor-pointer"
+                        onClick={pasteFromClipboard}
+                        size="sm"
+                        tabIndex={-1}
+                        title="Paste from clipboard"
+                        type="button"
+                        variant="outline"
+                      >
+                        Paste
+                      </Button>
+                    </div>
+                    <p className="sr-only" id="room-help">
+                      Tip: Press Ctrl/⌘+V to paste quickly.
+                    </p>
                   </div>
-                )}
 
-                <div className="space-y-2">
-                  <label className="font-medium text-sm" htmlFor="room-id">
-                    Room ID
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      aria-describedby="room-help"
-                      aria-label="Room ID"
-                      autoCapitalize="off"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoFocus
-                      className="flex-1 cursor-text"
-                      id="room-id"
-                      inputMode="text"
-                      maxLength={256}
-                      onChange={handleRoomIdChange}
-                      onKeyDown={onKeyDown}
-                      placeholder="Enter or paste room id"
-                      spellCheck="false"
-                      value={roomId}
-                    />
-                    <Button
-                      className="cursor-pointer"
-                      onClick={pasteFromClipboard}
-                      size="sm"
-                      tabIndex={-1}
-                      title="Paste from clipboard"
+                  <div className="space-y-2">
+                    <label className="font-medium text-sm" htmlFor="username">
+                      Your name
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        aria-label="Your name"
+                        className="flex-1"
+                        id="username"
+                        maxLength={32}
+                        onChange={(e) => setUserName(e.target.value)}
+                        onKeyDown={onKeyDown}
+                        placeholder="e.g. Alex"
+                        spellCheck="false"
+                        value={userName}
+                      />
+                      <Button
+                        onClick={randomizeName}
+                        size="sm"
+                        title="Generate a random name"
+                        type="button"
+                        variant="ghost"
+                      >
+                        Random
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 border-t pt-3">
+                    <button
+                      aria-controls={advancedSettingsId}
+                      aria-expanded={showAdvanced}
+                      className="flex w-full cursor-pointer items-center gap-1 font-medium text-muted-foreground text-xs hover:text-foreground"
+                      onClick={() => setShowAdvanced(!showAdvanced)}
                       type="button"
-                      variant="outline"
                     >
-                      Paste
-                    </Button>
+                      <span
+                        className={cn(
+                          "inline-block transition-transform",
+                          showAdvanced && "rotate-90"
+                        )}
+                      >
+                        ▶
+                      </span>
+                      Advanced Settings
+                      {isCustomBackend && (
+                        <span className="ml-1 rounded bg-accent px-1.5 py-0.5 text-[10px]">
+                          custom
+                        </span>
+                      )}
+                    </button>
+                    {showAdvanced && (
+                      <div className="space-y-2" id={advancedSettingsId}>
+                        <label
+                          className="font-medium text-muted-foreground text-xs"
+                          htmlFor="custom-backend"
+                        >
+                          Backend URL
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            aria-label="Custom backend URL"
+                            className="flex-1 text-xs"
+                            id="custom-backend"
+                            onChange={(e) =>
+                              setCustomBackendInput(e.target.value)
+                            }
+                            placeholder={BACKEND_API_URL}
+                            spellCheck="false"
+                            value={customBackendInput}
+                          />
+                          <Button
+                            className="cursor-pointer"
+                            disabled={!customBackendInput.trim()}
+                            onClick={saveCustomBackend}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            Save
+                          </Button>
+                        </div>
+                        {isCustomBackend && (
+                          <div className="flex items-center justify-between">
+                            <p className="truncate text-[11px] text-muted-foreground">
+                              Using: {getBackendUrl()}
+                            </p>
+                            <Button
+                              className="cursor-pointer"
+                              onClick={resetBackendUrl}
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              Reset
+                            </Button>
+                          </div>
+                        )}
+                        <p className="text-[11px] text-muted-foreground">
+                          {backendHelpText}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <p className="sr-only" id="room-help">
-                    Tip: Press Ctrl/⌘+V to paste quickly.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="font-medium text-sm" htmlFor="username">
-                    Your name
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      aria-label="Your name"
-                      className="flex-1"
-                      id="username"
-                      maxLength={32}
-                      onChange={(e) => setUserName(e.target.value)}
-                      onKeyDown={onKeyDown}
-                      placeholder="e.g. Alex"
-                      spellCheck="false"
-                      value={userName}
-                    />
+                </CardContent>
+                <CardFooter className="flex flex-col items-stretch gap-2">
+                  <Button
+                    aria-label="Join room"
+                    className="w-full"
+                    disabled={isCheckingServer}
+                    onClick={joinRoom}
+                    size="lg"
+                  >
+                    {isCheckingServer ? "Connecting..." : "Join now"}
+                  </Button>
+                  <div className="flex items-center justify-center">
                     <Button
-                      onClick={randomizeName}
+                      onClick={createnewroom}
                       size="sm"
-                      title="Generate a random name"
+                      title="Generate a new room ID"
                       type="button"
                       variant="ghost"
                     >
-                      Random
+                      Create new room
                     </Button>
                   </div>
-                </div>
+                </CardFooter>
+              </Card>
 
-                <div className="space-y-2 border-t pt-3">
-                  <button
-                    aria-controls={advancedSettingsId}
-                    aria-expanded={showAdvanced}
-                    className="flex w-full cursor-pointer items-center gap-1 font-medium text-muted-foreground text-xs hover:text-foreground"
-                    onClick={() => setShowAdvanced(!showAdvanced)}
+              {/* Recent Rooms — stored locally on this device only */}
+              <div className="mx-auto mt-3 flex w-full max-w-md items-center gap-2 rounded-lg border bg-card/80 px-3 py-2 text-xs shadow-sm">
+                <FiClock className="size-3 shrink-0 text-muted-foreground" />
+                <span className="shrink-0 font-medium text-muted-foreground">
+                  Recent rooms
+                </span>
+                <Tooltip>
+                  <TooltipTrigger
+                    className="inline-flex shrink-0 cursor-help text-muted-foreground transition-colors hover:text-foreground"
                     type="button"
                   >
-                    <span
-                      className={`inline-block transition-transform ${showAdvanced ? "rotate-90" : ""}`}
-                    >
-                      ▶
-                    </span>
-                    Advanced Settings
-                    {isCustomBackend && (
-                      <span className="ml-1 rounded bg-accent px-1.5 py-0.5 text-[10px]">
-                        custom
-                      </span>
-                    )}
-                  </button>
-                  {showAdvanced && (
-                    <div className="space-y-2" id={advancedSettingsId}>
-                      <label
-                        className="font-medium text-muted-foreground text-xs"
-                        htmlFor="custom-backend"
+                    <FiInfo className="size-3" />
+                    <span className="sr-only">Room history privacy info</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p className="max-w-xs text-balance">
+                      Stored on this device only — never sent to the server.
+                      Enable only on devices you trust.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+                <Switch
+                  aria-label="Save recent rooms locally"
+                  checked={isHistoryEnabled}
+                  className="shrink-0"
+                  onCheckedChange={handleHistoryPreferenceChange}
+                  size="sm"
+                />
+                <div className="ml-auto flex min-w-0 flex-1 items-center gap-1.5">
+                  {isHistoryEnabled && recentRooms.length > 0 && (
+                    <>
+                      {/* biome-ignore lint/a11y/useSemanticElements: horizontal scroll container uses divs with ARIA roles */}
+                      <div
+                        aria-label="Recent rooms list"
+                        className="scrollbar-none flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
+                        role="list"
                       >
-                        Backend URL
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          aria-label="Custom backend URL"
-                          className="flex-1 text-xs"
-                          id="custom-backend"
-                          onChange={(e) =>
-                            setCustomBackendInput(e.target.value)
-                          }
-                          placeholder={BACKEND_API_URL}
-                          spellCheck="false"
-                          value={customBackendInput}
-                        />
-                        <Button
-                          className="cursor-pointer"
-                          disabled={!customBackendInput.trim()}
-                          onClick={saveCustomBackend}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          Save
-                        </Button>
-                      </div>
-                      {isCustomBackend && (
-                        <div className="flex items-center justify-between">
-                          <p className="truncate text-[11px] text-muted-foreground">
-                            Using: {getBackendUrl()}
-                          </p>
-                          <Button
-                            className="cursor-pointer"
-                            onClick={resetBackendUrl}
-                            size="sm"
-                            type="button"
-                            variant="ghost"
+                        {recentRooms.map((room) => (
+                          /* biome-ignore lint/a11y/useSemanticElements: horizontal scroll container uses divs with ARIA roles */
+                          <div
+                            className="group relative inline-flex shrink-0 items-center gap-1 rounded-full border bg-background/70 px-2 py-0.5 transition-colors hover:bg-accent"
+                            key={room.roomId}
+                            role="listitem"
                           >
-                            Reset
-                          </Button>
-                        </div>
-                      )}
-                      <p className="text-[11px] text-muted-foreground">
-                        {backendHelpText}
-                      </p>
-                    </div>
+                            <button
+                              className="cursor-pointer truncate font-mono text-[11px] text-foreground"
+                              onClick={() => handleSelectRecentRoom(room)}
+                              title={`Join as ${room.userName} · ${formatTimeAgo(room.joinedAt)}`}
+                              type="button"
+                            >
+                              {room.roomId.length > 18
+                                ? `${room.roomId.slice(0, 7)}…${room.roomId.slice(-5)}`
+                                : room.roomId}
+                            </button>
+                            <button
+                              aria-label="Remove room from history"
+                              className="cursor-pointer rounded-full text-muted-foreground opacity-60 transition-opacity hover:text-destructive group-hover:opacity-100"
+                              onClick={() =>
+                                handleRemoveRecentRoom(room.roomId)
+                              }
+                              type="button"
+                            >
+                              <FiX className="size-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <Button
+                        className="h-6 shrink-0 cursor-pointer px-1.5"
+                        onClick={handleClearHistory}
+                        size="sm"
+                        title="Clear room history"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <FiTrash2 className="size-3" />
+                      </Button>
+                    </>
                   )}
                 </div>
-              </CardContent>
-              <CardFooter className="flex flex-col items-stretch gap-2">
-                <Button
-                  aria-label="Join room"
-                  className="w-full"
-                  disabled={isCheckingServer}
-                  onClick={joinRoom}
-                  size="lg"
-                >
-                  {isCheckingServer ? "Connecting..." : "Join now"}
-                </Button>
-                <div className="flex items-center justify-center">
-                  <Button
-                    onClick={createnewroom}
-                    size="sm"
-                    title="Generate a new room ID"
-                    type="button"
-                    variant="ghost"
-                  >
-                    Create new room
-                  </Button>
-                </div>
-              </CardFooter>
-             </Card>
-           </div>
-         </section>
+              </div>
+            </div>
+          </section>
 
-         {/* Recent Rooms — stored locally on this device only */}
-         <div className="mx-auto mt-3 w-full max-w-md rounded-lg border bg-card/80 p-2 shadow-sm">
-           <div className="flex items-center justify-between gap-2 px-1">
-             <h3 className="flex min-w-0 items-center gap-1.5 font-medium text-muted-foreground text-xs">
-               <FiClock className="size-3 shrink-0" />
-               <span>Recent rooms</span>
-               <span className="text-muted-foreground/60">
-                 (this device only)
-               </span>
-               <span
-                 className="inline-flex text-muted-foreground/70"
-                 title="Room history is stored only in this browser. Enable it only on devices you trust; turning it off clears saved room IDs and names."
-               >
-                 <FiInfo className="size-3" />
-               </span>
-             </h3>
-             <div className="flex shrink-0 items-center gap-1">
-               <label
-                 className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2 py-1 text-muted-foreground text-xs transition-colors hover:bg-accent"
-                 title="Toggle local recent room history"
-               >
-                 <input
-                   checked={isHistoryEnabled}
-                   className="size-3 accent-current"
-                   onChange={(event) =>
-                     handleHistoryPreferenceChange(event.target.checked)
-                   }
-                   type="checkbox"
-                 />
-                 Save
-               </label>
-               {recentRooms.length > 0 && (
-                 <Button
-                   className="h-7 cursor-pointer px-2"
-                   onClick={handleClearHistory}
-                   size="sm"
-                   title="Clear room history"
-                   type="button"
-                   variant="ghost"
-                 >
-                   <FiTrash2 className="size-3" />
-                   <span className="sr-only sm:not-sr-only">Clear</span>
-                 </Button>
-               )}
-             </div>
-           </div>
-           {isHistoryEnabled && recentRooms.length > 0 && (
-             <ul className="mt-2 max-h-52 space-y-1 overflow-y-auto pr-1">
-               {recentRooms.map((room) => (
-                 <li key={room.roomId}>
-                   <div
-                     className="flex w-full cursor-pointer items-center gap-2 rounded-md border bg-background/70 px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
-                     onClick={() => handleSelectRecentRoom(room)}
-                     title="Click to fill room details"
-                   >
-                     <div className="min-w-0 flex-1">
-                       <span className="block truncate font-mono text-xs">
-                         {room.roomId.length > 20
-                           ? `${room.roomId.slice(0, 8)}…${room.roomId.slice(-8)}`
-                           : room.roomId}
-                       </span>
-                       <span className="text-muted-foreground text-xs">
-                         as {room.userName} · {formatTimeAgo(room.joinedAt)}
-                       </span>
-                     </div>
-                     <button
-                       aria-label={`Remove ${room.roomId} from history`}
-                       className="shrink-0 cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/20 hover:text-destructive"
-                       onClick={(e) => {
-                         e.stopPropagation();
-                         handleRemoveRecentRoom(room.roomId);
-                       }}
-                       type="button"
-                     >
-                       <FiX className="size-3.5" />
-                     </button>
-                   </div>
-                 </li>
-               ))}
-             </ul>
-           )}
-         </div>
-         <footer className="shrink-0 py-4 text-center">
-          <div className="inline-flex items-center gap-2 text-muted-foreground text-xs">
-            <span>
-              Built with ❤️ by{" "}
-              <a
-                className="underline underline-offset-2 hover:text-foreground"
-                href="https://github.com/sachinthapa572"
-                rel="noreferrer"
-                target="_blank"
-              >
-                Sachin Thapa
-              </a>
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>
-              Maintainers:{" "}
-              <a
-                className="underline underline-offset-2 hover:text-foreground"
-                href="https://github.com/imxitiz"
-                rel="noreferrer"
-                target="_blank"
-              >
-                Kshitiz
-              </a>
-            </span>
-          </div>
-        </footer>
-      </div>
-    </AppShell>
+          <footer className="shrink-0 py-4 text-center">
+            <div className="inline-flex items-center gap-2 text-muted-foreground text-xs">
+              <span>
+                Built with ❤️ by{" "}
+                <a
+                  className="underline underline-offset-2 hover:text-foreground"
+                  href="https://github.com/sachinthapa572"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Sachin Thapa
+                </a>
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>
+                Maintainers:{" "}
+                <a
+                  className="underline underline-offset-2 hover:text-foreground"
+                  href="https://github.com/imxitiz"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Kshitiz
+                </a>
+              </span>
+            </div>
+          </footer>
+        </div>
+      </AppShell>
+    </TooltipProvider>
   );
 }

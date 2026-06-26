@@ -37,9 +37,13 @@ const OWNER_PERMISSIONS: UserPermissions = {
 };
 
 const sanitizeTabName = (name: unknown): string | null => {
-  if (typeof name !== "string") return null;
+  if (typeof name !== "string") {
+    return null;
+  }
   const trimmed = name.trim();
-  if (!trimmed || trimmed.length > MAX_TAB_NAME_LENGTH) return null;
+  if (!trimmed || trimmed.length > MAX_TAB_NAME_LENGTH) {
+    return null;
+  }
   return trimmed;
 };
 
@@ -53,7 +57,9 @@ const isValidCode = (code: unknown): code is string =>
   typeof code === "string" && code.length <= MAX_CODE_LENGTH;
 
 const normalizePermissions = (value: unknown): UserPermissions | null => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
   const input = value as Record<string, unknown>;
   const allowedKeys = [
     "canEdit",
@@ -61,9 +67,12 @@ const normalizePermissions = (value: unknown): UserPermissions | null => {
     "canDeleteTab",
     "canRenameTab",
   ];
-  if (Object.keys(input).some((key) => !allowedKeys.includes(key)))
+  if (Object.keys(input).some((key) => !allowedKeys.includes(key))) {
     return null;
-  if (allowedKeys.some((key) => typeof input[key] !== "boolean")) return null;
+  }
+  if (allowedKeys.some((key) => typeof input[key] !== "boolean")) {
+    return null;
+  }
   return {
     canEdit: input.canEdit,
     canCreateTab: input.canCreateTab,
@@ -139,7 +148,9 @@ export function setupSocket(
     roomId: string
   ): { username: string; activeTabId: string }[] => {
     const room = io.sockets.adapter.rooms.get(roomId);
-    if (!room) return [];
+    if (!room) {
+      return [];
+    }
     return [...room]
       .map((sid) => ({
         username: userSocketMap.get(sid) ?? "",
@@ -156,7 +167,9 @@ export function setupSocket(
 
   const scheduleRoomCodeExpiry = (roomId: string) => {
     const existingTimer = roomCodeTtlTimers.get(roomId);
-    if (existingTimer) clearTimeout(existingTimer);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
     const timer = setTimeout(() => {
       roomTabsMap.delete(roomId);
       roomCodeTtlTimers.delete(roomId);
@@ -166,7 +179,9 @@ export function setupSocket(
 
   const cancelRoomCodeExpiry = (roomId: string) => {
     const existingTimer = roomCodeTtlTimers.get(roomId);
-    if (!existingTimer) return;
+    if (!existingTimer) {
+      return;
+    }
     clearTimeout(existingTimer);
     roomCodeTtlTimers.delete(roomId);
   };
@@ -183,7 +198,7 @@ export function setupSocket(
         }
 
         userSocketMap.set(socket.id, userName);
-        void socket.join(roomId);
+        socket.join(roomId);
 
         cancelRoomCodeExpiry(roomId);
 
@@ -248,11 +263,17 @@ export function setupSocket(
         tabId: string;
         code: string;
       }) => {
-        if (!socket.rooms.has(roomId)) return;
-        if (!isValidTabId(tabId) || !isValidCode(code)) return;
+        if (!socket.rooms.has(roomId)) {
+          return;
+        }
+        if (!(isValidTabId(tabId) && isValidCode(code))) {
+          return;
+        }
 
         const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
+        if (!userName) {
+          return;
+        }
 
         const roomCreator = roomCreatorMap.get(roomId);
         const perms = getOrCreateRoomPermissions(roomId);
@@ -260,13 +281,19 @@ export function setupSocket(
         const currentEditor = getRoomCurrentEditor(roomId);
         const canEdit = roomCreator === userName || userPerms.canEdit;
 
-        if (!canEdit) return;
-        if (roomCreator !== userName && currentEditor !== userName) return;
+        if (!canEdit) {
+          return;
+        }
+        if (roomCreator !== userName && currentEditor !== userName) {
+          return;
+        }
 
         const tabs = roomTabsMap.get(roomId);
         if (tabs) {
           const tab = tabs.get(tabId);
-          if (tab) tab.code = code;
+          if (tab) {
+            tab.code = code;
+          }
         }
 
         socket.in(roomId).emit(ACTIONS.CODE_CHANGE, {
@@ -291,10 +318,14 @@ export function setupSocket(
         tabId: string;
       }) => {
         const targetSocket = io.sockets.sockets.get(socketId);
-        if (!targetSocket) return;
+        if (!targetSocket) {
+          return;
+        }
 
         const senderRooms = [...socket.rooms].filter((r) => r !== socket.id);
-        const hasSharedRoom = senderRooms.some((r) => targetSocket.rooms.has(r));
+        const hasSharedRoom = senderRooms.some((r) =>
+          targetSocket.rooms.has(r)
+        );
 
         if (hasSharedRoom) {
           targetSocket.emit(ACTIONS.CODE_CHANGE, {
@@ -309,12 +340,20 @@ export function setupSocket(
     socket.on(
       ACTIONS.TAB_CODE_REQUEST,
       ({ roomId, tabId }: { roomId: string; tabId: string }) => {
-        if (!socket.rooms.has(roomId)) return;
-        if (!isValidTabId(tabId)) return;
+        if (!socket.rooms.has(roomId)) {
+          return;
+        }
+        if (!isValidTabId(tabId)) {
+          return;
+        }
         const tabs = roomTabsMap.get(roomId);
-        if (!tabs) return;
+        if (!tabs) {
+          return;
+        }
         const tab = tabs.get(tabId);
-        if (!tab) return;
+        if (!tab) {
+          return;
+        }
         socket.emit(ACTIONS.TAB_CODE, { tabId, code: tab.code });
       }
     );
@@ -329,14 +368,18 @@ export function setupSocket(
         currenteditor: string;
       }) => {
         const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
+        if (!userName) {
+          return;
+        }
 
         const roomCreator = roomCreatorMap.get(roomId);
         const currentEditor = getRoomCurrentEditor(roomId);
         const isOwner = roomCreator === userName;
         const canRelease = currenteditor === "" && currentEditor === userName;
 
-        if (!(isOwner || canRelease)) return;
+        if (!(isOwner || canRelease)) {
+          return;
+        }
 
         setRoomCurrentEditor(roomId, currenteditor);
         socket.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
@@ -355,21 +398,32 @@ export function setupSocket(
         name: string;
       }) => {
         const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
+        if (!userName) {
+          return;
+        }
 
-        if (!(socket.rooms.has(roomId) && isValidTabId(tabId))) return;
+        if (!(socket.rooms.has(roomId) && isValidTabId(tabId))) {
+          return;
+        }
         const sanitizedName = sanitizeTabName(name);
-        if (!sanitizedName) return;
+        if (!sanitizedName) {
+          return;
+        }
 
         const roomCreator = roomCreatorMap.get(roomId);
         const perms = getOrCreateRoomPermissions(roomId);
         const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        if (roomCreator !== userName && !userPerms.canCreateTab) return;
+        if (roomCreator !== userName && !userPerms.canCreateTab) {
+          return;
+        }
 
         const tabs = roomTabsMap.get(roomId);
         if (tabs && !tabs.has(tabId) && tabs.size < MAX_TABS_PER_ROOM) {
           tabs.set(tabId, { name: sanitizedName, code: "" });
-          io.in(roomId).emit(ACTIONS.TAB_CREATE, { tabId, name: sanitizedName });
+          io.in(roomId).emit(ACTIONS.TAB_CREATE, {
+            tabId,
+            name: sanitizedName,
+          });
         }
       }
     );
@@ -378,13 +432,19 @@ export function setupSocket(
       ACTIONS.TAB_CLOSE,
       ({ roomId, tabId }: { roomId: string; tabId: string }) => {
         const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
-        if (!isValidTabId(tabId)) return;
+        if (!userName) {
+          return;
+        }
+        if (!isValidTabId(tabId)) {
+          return;
+        }
 
         const roomCreator = roomCreatorMap.get(roomId);
         const perms = getOrCreateRoomPermissions(roomId);
         const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        if (roomCreator !== userName && !userPerms.canDeleteTab) return;
+        if (roomCreator !== userName && !userPerms.canDeleteTab) {
+          return;
+        }
 
         const tabs = roomTabsMap.get(roomId);
         if (tabs && tabs.size > 1) {
@@ -406,20 +466,30 @@ export function setupSocket(
         name: string;
       }) => {
         const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
-        if (!isValidTabId(tabId)) return;
+        if (!userName) {
+          return;
+        }
+        if (!isValidTabId(tabId)) {
+          return;
+        }
         const sanitizedName = sanitizeTabName(name);
-        if (!sanitizedName) return;
+        if (!sanitizedName) {
+          return;
+        }
 
         const roomCreator = roomCreatorMap.get(roomId);
         const perms = getOrCreateRoomPermissions(roomId);
         const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        if (roomCreator !== userName && !userPerms.canRenameTab) return;
+        if (roomCreator !== userName && !userPerms.canRenameTab) {
+          return;
+        }
 
         const tabs = roomTabsMap.get(roomId);
         if (tabs) {
           const tab = tabs.get(tabId);
-          if (tab) tab.name = sanitizedName;
+          if (tab) {
+            tab.name = sanitizedName;
+          }
         }
 
         io.in(roomId).emit(ACTIONS.TAB_RENAME, { tabId, name: sanitizedName });
@@ -430,8 +500,12 @@ export function setupSocket(
       ACTIONS.TAB_SWITCH,
       ({ roomId, tabId }: { roomId: string; tabId: string }) => {
         const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
-        if (!isValidTabId(tabId)) return;
+        if (!userName) {
+          return;
+        }
+        if (!isValidTabId(tabId)) {
+          return;
+        }
 
         userActiveTabMap.set(socket.id, tabId);
         socket
@@ -451,22 +525,31 @@ export function setupSocket(
         username: string;
         permissions: unknown;
       }) => {
-        if (!socket.rooms.has(roomId)) return;
+        if (!socket.rooms.has(roomId)) {
+          return;
+        }
 
         const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
+        if (!userName) {
+          return;
+        }
 
         const roomCreator = roomCreatorMap.get(roomId);
-        if (roomCreator !== userName) return;
+        if (roomCreator !== userName) {
+          return;
+        }
 
         const normalized = normalizePermissions(permissions);
-        if (!normalized) return;
+        if (!normalized) {
+          return;
+        }
 
         const perms = getOrCreateRoomPermissions(roomId);
         perms.set(username, normalized);
-        io
-          .in(roomId)
-          .emit(ACTIONS.PERMISSIONS_UPDATE, { username, permissions: normalized });
+        io.in(roomId).emit(ACTIONS.PERMISSIONS_UPDATE, {
+          username,
+          permissions: normalized,
+        });
       }
     );
 

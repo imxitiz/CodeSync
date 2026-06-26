@@ -71,6 +71,7 @@ export default function EditorPageModern() {
   const [currentEditor, setCurrentEditor] = useState<string>("");
   const currentEditorRef = useRef<string>(currentEditor);
   const [roomCreator, setRoomCreator] = useState<string | null>(null);
+  const roomCreatorRef = useRef<string | null>(roomCreator);
   const socketRef = useRef<Socket | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -160,6 +161,10 @@ export default function EditorPageModern() {
     currentEditorRef.current = currentEditor;
   }, [currentEditor]);
 
+  useEffect(() => {
+    roomCreatorRef.current = roomCreator;
+  }, [roomCreator]);
+
   const sortedClients = useMemo(
     () =>
       [...(clients || [])].sort((a, b) => {
@@ -185,7 +190,9 @@ export default function EditorPageModern() {
     if (!roomCreator) {
       return null;
     }
-    const ownerActive = clients.some((client) => client.username === roomCreator);
+    const ownerActive = clients.some(
+      (client) => client.username === roomCreator
+    );
     if (ownerActive && roomCreator !== userName) {
       return roomCreator;
     }
@@ -423,7 +430,7 @@ export default function EditorPageModern() {
   ]);
 
   useEffect(() => {
-    if (!socketRef.current || !id) {
+    if (!(socketRef.current && id)) {
       return;
     }
     if (!activeTabId) {
@@ -517,12 +524,10 @@ export default function EditorPageModern() {
             ({
               clients: joinedClients,
               username,
-              socketId,
               roomcreator,
             }: {
               clients: Client[];
               username: string;
-              socketId: string;
               roomcreator: string;
             }) => {
               setClients(joinedClients);
@@ -545,19 +550,6 @@ export default function EditorPageModern() {
               }
               if (username !== userName) {
                 toast.success(`${username} joined the room`);
-                // Sync current tab code to new joiner
-                const currentTabs = tabsRef.current;
-                const currentTab = currentTabs.find(
-                  (t) => t.id === activeTabId
-                );
-                if (currentTab && socketRef.current) {
-                  socketRef.current.emit(ACTIONS.SYNC_CODE, {
-                    socketId,
-                    code: currentTab.code,
-                    currenteditor: currentEditorRef.current,
-                    tabId: activeTabId,
-                  });
-                }
               }
             }
           );
@@ -646,7 +638,7 @@ export default function EditorPageModern() {
               if (currenteditor === userName) {
                 toast.success("You are now the editor");
               }
-              if (currenteditor === "" && userName === roomCreator) {
+              if (currenteditor === "" && userName === roomCreatorRef.current) {
                 toast.success(
                   `${currentEditorRef.current} have released control`
                 );
@@ -1331,11 +1323,10 @@ export default function EditorPageModern() {
             {/* Editor wrapper takes full available space (keyed by tabId to remount) */}
             {activeTab && (
               <div
-                className={`editor-host h-full w-full ${
-                  wrapLines ? "wrap-on" : "no-wrap"
-                }`}
+                className={`editor-host h-full w-full ${wrapLines ? "wrap-on" : "no-wrap"}`}
               >
                 <EditorWrapper
+                  activeTabId={activeTab.id}
                   currentEditor={currentEditor}
                   darkMode={isDark}
                   editable={canEditCode}
@@ -1346,7 +1337,6 @@ export default function EditorPageModern() {
                   roomId={id || ""}
                   setCurrentEditor={setCurrentEditor}
                   socketRef={socketRef as RefObject<Socket>}
-                  tabId={activeTab.id}
                   wrap={wrapLines}
                 />
               </div>
