@@ -2,7 +2,7 @@ import { javascript } from "@codemirror/lang-javascript";
 import { EditorView } from "@codemirror/view";
 import { dracula } from "@uiw/codemirror-theme-dracula";
 import CodeMirror from "@uiw/react-codemirror";
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useEffect, useMemo, useState } from "react";
 import { ACTIONS } from "../utils/constants";
 
 type CodeChangeData = {
@@ -12,24 +12,32 @@ type CodeChangeData = {
   currenteditor: string;
 };
 
-type IncomingCodeChange = {
-  tabId?: string;
-  code: string;
-  currenteditor?: string;
-};
-
 type Socket = {
   emit: (event: string, data: CodeChangeData) => void;
-  on: (event: string, callback: (data: IncomingCodeChange) => void) => void;
-  off: (event: string, callback: (data: IncomingCodeChange) => void) => void;
+  on: (
+    event: string,
+    callback: (data: {
+      tabId: string;
+      code: string;
+      currenteditor?: string;
+    }) => void
+  ) => void;
+  off: (
+    event: string,
+    callback: (data: {
+      tabId: string;
+      code: string;
+      currenteditor?: string;
+    }) => void
+  ) => void;
 };
 
 export type EditorProps = {
   socketRef: RefObject<Socket>;
   roomId: string;
-  activeTabId: string;
-  initialCode: string;
-  onCodeChange: (code: string, tabId: string) => void;
+  tabId: string;
+  initialCode?: string;
+  onCodeChange: (code: string) => void;
   editable: boolean;
   currentEditor: string;
   setCurrentEditor: (editor: string) => void;
@@ -38,11 +46,13 @@ export type EditorProps = {
   fontSize?: number;
 };
 
+// Added "wrap" prop to control line wrapping (true = wrap at viewport width)
+// Added "darkMode" prop to switch editor theme; light uses CSS variables for colors
 const Editor: React.FC<EditorProps> = ({
   socketRef,
   roomId,
-  activeTabId,
-  initialCode,
+  tabId,
+  initialCode = "",
   onCodeChange,
   editable,
   currentEditor,
@@ -52,23 +62,8 @@ const Editor: React.FC<EditorProps> = ({
   fontSize = 16,
 }) => {
   const [code, setCode] = useState<string>(initialCode);
-  const activeTabIdRef = useRef(activeTabId);
-  const codeRef = useRef(initialCode);
-  const onCodeChangeRef = useRef(onCodeChange);
 
-  useEffect(() => {
-    activeTabIdRef.current = activeTabId;
-  }, [activeTabId]);
-
-  useEffect(() => {
-    onCodeChangeRef.current = onCodeChange;
-  }, [onCodeChange]);
-
-  useEffect(() => {
-    codeRef.current = initialCode;
-    setCode(initialCode);
-  }, [initialCode]);
-
+  // Minimal light theme that follows CSS variables (no external theme needed)
   const lightTheme = useMemo(
     () =>
       EditorView.theme(
@@ -106,6 +101,7 @@ const Editor: React.FC<EditorProps> = ({
 
   const themeExt = darkMode ? dracula : lightTheme;
 
+  // Extension that sets font-size and triggers CodeMirror re-measure on change
   const fontSizeTheme = useMemo(
     () =>
       EditorView.theme({
@@ -123,64 +119,68 @@ const Editor: React.FC<EditorProps> = ({
   }, [wrap, themeExt, fontSizeTheme]);
 
   const handleChange = (value: string): void => {
-    if (!(editable && socketRef.current)) return;
+    if (!editable) {
+      return;
+    }
 
-    codeRef.current = value;
-    setCode(value);
-    onCodeChange(value, activeTabId);
-    socketRef.current.emit(ACTIONS.CODE_CHANGE, {
-      roomId,
-      tabId: activeTabId,
-      code: value,
-      currenteditor: currentEditor,
-    });
+    if (editable && socketRef.current) {
+      setCode(value);
+      onCodeChange(value);
+      socketRef.current.emit(ACTIONS.CODE_CHANGE, {
+        roomId,
+        tabId,
+        code: value,
+        currenteditor: currentEditor,
+      });
+    }
   };
 
+  // @ts-expect-error
   useEffect(() => {
-    const socket = socketRef.current;
-    if (!socket) return;
+    if (socketRef.current) {
+      const handleCodeChange = ({
+        tabId: incomingTabId,
+        code: newCode,
+        currenteditor,
+      }: {
+        tabId: string;
+        code: string;
+        currenteditor?: string;
+      }) => {
+        // Only update if the incoming change is for our active tab
+        if (incomingTabId === tabId && newCode !== null && newCode !== code) {
+          setCode(newCode);
+          onCodeChange(newCode);
+        }
+        if (currenteditor !== undefined) {
+          setCurrentEditor(currenteditor);
+        }
+      };
 
-    const handleCodeChange = ({
-      tabId: incomingTabId,
-      code: newCode,
-      currenteditor,
-    }: IncomingCodeChange) => {
-      const targetTabId = incomingTabId || activeTabIdRef.current;
-      onCodeChangeRef.current(newCode, targetTabId);
-      if (
-        targetTabId === activeTabIdRef.current &&
-        newCode !== codeRef.current
-      ) {
-        codeRef.current = newCode;
-        setCode(newCode);
-      }
-      if (currenteditor !== undefined) {
-        setCurrentEditor(currenteditor);
-      }
-    };
+      const handleTabCode = ({
+        tabId: incomingTabId,
+        code: newCode,
+      }: {
+        tabId: string;
+        code: string;
+      }) => {
+        if (incomingTabId === tabId && newCode !== null && newCode !== code) {
+          setCode(newCode);
+          onCodeChange(newCode);
+        }
+      };
 
-    const handleTabCode = ({
-      tabId: incomingTabId,
-      code: newCode,
-    }: { tabId: string; code: string }) => {
-      if (
-        incomingTabId === activeTabIdRef.current &&
-        newCode !== codeRef.current
-      ) {
-        codeRef.current = newCode;
-        setCode(newCode);
-        onCodeChangeRef.current(newCode, incomingTabId);
-      }
-    };
+      socketRef.current.on(ACTIONS.CODE_CHANGE, handleCodeChange);
+      socketRef.current.on(ACTIONS.TAB_CODE, handleTabCode);
 
-    socket.on(ACTIONS.CODE_CHANGE, handleCodeChange);
-    socket.on(ACTIONS.TAB_CODE, handleTabCode);
-
-    return () => {
-      socket.off(ACTIONS.CODE_CHANGE, handleCodeChange);
-      socket.off(ACTIONS.TAB_CODE, handleTabCode);
-    };
-  }, [socketRef, setCurrentEditor]);
+      return () => {
+        if (socketRef.current) {
+          socketRef.current.off(ACTIONS.CODE_CHANGE, handleCodeChange);
+          socketRef.current.off(ACTIONS.TAB_CODE, handleTabCode);
+        }
+      };
+    }
+  }, [code, onCodeChange, socketRef, setCurrentEditor, tabId]);
 
   return (
     <CodeMirror
@@ -193,6 +193,7 @@ const Editor: React.FC<EditorProps> = ({
       extensions={extensions}
       height="100%"
       onChange={handleChange}
+      // theme prop left undefined for light; dark handled by dracula in extensions
       readOnly={!editable}
       style={{ height: "100%", width: "100%", minHeight: 0, minWidth: 0 }}
       theme={darkMode ? dracula : "light"}

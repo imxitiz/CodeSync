@@ -10,16 +10,7 @@ import Avatar from "react-avatar";
 import toast from "react-hot-toast";
 import { FaCrown } from "react-icons/fa";
 import { FaRegCopy } from "react-icons/fa6";
-import {
-  FiEdit2,
-  FiEye,
-  FiEyeOff,
-  FiInfo,
-  FiLogOut,
-  FiPlus,
-  FiUsers,
-  FiX,
-} from "react-icons/fi";
+import { FiEdit2, FiEye, FiLogOut, FiPlus, FiUsers, FiX } from "react-icons/fi";
 import { MdTextDecrease, MdTextIncrease } from "react-icons/md";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
@@ -27,7 +18,6 @@ import AppShell from "@/components/AppShell";
 import ClientModern from "@/components/ClientModern";
 import EditorWrapper from "@/components/EditorWrapper";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { ACTIONS } from "@/utils/constants";
 import { saveRoom } from "@/utils/roomHistory";
 import { initSocket } from "@/utils/socket";
@@ -81,9 +71,7 @@ export default function EditorPageModern() {
   const [currentEditor, setCurrentEditor] = useState<string>("");
   const currentEditorRef = useRef<string>(currentEditor);
   const [roomCreator, setRoomCreator] = useState<string | null>(null);
-  const roomCreatorRef = useRef<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
-  const [socketReady, setSocketReady] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -123,10 +111,11 @@ export default function EditorPageModern() {
   const getIsDark = () => document?.documentElement.classList.contains("dark");
   const [isDark, setIsDark] = useState<boolean>(getIsDark());
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: First load only
   useEffect(() => {
     const root = document.documentElement;
     const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains("dark"));
+      setIsDark(getIsDark());
     });
     observer.observe(root, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();
@@ -171,13 +160,9 @@ export default function EditorPageModern() {
     currentEditorRef.current = currentEditor;
   }, [currentEditor]);
 
-  useEffect(() => {
-    roomCreatorRef.current = roomCreator;
-  }, [roomCreator]);
-
   const sortedClients = useMemo(
     () =>
-      [...clients].sort((a, b) => {
+      [...(clients || [])].sort((a, b) => {
         if (a.username === roomCreator) {
           return -1;
         }
@@ -219,22 +204,11 @@ export default function EditorPageModern() {
     [tabs]
   );
 
-  const activeFollowerTabName = followingUser
-    ? getTabName(userActiveTabs[followingUser] || DEFAULT_TAB_ID)
-    : null;
-
-  let roleLabel = "Viewer";
-  if (isOwner) {
-    roleLabel = "Owner";
-  } else if (canEditCode) {
-    roleLabel = "Editor";
-  }
-
   // Handlers
-  const handleErrors = useCallback(() => {
+  const handleErrors = () => {
     setServerStatus("disconnected");
     setConnectionMessage("Connection lost - Reconnecting...");
-  }, []);
+  };
 
   const copyRoomId = async () => {
     try {
@@ -275,48 +249,63 @@ export default function EditorPageModern() {
     if (currentEditor === userName) {
       setCurrentEditor("");
       toast.success("Editor is now read-only");
-      socketRef.current?.emit(ACTIONS.SET_CURRENT_EDITOR, {
-        roomId: id,
-        currenteditor: "",
-      });
-      return;
+      if (socketRef.current) {
+        socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+          roomId: id,
+          currenteditor: "",
+        });
+      }
+    } else {
+      if (!isOwner) {
+        toast.error("Only the room creator can change the editable state");
+        return;
+      }
+      setCurrentEditor(userName);
+      toast.success("Editor is now editable");
+      if (socketRef.current) {
+        socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+          roomId: id,
+          currenteditor: userName,
+        });
+      }
     }
-
-    if (!isOwner) {
-      toast.error("Only the room creator can change the editable state");
-      return;
-    }
-
-    setCurrentEditor(userName);
-    toast.success("Editor is now editable");
-    socketRef.current?.emit(ACTIONS.SET_CURRENT_EDITOR, {
-      roomId: id,
-      currenteditor: userName,
-    });
   };
 
   const handleGrantEditor = (username: string) => {
     setCurrentEditor(username);
     toast.success(`${username} can now edit the code`);
-    socketRef.current?.emit(ACTIONS.SET_CURRENT_EDITOR, {
-      roomId: id,
-      currenteditor: username,
-    });
+    if (socketRef.current) {
+      socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+        roomId: id,
+        currenteditor: username,
+      });
+    }
   };
 
   // Tab management
-  const handleCreateTab = useCallback(() => {
+  const handleCreateTab = () => {
     if (!(isOwner || myPermissions.canCreateTab)) {
       toast.error("You don't have permission to create tabs");
       return;
     }
     const tabId = `tab-${uuidv4()}`;
     const name = `file-${tabs.length + 1}.js`;
-    setTabs((prev) => [...prev, { id: tabId, name, code: "" }]);
+    const newTab: Tab = { id: tabId, name, code: "" };
+    setTabs((prev) => [...prev, newTab]);
     applyActiveTab(tabId);
-    socketRef.current?.emit(ACTIONS.TAB_CREATE, { roomId: id, tabId, name });
-    socketRef.current?.emit(ACTIONS.TAB_SWITCH, { roomId: id, tabId });
-  }, [applyActiveTab, id, isOwner, myPermissions.canCreateTab, tabs.length]);
+    if (socketRef.current) {
+      socketRef.current.emit(ACTIONS.TAB_CREATE, {
+        roomId: id,
+        tabId,
+        name,
+      });
+      socketRef.current.emit(ACTIONS.TAB_SWITCH, {
+        roomId: id,
+        tabId,
+        username: userName,
+      });
+    }
+  };
 
   const handleCloseTab = (tabId: string) => {
     if (!(isOwner || myPermissions.canDeleteTab)) {
@@ -328,65 +317,41 @@ export default function EditorPageModern() {
       return;
     }
     setTabs((prev) => {
-      const filtered = prev.filter((tab) => tab.id !== tabId);
-      if (activeTabId === tabId) {
-        const nextActive = filtered[0]?.id || DEFAULT_TAB_ID;
-        applyActiveTab(nextActive);
-        socketRef.current?.emit(ACTIONS.TAB_SWITCH, {
-          roomId: id,
-          tabId: nextActive,
-        });
+      const filtered = prev.filter((t) => t.id !== tabId);
+      if (activeTabId === tabId && filtered.length > 0) {
+        const newActive = filtered[0]?.id || DEFAULT_TAB_ID;
+        applyActiveTab(newActive);
+        if (socketRef.current) {
+          socketRef.current.emit(ACTIONS.TAB_SWITCH, {
+            roomId: id,
+            tabId: newActive,
+            username: userName,
+          });
+        }
       }
       return filtered;
     });
-    socketRef.current?.emit(ACTIONS.TAB_CLOSE, { roomId: id, tabId });
-  };
-
-  const stopFollowing = () => {
-    setFollowMode("off");
-    setFollowingUser(null);
-    toast.success("Follow mode is off");
+    if (socketRef.current) {
+      socketRef.current.emit(ACTIONS.TAB_CLOSE, {
+        roomId: id,
+        tabId,
+      });
+    }
   };
 
   const handleSwitchTab = (tabId: string) => {
     if (tabId === activeTabId) {
       return;
     }
-    if (followingUser) {
-      toast(
-        `You're following ${followingUser}. Turn off follow mode to switch tabs manually.`
-      );
-      return;
-    }
     applyActiveTab(tabId);
-    socketRef.current?.emit(ACTIONS.TAB_SWITCH, { roomId: id, tabId });
-  };
-
-  const switchTabByOffset = useCallback(
-    (offset: number) => {
-      if (followingUser) {
-        toast(
-          `You're following ${followingUser}. Turn off follow mode to switch tabs manually.`
-        );
-        return;
-      }
-      const currentIndex = tabs.findIndex((tab) => tab.id === activeTabId);
-      if (currentIndex === -1 || tabs.length <= 1) {
-        return;
-      }
-      const nextIndex = (currentIndex + offset + tabs.length) % tabs.length;
-      const nextTab = tabs[nextIndex];
-      if (!nextTab) {
-        return;
-      }
-      applyActiveTab(nextTab.id);
-      socketRef.current?.emit(ACTIONS.TAB_SWITCH, {
+    if (socketRef.current) {
+      socketRef.current.emit(ACTIONS.TAB_SWITCH, {
         roomId: id,
-        tabId: nextTab.id,
+        tabId,
+        username: userName,
       });
-    },
-    [activeTabId, applyActiveTab, followingUser, id, tabs]
-  );
+    }
+  };
 
   const handleRenameTab = (tabId: string, newName: string) => {
     if (!(isOwner || myPermissions.canRenameTab)) {
@@ -398,91 +363,99 @@ export default function EditorPageModern() {
       return;
     }
     setTabs((prev) =>
-      prev.map((tab) => (tab.id === tabId ? { ...tab, name: trimmed } : tab))
+      prev.map((t) => (t.id === tabId ? { ...t, name: trimmed } : t))
     );
-    socketRef.current?.emit(ACTIONS.TAB_RENAME, {
-      roomId: id,
-      tabId,
-      name: trimmed,
-    });
+    if (socketRef.current) {
+      socketRef.current.emit(ACTIONS.TAB_RENAME, {
+        roomId: id,
+        tabId,
+        name: trimmed,
+      });
+    }
     setRenamingTabId(null);
     setRenameValue("");
   };
 
-  const handleCodeChange = useCallback((code: string, tabId: string) => {
-    setTabs((prev) =>
-      prev.map((tab) => (tab.id === tabId ? { ...tab, code } : tab))
-    );
-  }, []);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyboard = (event: KeyboardEvent) => {
-      if (!(event.altKey && event.shiftKey)) {
-        return;
-      }
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        switchTabByOffset(1);
-      }
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        switchTabByOffset(-1);
-      }
-      if (event.key.toLowerCase() === "n") {
-        event.preventDefault();
-        handleCreateTab();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyboard);
-    return () => window.removeEventListener("keydown", handleKeyboard);
-  }, [switchTabByOffset, handleCreateTab]);
+  const handleCodeChange = useCallback(
+    (code: string) => {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === activeTabId ? { ...t, code } : t))
+      );
+    },
+    [activeTabId]
+  );
 
   useEffect(() => {
     if (followMode !== "auto") {
       return;
     }
-    setFollowingUser(autoFollowTarget);
-  }, [autoFollowTarget, followMode]);
+    if (!autoFollowTarget) {
+      setFollowingUser(null);
+      return;
+    }
+    if (followingUser !== autoFollowTarget) {
+      setFollowingUser(autoFollowTarget);
+    }
+  }, [followMode, autoFollowTarget, followingUser]);
 
   // Follow mode: auto-switch tab when followed user switches
   useEffect(() => {
-    const targetTab = followingUser ? userActiveTabs[followingUser] : null;
-    if (targetTab && targetTab !== activeTabId) {
-      applyActiveTab(targetTab);
-      socketRef.current?.emit(ACTIONS.TAB_SWITCH, {
-        roomId: id,
-        tabId: targetTab,
-      });
+    if (followingUser && userActiveTabs[followingUser]) {
+      const targetTab = userActiveTabs[followingUser];
+      if (targetTab && targetTab !== activeTabId) {
+        applyActiveTab(targetTab);
+        if (socketRef.current) {
+          socketRef.current.emit(ACTIONS.TAB_SWITCH, {
+            roomId: id,
+            tabId: targetTab,
+            username: userName,
+          });
+        }
+      }
     }
-  }, [activeTabId, applyActiveTab, followingUser, id, userActiveTabs]);
+  }, [
+    followingUser,
+    userActiveTabs,
+    activeTabId,
+    id,
+    userName,
+    applyActiveTab,
+  ]);
 
   useEffect(() => {
-    if (socketRef.current && id && activeTabId) {
-      socketRef.current.emit(ACTIONS.TAB_CODE_REQUEST, {
-        roomId: id,
-        tabId: activeTabId,
-      });
+    if (!socketRef.current || !id) {
+      return;
     }
+    if (!activeTabId) {
+      return;
+    }
+    socketRef.current.emit(ACTIONS.TAB_CODE_REQUEST, {
+      roomId: id,
+      tabId: activeTabId,
+    });
   }, [activeTabId, id]);
 
   const toggleFollow = (username: string) => {
     if (followingUser === username && followMode === "manual") {
-      stopFollowing();
-      return;
-    }
-
-    setFollowMode("manual");
-    setFollowingUser(username);
-    toast.success(`Following ${username}`);
-    const targetTab = userActiveTabs[username];
-    if (targetTab && targetTab !== activeTabId) {
-      applyActiveTab(targetTab);
-      socketRef.current?.emit(ACTIONS.TAB_SWITCH, {
-        roomId: id,
-        tabId: targetTab,
-      });
+      setFollowMode("off");
+      setFollowingUser(null);
+      toast.success("Stopped following");
+    } else {
+      setFollowMode("manual");
+      setFollowingUser(username);
+      toast.success(`Following ${username}`);
+      // Immediately switch to their tab
+      const targetTab = userActiveTabs[username];
+      if (targetTab && targetTab !== activeTabId) {
+        applyActiveTab(targetTab);
+        if (socketRef.current) {
+          socketRef.current.emit(ACTIONS.TAB_SWITCH, {
+            roomId: id,
+            tabId: targetTab,
+            username: userName,
+          });
+        }
+      }
     }
   };
 
@@ -496,15 +469,18 @@ export default function EditorPageModern() {
       return;
     }
     setPermissions((prev) => ({ ...prev, [targetUser]: newPerms }));
-    socketRef.current?.emit(ACTIONS.PERMISSIONS_UPDATE, {
-      roomId: id,
-      username: targetUser,
-      permissions: newPerms,
-    });
+    if (socketRef.current) {
+      socketRef.current.emit(ACTIONS.PERMISSIONS_UPDATE, {
+        roomId: id,
+        username: targetUser,
+        permissions: newPerms,
+      });
+    }
     toast.success(`Permissions updated for ${targetUser}`);
   };
 
   // Socket init and events
+  // biome-ignore lint/correctness/useExhaustiveDependencies: First load only
   useEffect(() => {
     document.title = `${id} - CodeSync`;
 
@@ -512,49 +488,116 @@ export default function EditorPageModern() {
       try {
         setServerStatus("connecting");
         setConnectionMessage("Connecting to server...");
+
         socketRef.current = await initSocket();
-        const socket = socketRef.current;
-        if (!socket) {
-          return;
-        }
-        setSocketReady(true);
 
-        socket.on("connect", () => {
-          setServerStatus("connected");
-          setConnectionMessage("Connected!");
-        });
-        socket.on("connect_error", handleErrors);
-        socket.on("connect_failed", handleErrors);
-        socket.on("disconnect", () => {
-          setServerStatus("disconnected");
-          setConnectionMessage("Connection lost - Reconnecting...");
-        });
+        if (socketRef.current) {
+          socketRef.current.on("connect", () => {
+            setServerStatus("connected");
+            setConnectionMessage("Connected!");
+          });
 
-        socket.emit(ACTIONS.JOIN, { roomId: id, userName });
-        if (id) {
-          saveRoom(id, userName);
-        }
+          socketRef.current.on("connect_error", handleErrors);
+          socketRef.current.on("connect_failed", handleErrors);
+          socketRef.current.on("disconnect", () => {
+            setServerStatus("disconnected");
+            setConnectionMessage("Connection lost - Reconnecting...");
+          });
 
-        socket.on(
-          ACTIONS.JOINED,
-          ({
-            clients: joinedClients,
-            username,
-            roomcreator,
-          }: {
-            clients: Client[];
-            username: string;
-            socketId: string;
-            roomcreator: string;
-          }) => {
-            setClients(joinedClients);
-            setRoomCreator(roomcreator);
-            if (
-              username === userName &&
-              roomcreator === userName &&
-              sessionStorage.getItem("admin") !== roomcreator &&
-              joinedClients.length !== 1
-            ) {
+          socketRef.current.emit(ACTIONS.JOIN, {
+            roomId: id,
+            userName,
+          });
+          if (id) {
+            saveRoom(id, userName);
+          }
+
+          socketRef.current.on(
+            ACTIONS.JOINED,
+            ({
+              clients: joinedClients,
+              username,
+              socketId,
+              roomcreator,
+            }: {
+              clients: Client[];
+              username: string;
+              socketId: string;
+              roomcreator: string;
+            }) => {
+              setClients(joinedClients);
+              setRoomCreator(roomcreator);
+              if (
+                username === userName &&
+                roomcreator === username &&
+                sessionStorage.getItem("admin") !== roomcreator &&
+                joinedClients.length !== 1
+              ) {
+                toast.error(
+                  `${username} is already in the ${id} room.\nPlease try another UserName!`
+                );
+                navigate("/", {
+                  state: { id },
+                });
+              }
+              if (roomCreator === username || joinedClients.length === 1) {
+                sessionStorage.setItem("admin", username);
+              }
+              if (username !== userName) {
+                toast.success(`${username} joined the room`);
+                // Sync current tab code to new joiner
+                const currentTabs = tabsRef.current;
+                const currentTab = currentTabs.find(
+                  (t) => t.id === activeTabId
+                );
+                if (currentTab && socketRef.current) {
+                  socketRef.current.emit(ACTIONS.SYNC_CODE, {
+                    socketId,
+                    code: currentTab.code,
+                    currenteditor: currentEditorRef.current,
+                    tabId: activeTabId,
+                  });
+                }
+              }
+            }
+          );
+
+          // Receive tab sync data when joining
+          socketRef.current.on(
+            ACTIONS.TAB_SYNC,
+            ({
+              tabs: syncTabs,
+              activeTabId: syncActiveTabId,
+              userActiveTabs: syncUserActiveTabs,
+              permissions: syncPermissions,
+            }: {
+              tabs: Tab[];
+              activeTabId: string;
+              userActiveTabs: { username: string; activeTabId: string }[];
+              permissions: Record<string, UserPermissions>;
+            }) => {
+              if (syncTabs && syncTabs.length > 0) {
+                setTabs(syncTabs);
+                setActiveTabId(
+                  syncActiveTabId || syncTabs[0]?.id || DEFAULT_TAB_ID
+                );
+              }
+              if (syncUserActiveTabs) {
+                const map: Record<string, string> = {};
+                for (const u of syncUserActiveTabs) {
+                  map[u.username] = u.activeTabId;
+                }
+                setUserActiveTabs(map);
+              }
+              if (syncPermissions) {
+                setPermissions(syncPermissions);
+              }
+            }
+          );
+
+          socketRef.current.on(
+            ACTIONS.DUPLICATE_USER,
+            ({ username }: { username: string }) => {
               toast.error(
                 `${username} is already in the ${id} room.\nPlease try another UserName!`
               );
@@ -562,175 +605,171 @@ export default function EditorPageModern() {
                 state: { id },
               });
             }
-            if (
-              roomCreatorRef.current === username ||
-              joinedClients.length === 1
-            ) {
-              sessionStorage.setItem("admin", username);
-            }
-            if (username !== userName) {
-              toast.success(`${username} joined the room`);
-            }
-          }
-        );
+          );
 
-        // Receive tab sync data when joining
-        socket.on(
-          ACTIONS.TAB_SYNC,
-          ({
-            tabs: syncTabs,
-            activeTabId: syncActiveTabId,
-            userActiveTabs: syncUserActiveTabs,
-            permissions: syncPermissions,
-          }: {
-            tabs: Tab[];
-            activeTabId: string;
-            userActiveTabs: { username: string; activeTabId: string }[];
-            permissions: Record<string, UserPermissions>;
-          }) => {
-            if (syncTabs?.length) {
-              setTabs(syncTabs);
-              setActiveTabId(
-                syncActiveTabId || syncTabs[0]?.id || DEFAULT_TAB_ID
+          socketRef.current.on(
+            ACTIONS.DISCONNECTED,
+            ({
+              socketId,
+              username,
+            }: {
+              socketId: string;
+              username: string;
+            }) => {
+              toast.success(`${username} left the room`);
+              setClients((prev) =>
+                prev.filter((client) => client.socketId !== socketId)
               );
-              if (currentEditor === userName) {
+              if (currentEditor === username) {
                 setCurrentEditor("");
+                if (socketRef.current) {
+                  socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
+                    roomId: id,
+                    currenteditor: "",
+                  });
+                }
               }
               // Stop following if the user left
-              setFollowingUser((prev) => (prev === userName ? null : prev));
+              setFollowingUser((prev) => (prev === username ? null : prev));
               // Remove from user active tabs
               setUserActiveTabs((prev) => {
                 const next = { ...prev };
-                delete next[userName];
+                delete next[username];
                 return next;
               });
             }
-            if (syncUserActiveTabs) {
-              setUserActiveTabs(
-                Object.fromEntries(
-                  syncUserActiveTabs.map((user) => [
-                    user.username,
-                    user.activeTabId,
-                  ])
-                )
+          );
+
+          socketRef.current.on(
+            ACTIONS.SET_CURRENT_EDITOR,
+            ({ currenteditor }: { currenteditor: string }) => {
+              if (currenteditor === userName) {
+                toast.success("You are now the editor");
+              }
+              if (currenteditor === "" && userName === roomCreator) {
+                toast.success(
+                  `${currentEditorRef.current} have released control`
+                );
+              }
+              setCurrentEditor(currenteditor);
+            }
+          );
+
+          // Tab events from other users
+          socketRef.current.on(
+            ACTIONS.TAB_CREATE,
+            ({ tabId, name }: { tabId: string; name: string }) => {
+              setTabs((prev) => {
+                if (prev.some((t) => t.id === tabId)) {
+                  return prev;
+                }
+                return [...prev, { id: tabId, name, code: "" }];
+              });
+            }
+          );
+
+          socketRef.current.on(
+            ACTIONS.TAB_CLOSE,
+            ({ tabId }: { tabId: string }) => {
+              setTabs((prev) => {
+                const filtered = prev.filter((t) => t.id !== tabId);
+                if (filtered.length === 0) {
+                  return prev;
+                }
+                return filtered;
+              });
+              setActiveTabId((prev) => {
+                if (prev === tabId) {
+                  const remaining = tabsRef.current.filter(
+                    (t) => t.id !== tabId
+                  );
+                  const nextTabId = remaining[0]?.id || DEFAULT_TAB_ID;
+                  setUserActiveTabs((current) => ({
+                    ...current,
+                    [userName]: nextTabId,
+                  }));
+                  if (socketRef.current) {
+                    socketRef.current.emit(ACTIONS.TAB_SWITCH, {
+                      roomId: id,
+                      tabId: nextTabId,
+                      username: userName,
+                    });
+                  }
+                  return nextTabId;
+                }
+                return prev;
+              });
+            }
+          );
+
+          socketRef.current.on(
+            ACTIONS.TAB_RENAME,
+            ({ tabId, name }: { tabId: string; name: string }) => {
+              setTabs((prev) =>
+                prev.map((t) => (t.id === tabId ? { ...t, name } : t))
               );
             }
-            if (syncPermissions) {
-              setPermissions(syncPermissions);
-            }
-          }
-        );
-
-        socket.on(ACTIONS.DUPLICATE_USER, ({ username }) => {
-          toast.error(
-            `${username} is already in the ${id} room.\nPlease try another UserName!`
           );
-          navigate("/", { state: { id } });
-        });
 
-        socket.on(
-          ACTIONS.DISCONNECTED,
-          ({ socketId, username }: { socketId: string; username: string }) => {
-            toast.success(`${username} left the room`);
-            setClients((prev) =>
-              prev.filter((client) => client.socketId !== socketId)
-            );
-            if (currentEditorRef.current === username) {
-              setCurrentEditor("");
+          socketRef.current.on(
+            ACTIONS.TAB_CODE,
+            ({ tabId, code }: { tabId: string; code: string }) => {
+              setTabs((prev) =>
+                prev.map((t) => (t.id === tabId ? { ...t, code } : t))
+              );
             }
-            // Stop following if the user left
-            setFollowingUser((prev) => (prev === username ? null : prev));
-            // Remove from user active tabs
-            setUserActiveTabs((prev) => {
-              const next = { ...prev };
-              delete next[username];
-              return next;
-            });
-          }
-        );
-
-        socket.on(ACTIONS.SET_CURRENT_EDITOR, ({ currenteditor }) => {
-          if (currenteditor === userName) {
-            toast.success("You are now the editor");
-          }
-          if (currenteditor === "" && userName === roomCreatorRef.current) {
-            toast.success(`${currentEditorRef.current} has released control`);
-          }
-          setCurrentEditor(currenteditor);
-        });
-
-        // Tab events from other users
-        socket.on(ACTIONS.TAB_CREATE, ({ tabId, name }) => {
-          setTabs((prev) =>
-            prev.some((tab) => tab.id === tabId)
-              ? prev
-              : [...prev, { id: tabId, name, code: "" }]
           );
-        });
 
-        socket.on(ACTIONS.TAB_CLOSE, ({ tabId }) => {
-          setTabs((prev) => {
-            const filtered = prev.filter((tab) => tab.id !== tabId);
-            return filtered.length ? filtered : prev;
-          });
-          setActiveTabId((prev) => {
-            if (prev !== tabId) {
-              return prev;
+          socketRef.current.on(
+            ACTIONS.TAB_SWITCH,
+            ({ username, tabId }: { username: string; tabId: string }) => {
+              setUserActiveTabs((prev) => ({
+                ...prev,
+                [username]: tabId,
+              }));
             }
-            const nextTabId =
-              tabsRef.current.find((tab) => tab.id !== tabId)?.id ||
-              DEFAULT_TAB_ID;
-            setUserActiveTabs((current) => ({
-              ...current,
-              [userName]: nextTabId,
-            }));
-            socketRef.current?.emit(ACTIONS.TAB_SWITCH, {
-              roomId: id,
-              tabId: nextTabId,
-            });
-            return nextTabId;
-          });
-        });
-
-        socket.on(ACTIONS.TAB_RENAME, ({ tabId, name }) => {
-          setTabs((prev) =>
-            prev.map((tab) => (tab.id === tabId ? { ...tab, name } : tab))
           );
-        });
 
-        socket.on(ACTIONS.TAB_CODE, ({ tabId, code }) => {
-          handleCodeChange(code, tabId);
-        });
-
-        socket.on(ACTIONS.TAB_SWITCH, ({ username, tabId }) => {
-          setUserActiveTabs((prev) => ({ ...prev, [username]: tabId }));
-        });
-
-        socket.on(
-          ACTIONS.PERMISSIONS_UPDATE,
-          ({ username, permissions: next }) => {
-            setPermissions((prev) => ({ ...prev, [username]: next }));
-            if (username === userName) {
-              toast.success("Your permissions have been updated");
+          socketRef.current.on(
+            ACTIONS.PERMISSIONS_UPDATE,
+            ({
+              username,
+              permissions: newPerms,
+            }: {
+              username: string;
+              permissions: UserPermissions;
+            }) => {
+              setPermissions((prev) => ({
+                ...prev,
+                [username]: newPerms,
+              }));
+              if (username === userName) {
+                toast.success("Your permissions have been updated");
+              }
             }
-          }
-        );
-      } catch {
+          );
+        }
+      } catch (_error) {
         setServerStatus("disconnected");
         setConnectionMessage("Failed to connect to server");
-        toast.error("Failed to connect to server. Please try refreshing.");
+        toast.error(
+          "Failed to connect to server. Please check your connection."
+        );
+        setTimeout(() => {
+          navigate("/");
+        }, 3000);
       }
     };
 
     init();
 
     return () => {
-      socketRef.current?.disconnect();
-      socketRef.current = null;
-      setSocketReady(false);
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleCodeChange, handleErrors, id, navigate, userName]);
+  }, []);
 
   // Redirect if no state
   useEffect(() => {
@@ -846,18 +885,12 @@ export default function EditorPageModern() {
                     />
                   ) : (
                     <span
-                      className={cn(
-                        "size-2 rounded-full",
-                        serverStatus === "connected"
-                          ? "bg-primary"
-                          : "bg-muted-foreground"
-                      )}
-                    />
+                      aria-live="polite"
+                      className="inline-flex shrink-0 items-center rounded-md border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-200"
+                    >
+                      {connectionMessage}
+                    </span>
                   )}
-                  <span>{connectionMessage}</span>
-                  <span className="hidden text-muted-foreground/60 sm:inline">
-                    · {roleLabel}
-                  </span>
                 </p>
               </div>
 
@@ -1003,7 +1036,11 @@ export default function EditorPageModern() {
 
                   {followingUser && (
                     <Button
-                      onClick={() => stopFollowing()}
+                      onClick={() => {
+                        setFollowMode("off");
+                        setFollowingUser(null);
+                        toast.success("Stopped following");
+                      }}
                       size="sm"
                       title="Stop following"
                       variant="secondary"
@@ -1044,25 +1081,16 @@ export default function EditorPageModern() {
             <div className="flex items-center gap-0 overflow-x-auto border-b bg-background/80 px-1">
               {tabs.map((tab) => {
                 const isActive = tab.id === activeTabId;
-                const isFollowingLocked = Boolean(
-                  followingUser && !isActive
-                );
                 const usersOnTab = tabUserCounts[tab.id];
                 return (
                   <div
-                    className={cn(
+                    className={[
                       "group relative flex items-center gap-1 border-r px-2 py-1.5 text-xs transition-colors",
                       isActive
                         ? "bg-card font-medium text-foreground"
                         : "cursor-pointer text-muted-foreground hover:bg-accent/40 hover:text-foreground",
-                      isFollowingLocked && "cursor-not-allowed opacity-60"
-                    )}
+                    ].join(" ")}
                     key={tab.id}
-                    title={
-                      isFollowingLocked
-                        ? `Following ${followingUser}. Turn off follow to switch tabs.`
-                        : `${tab.name}${usersOnTab ? ` (${usersOnTab.join(", ")})` : ""}`
-                    }
                   >
                     {renamingTabId === tab.id ? (
                       <input
@@ -1083,18 +1111,9 @@ export default function EditorPageModern() {
                       />
                     ) : (
                       <button
-                        className={cn(
-                          "cursor-pointer truncate",
-                          isFollowingLocked && "cursor-not-allowed"
-                        )}
+                        className="cursor-pointer truncate bg-transparent text-inherit"
                         onClick={() => handleSwitchTab(tab.id)}
                         onDoubleClick={() => {
-                          if (followingUser) {
-                            toast(
-                              `You're following ${followingUser}. Turn off follow to rename tabs.`
-                            );
-                            return;
-                          }
                           if (isOwner || myPermissions.canRenameTab) {
                             setRenamingTabId(tab.id);
                             setRenameValue(tab.name);
@@ -1135,7 +1154,7 @@ export default function EditorPageModern() {
                 <button
                   className="flex cursor-pointer items-center gap-1 px-2 py-1.5 text-muted-foreground text-xs transition-colors hover:bg-accent/40 hover:text-foreground"
                   onClick={handleCreateTab}
-                  title="New tab · Alt+Shift+N"
+                  title="New tab"
                   type="button"
                 >
                   <FiPlus className="size-3" />
@@ -1317,7 +1336,6 @@ export default function EditorPageModern() {
                 }`}
               >
                 <EditorWrapper
-                  activeTabId={activeTab.id}
                   currentEditor={currentEditor}
                   darkMode={isDark}
                   editable={canEditCode}
@@ -1328,6 +1346,7 @@ export default function EditorPageModern() {
                   roomId={id || ""}
                   setCurrentEditor={setCurrentEditor}
                   socketRef={socketRef as RefObject<Socket>}
+                  tabId={activeTab.id}
                   wrap={wrapLines}
                 />
               </div>

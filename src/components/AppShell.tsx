@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/theme/ThemeProvider";
 export type AppShellProps = {
   children: ReactNode;
   className?: string;
+  noScroll?: boolean;
 };
 
 /**
@@ -15,7 +16,7 @@ export type AppShellProps = {
  * - Skip-to-content link for a11y
  * - Responsive container
  */
-export default function AppShell({ children, className }: AppShellProps) {
+export default function AppShell({ children, className, noScroll }: AppShellProps) {
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
 
   return (
@@ -99,7 +100,10 @@ export default function AppShell({ children, className }: AppShellProps) {
       </header>
 
       <main
-        className={cn("h-[calc(100svh-56px)] overflow-auto", className)}
+        className={cn(
+          noScroll ? "h-screen overflow-hidden" : "h-[calc(100svh-56px)] overflow-auto",
+          className
+        )}
         id="content"
       >
         {children}

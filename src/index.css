@@ -130,7 +130,18 @@
   color: var(--primary);
 }
 
-.dark::selection {
-  background-color: rgba(from var(--primary) r g b / 0.35);
-  color: var(--primary);
+  .dark::selection {
+    background-color: rgba(from var(--primary) r g b / 0.35);
+    color: var(--primary);
+  }
+}
+
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }

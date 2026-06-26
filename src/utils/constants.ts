@@ -27,27 +27,32 @@ export const ACTIONS = {
 
 export type ACTIONS = (typeof ACTIONS)[keyof typeof ACTIONS];
 
-type ImportMetaWithEnv = ImportMeta & {
-  env?: { VITE_BACKEND_API_URL?: string };
-};
-
-const viteEnv = (import.meta as ImportMetaWithEnv).env;
-
 export const BACKEND_API_URL: string =
   import.meta.env.VITE_BACKEND_API_URL || "http://localhost:3000";
 
 const CUSTOM_BACKEND_KEY = "codesync_custom_backend_url";
 
 const normalizeBackendUrl = (value: string | null): string | null => {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
+
   const trimmed = value.trim();
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return null;
+  }
+
   try {
     const parsed = new URL(trimmed);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return null;
-    if (parsed.pathname !== "/" || parsed.search || parsed.hash) return null;
-    if (parsed.username || parsed.password) return null;
+    }
+    if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
+      return null;
+    }
+    if (parsed.username || parsed.password) {
+      return null;
+    }
     return parsed.origin;
   } catch {
     return null;
@@ -55,8 +60,12 @@ const normalizeBackendUrl = (value: string | null): string | null => {
 };
 
 const readCustomBackendUrl = (): string | null => {
-  if (typeof window === "undefined") return null;
-  if (!window.localStorage) return null;
+  if (typeof window === "undefined") {
+    return null;
+  }
+  if (!window.localStorage) {
+    return null;
+  }
   try {
     return window.localStorage.getItem(CUSTOM_BACKEND_KEY);
   } catch {
@@ -65,16 +74,24 @@ const readCustomBackendUrl = (): string | null => {
 };
 
 const writeCustomBackendUrl = (value: string): void => {
-  if (typeof window === "undefined") return;
-  if (!window.localStorage) return;
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (!window.localStorage) {
+    return;
+  }
   try {
     window.localStorage.setItem(CUSTOM_BACKEND_KEY, value);
   } catch {}
 };
 
 const removeCustomBackendUrl = (): void => {
-  if (typeof window === "undefined") return;
-  if (!window.localStorage) return;
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (!window.localStorage) {
+    return;
+  }
   try {
     window.localStorage.removeItem(CUSTOM_BACKEND_KEY);
   } catch {}
@@ -99,7 +116,9 @@ export const isValidBackendOrigin = (value: string): boolean =>
  */
 export const setCustomBackendUrl = (url: string): void => {
   const normalized = normalizeBackendUrl(url);
-  if (!normalized) return;
+  if (!normalized) {
+    return;
+  }
   writeCustomBackendUrl(normalized);
 };
 

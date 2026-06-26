@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ClientOnly, ViteReactSSG } from "vite-react-ssg";
 import "./index.css";
 import HomePageModern from "@/pages/HomePageModern/HomePageModern.tsx";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   detectAndHandleServiceWorkerCache,
   setupHydrationErrorRecovery,
@@ -34,17 +35,19 @@ function ClientApp() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route element={<HomePageModern />} path="/" />
-        <Route
-          element={
-            <Suspense fallback={<div>Loading editor...</div>}>
-              <EditorPageModern />
-            </Suspense>
-          }
-          path="/editor/:id"
-        />
-      </Routes>
+      <TooltipProvider delayDuration={300}>
+        <Routes>
+          <Route element={<HomePageModern />} path="/" />
+          <Route
+            element={
+              <Suspense fallback={<div>Loading editor...</div>}>
+                <EditorPageModern />
+              </Suspense>
+            }
+            path="/editor/:id"
+          />
+        </Routes>
+      </TooltipProvider>
     </BrowserRouter>
   );
 }
