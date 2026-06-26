@@ -86,7 +86,12 @@ app.get("/api/info", (c) =>
 const PORT = Number(process.env.PORT) || 3000;
 
 const httpServer = serve(
-  { fetch: app.fetch, port: PORT, hostname: "0.0.0.0" },
+  {
+    fetch: app.fetch,
+    port: PORT,
+    hostname: "0.0.0.0",
+    overrideGlobalObjects: false,
+  },
   () => console.log(`Server running on ${PORT}`)
 ) as Http2Server;
 
