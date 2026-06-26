@@ -1,8 +1,8 @@
-import { serve } from "@hono/node-server";
+import { createAdaptorServer } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import type { Server } from "node:http";
 import { setupSocket } from "./socket.js";
-import type { Http2Server } from "node:http2";
 
 const TRAILING_SLASH_REGEX = /\/$/;
 const normalize = (origin: string) => origin.replace(TRAILING_SLASH_REGEX, "");
@@ -85,14 +85,21 @@ app.get("/api/info", (c) =>
 
 const PORT = Number(process.env.PORT) || 3000;
 
-const httpServer = serve(
-  {
-    fetch: app.fetch,
-    port: PORT,
-    hostname: "0.0.0.0",
-    overrideGlobalObjects: false,
-  },
-  () => console.log(`Server running on ${PORT}`)
-) as Http2Server;
+// Create the HTTP server via @hono/node-server but DON'T start listening yet —
+// Socket.IO's engine.io needs to attach BEFORE the "listening" event fires,
+// otherwise its internal WebSocket server (ws) is never initialized.
+const httpServer = createAdaptorServer({
+  fetch: app.fetch,
+  hostname: "0.0.0.0",
+  overrideGlobalObjects: false,
+}) as Server;
 
+// Attach Socket.IO FIRST — this registers its 'listening' event listener
+// which calls engine.io's init() to create the ws.WebSocketServer.
 setupSocket(httpServer, isAllowedOrigin);
+
+// Now start listening — the 'listening' event fires, engine.io's init() runs,
+// the ws.WebSocketServer is created, and WebSocket upgrades work.
+httpServer.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on ${PORT}`);
+});
