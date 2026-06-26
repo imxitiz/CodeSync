@@ -3,7 +3,7 @@ import { EditorView } from "@codemirror/view";
 import { dracula } from "@uiw/codemirror-theme-dracula";
 import CodeMirror from "@uiw/react-codemirror";
 import { type RefObject, useEffect, useMemo, useState } from "react";
-import { ACTIONS } from "../../action";
+import { ACTIONS } from "../utils/constants";
 
 type CodeChangeData = {
   roomId: string;
