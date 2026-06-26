@@ -1,8 +1,8 @@
-import type { Server as HttpServer } from "node:http";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { setupSocket } from "./socket.js";
+import type { Http2Server } from "node:http2";
 
 const TRAILING_SLASH_REGEX = /\/$/;
 const normalize = (origin: string) => origin.replace(TRAILING_SLASH_REGEX, "");
@@ -25,6 +25,11 @@ const envOrigins = (process.env.CORS_ORIGIN ?? "")
 const allowAll = envOrigins.length === 1 && envOrigins[0] === "*";
 const isDev = process.env.NODE_ENV !== "production";
 
+console.log("[CORS] CORS_ORIGIN env:", process.env.CORS_ORIGIN);
+console.log("[CORS] Parsed envOrigins:", envOrigins);
+console.log("[CORS] allowAll:", allowAll);
+console.log("[CORS] NODE_ENV:", process.env.NODE_ENV);
+
 const allowedOrigins = new Set(
   [...defaultOrigins, ...envOrigins.filter((o) => o !== "*")].map(normalize)
 );
@@ -41,8 +46,22 @@ const app = new Hono();
 app.use(
   "*",
   cors({
-    origin: (origin) => (isAllowedOrigin(origin) ? origin : ""),
+    origin: (origin) => {
+      const allowed = isAllowedOrigin(origin);
+      console.log("[CORS] Request origin:", origin, "-> allowed:", allowed);
+      return allowed ? origin : "";
+    },
     credentials: true,
+  })
+);
+
+// Root route — useful for Render health checks & verifying the server is alive
+app.get("/", (c) =>
+  c.json({
+    status: "running",
+    server: "CodeSync",
+    timestamp: new Date().toISOString(),
+    port: Number(process.env.PORT) || 3000,
   })
 );
 
@@ -67,8 +86,8 @@ app.get("/api/info", (c) =>
 const PORT = Number(process.env.PORT) || 3000;
 
 const httpServer = serve(
-  { fetch: app.fetch, port: PORT },
-  () => console.log(`Server running on port ${PORT}`)
-) as unknown as HttpServer;
+  { fetch: app.fetch, port: PORT, hostname: "0.0.0.0" },
+  () => console.log(`Server running on ${PORT}`)
+) as Http2Server;
 
 setupSocket(httpServer, isAllowedOrigin);

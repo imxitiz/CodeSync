@@ -1,4 +1,4 @@
-import type { Server as HttpServer } from "node:http";
+import type { ServerType } from "@hono/node-server";
 import type { Socket } from "socket.io";
 import { Server as SocketServer } from "socket.io";
 import { ACTIONS } from "./actions.js";
@@ -31,7 +31,7 @@ const OWNER_PERMISSIONS: UserPermissions = {
 };
 
 export function setupSocket(
-  httpServer: HttpServer,
+  httpServer: ServerType,
   isAllowedOrigin: (origin: string | undefined) => boolean
 ): SocketServer {
   const io = new SocketServer(httpServer, {
@@ -115,8 +115,15 @@ export function setupSocket(
     socket.on(
       ACTIONS.JOIN,
       ({ roomId, userName }: { roomId: string; userName: string }) => {
+        const existingClients = getAllConnectedClients(roomId);
+        if (existingClients.some((c) => c.username === userName)) {
+          socket.emit(ACTIONS.DUPLICATE_USER, { username: userName });
+          socket.disconnect();
+          return;
+        }
+
         userSocketMap.set(socket.id, userName);
-        socket.join(roomId);
+        void socket.join(roomId);
 
         let roomCreator: string;
         if (roomCreatorMap.has(roomId)) {
@@ -126,17 +133,7 @@ export function setupSocket(
           roomCreator = userName;
         }
 
-        const clients = getAllConnectedClients(roomId);
-        if (
-          clients.length > 1 &&
-          clients.filter((c) => c.username === userName).length > 1
-        ) {
-          userSocketMap.delete(socket.id);
-          socket.emit(ACTIONS.DUPLICATE_USER, { username: userName });
-          socket.leave(roomId);
-          socket.disconnect();
-          return;
-        }
+        const clients = existingClients;
 
         const tabs = getOrCreateRoomTabs(roomId);
         const perms = getOrCreateRoomPermissions(roomId);
@@ -181,6 +178,8 @@ export function setupSocket(
         tabId: string;
         code: string;
       }) => {
+        if (!socket.rooms.has(roomId)) return;
+
         const userName = userSocketMap.get(socket.id);
         if (!userName) return;
 
@@ -220,7 +219,15 @@ export function setupSocket(
         currenteditor: string;
         tabId: string;
       }) => {
-        io.to(socketId).emit(ACTIONS.CODE_CHANGE, { tabId, code, currenteditor });
+        const targetSocket = io.sockets.sockets.get(socketId);
+        if (!targetSocket) return;
+
+        const senderRooms = [...socket.rooms].filter((r) => r !== socket.id);
+        const hasSharedRoom = senderRooms.some((r) => targetSocket.rooms.has(r));
+
+        if (hasSharedRoom) {
+          targetSocket.emit(ACTIONS.CODE_CHANGE, { tabId, code, currenteditor });
+        }
       }
     );
 
@@ -356,6 +363,8 @@ export function setupSocket(
         username: string;
         permissions: UserPermissions;
       }) => {
+        if (!socket.rooms.has(roomId)) return;
+
         const userName = userSocketMap.get(socket.id);
         if (!userName) return;
 
@@ -369,7 +378,7 @@ export function setupSocket(
     );
 
     socket.on("disconnecting", () => {
-      const rooms = [...socket.rooms];
+      const rooms = [...socket.rooms].filter((r) => r !== socket.id);
 
       for (const room of rooms) {
         socket.in(room).emit(ACTIONS.DISCONNECTED, {
