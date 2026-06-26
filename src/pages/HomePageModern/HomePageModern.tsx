@@ -14,13 +14,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import {
   BACKEND_API_URL,
   clearCustomBackendUrl,
@@ -78,6 +71,48 @@ export default function HomePageModern() {
       setCustomBackendInput(getBackendUrl());
     }
   }, []);
+
+  const formatTimeAgo = (timestamp: number): string => {
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 60) {
+      return "just now";
+    }
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+      return `${minutes}m ago`;
+    }
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+      return `${hours}h ago`;
+    }
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
+
+  const handleSelectRecentRoom = (room: RecentRoom) => {
+    setRoomId(room.roomId);
+    setUserName(room.userName);
+  };
+
+  const handleRemoveRecentRoom = (targetRoomId: string) => {
+    removeRoom(targetRoomId);
+    setRecentRooms(getRecentRooms());
+  };
+
+  const handleClearHistory = () => {
+    clearRoomHistory();
+    setRecentRooms([]);
+    toast.success("Room history cleared");
+  };
+
+  const handleHistoryPreferenceChange = (enabled: boolean) => {
+    setRoomHistoryEnabled(enabled);
+    setIsHistoryEnabled(enabled);
+    setRecentRooms(enabled ? getRecentRooms() : []);
+    toast.success(
+      enabled ? "Room history enabled" : "Room history disabled and cleared"
+    );
+  };
 
   const handleHealthCheck = (attempt: number, maxRetries: number) => {
     setServerStatusMessage(`Waking up server... (${attempt}/${maxRetries})`);
@@ -192,48 +227,6 @@ export default function HomePageModern() {
     }
   };
 
-  const formatTimeAgo = (timestamp: number): string => {
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
-    if (seconds < 60) {
-      return "just now";
-    }
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) {
-      return `${minutes}m ago`;
-    }
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) {
-      return `${hours}h ago`;
-    }
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  };
-
-  const handleSelectRecentRoom = (room: RecentRoom) => {
-    setRoomId(room.roomId);
-    setUserName(room.userName);
-  };
-
-  const handleRemoveRecentRoom = (targetRoomId: string) => {
-    removeRoom(targetRoomId);
-    setRecentRooms(getRecentRooms());
-  };
-
-  const handleClearHistory = () => {
-    clearRoomHistory();
-    setRecentRooms([]);
-    toast.success("Room history cleared");
-  };
-
-  const handleHistoryPreferenceChange = (enabled: boolean) => {
-    setRoomHistoryEnabled(enabled);
-    setIsHistoryEnabled(enabled);
-    setRecentRooms(enabled ? getRecentRooms() : []);
-    toast.success(
-      enabled ? "Room history enabled" : "Room history disabled and cleared"
-    );
-  };
-
   return (
     <AppShell className="relative">
       <div className="flex min-h-full flex-col">
@@ -246,7 +239,7 @@ export default function HomePageModern() {
             </h1>
             <p className="mt-3 max-w-prose text-pretty text-muted-foreground text-sm leading-relaxed sm:text-base">
               Create a room, share the link, and start collaborating instantly.
-              No setup, just presence and editor
+              No setup, just productive pairing with live presence and editor
               control.
             </p>
 
@@ -361,10 +354,7 @@ export default function HomePageModern() {
                     type="button"
                   >
                     <span
-                      className={cn(
-                        "inline-block transition-transform",
-                        showAdvanced && "rotate-90"
-                      )}
+                      className={`inline-block transition-transform ${showAdvanced ? "rotate-90" : ""}`}
                     >
                       ▶
                     </span>
@@ -451,94 +441,93 @@ export default function HomePageModern() {
                   </Button>
                 </div>
               </CardFooter>
-            </Card>
+             </Card>
+           </div>
+         </section>
 
-            {/* Recent Rooms — stored locally on this device only */}
-            <div className="mx-auto mt-3 w-full max-w-md rounded-lg border bg-card/80 p-2 shadow-sm">
-              <div className="flex items-center justify-between gap-2 px-1">
-                <h3 className="flex min-w-0 items-center gap-1.5 font-medium text-muted-foreground text-xs">
-                  <FiClock className="size-3 shrink-0" />
-                  <span>Recent rooms</span>
-                  <span className="text-muted-foreground/60">
-                    (this device only)
-                  </span>
-                  <span
-                    className="inline-flex text-muted-foreground/70"
-                    title="Room history is stored only in this browser. Enable it only on devices you trust; turning it off clears saved room IDs and names."
-                  >
-                    <FiInfo className="size-3" />
-                  </span>
-                </h3>
-                <div className="flex shrink-0 items-center gap-1">
-                  <label
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2 py-1 text-muted-foreground text-xs transition-colors hover:bg-accent"
-                    title="Toggle local recent room history"
-                  >
-                    <input
-                      checked={isHistoryEnabled}
-                      className="size-3 accent-current"
-                      onChange={(event) =>
-                        handleHistoryPreferenceChange(event.target.checked)
-                      }
-                      type="checkbox"
-                    />
-                    Save
-                  </label>
-                  {recentRooms.length > 0 && (
-                    <Button
-                      className="h-7 cursor-pointer px-2"
-                      onClick={handleClearHistory}
-                      size="sm"
-                      title="Clear room history"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <FiTrash2 className="size-3" />
-                      <span className="sr-only sm:not-sr-only">Clear</span>
-                    </Button>
-                  )}
-                </div>
-              </div>
-              {isHistoryEnabled && recentRooms.length > 0 && (
-                <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1">
-                  {recentRooms.map((room) => (
-                    <li key={room.roomId}>
-                      <div
-                        className="flex w-full cursor-pointer items-center gap-2 rounded-md border bg-background/70 px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
-                        onClick={() => handleSelectRecentRoom(room)}
-                        title="Click to fill room details"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <span className="block truncate font-mono text-xs">
-                            {room.roomId.length > 20
-                              ? `${room.roomId.slice(0, 8)}…${room.roomId.slice(-8)}`
-                              : room.roomId}
-                          </span>
-                          <span className="text-muted-foreground text-xs">
-                            as {room.userName} · {formatTimeAgo(room.joinedAt)}
-                          </span>
-                        </div>
-                        <button
-                          aria-label={`Remove ${room.roomId} from history`}
-                          className="shrink-0 cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/20 hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveRecentRoom(room.roomId);
-                          }}
-                          type="button"
-                        >
-                          <FiX className="size-3.5" />
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <footer className="shrink-0 py-4 text-center">
+         {/* Recent Rooms — stored locally on this device only */}
+         <div className="mx-auto mt-3 w-full max-w-md rounded-lg border bg-card/80 p-2 shadow-sm">
+           <div className="flex items-center justify-between gap-2 px-1">
+             <h3 className="flex min-w-0 items-center gap-1.5 font-medium text-muted-foreground text-xs">
+               <FiClock className="size-3 shrink-0" />
+               <span>Recent rooms</span>
+               <span className="text-muted-foreground/60">
+                 (this device only)
+               </span>
+               <span
+                 className="inline-flex text-muted-foreground/70"
+                 title="Room history is stored only in this browser. Enable it only on devices you trust; turning it off clears saved room IDs and names."
+               >
+                 <FiInfo className="size-3" />
+               </span>
+             </h3>
+             <div className="flex shrink-0 items-center gap-1">
+               <label
+                 className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2 py-1 text-muted-foreground text-xs transition-colors hover:bg-accent"
+                 title="Toggle local recent room history"
+               >
+                 <input
+                   checked={isHistoryEnabled}
+                   className="size-3 accent-current"
+                   onChange={(event) =>
+                     handleHistoryPreferenceChange(event.target.checked)
+                   }
+                   type="checkbox"
+                 />
+                 Save
+               </label>
+               {recentRooms.length > 0 && (
+                 <Button
+                   className="h-7 cursor-pointer px-2"
+                   onClick={handleClearHistory}
+                   size="sm"
+                   title="Clear room history"
+                   type="button"
+                   variant="ghost"
+                 >
+                   <FiTrash2 className="size-3" />
+                   <span className="sr-only sm:not-sr-only">Clear</span>
+                 </Button>
+               )}
+             </div>
+           </div>
+           {isHistoryEnabled && recentRooms.length > 0 && (
+             <ul className="mt-2 max-h-52 space-y-1 overflow-y-auto pr-1">
+               {recentRooms.map((room) => (
+                 <li key={room.roomId}>
+                   <div
+                     className="flex w-full cursor-pointer items-center gap-2 rounded-md border bg-background/70 px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                     onClick={() => handleSelectRecentRoom(room)}
+                     title="Click to fill room details"
+                   >
+                     <div className="min-w-0 flex-1">
+                       <span className="block truncate font-mono text-xs">
+                         {room.roomId.length > 20
+                           ? `${room.roomId.slice(0, 8)}…${room.roomId.slice(-8)}`
+                           : room.roomId}
+                       </span>
+                       <span className="text-muted-foreground text-xs">
+                         as {room.userName} · {formatTimeAgo(room.joinedAt)}
+                       </span>
+                     </div>
+                     <button
+                       aria-label={`Remove ${room.roomId} from history`}
+                       className="shrink-0 cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/20 hover:text-destructive"
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         handleRemoveRecentRoom(room.roomId);
+                       }}
+                       type="button"
+                     >
+                       <FiX className="size-3.5" />
+                     </button>
+                   </div>
+                 </li>
+               ))}
+             </ul>
+           )}
+         </div>
+         <footer className="shrink-0 py-4 text-center">
           <div className="inline-flex items-center gap-2 text-muted-foreground text-xs">
             <span>
               Built with ❤️ by{" "}
