@@ -3,7 +3,7 @@ import { EditorView } from "@codemirror/view";
 import { dracula } from "@uiw/codemirror-theme-dracula";
 import CodeMirror from "@uiw/react-codemirror";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { ACTIONS } from "../../action";
+import { ACTIONS } from "../utils/constants";
 
 type CodeChangeData = {
   roomId: string;
@@ -15,7 +15,7 @@ type CodeChangeData = {
 type IncomingCodeChange = {
   tabId?: string;
   code: string;
-  currenteditor: string;
+  currenteditor?: string;
 };
 
 type Socket = {
@@ -123,9 +123,7 @@ const Editor: React.FC<EditorProps> = ({
   }, [wrap, themeExt, fontSizeTheme]);
 
   const handleChange = (value: string): void => {
-    if (!(editable && socketRef.current)) {
-      return;
-    }
+    if (!(editable && socketRef.current)) return;
 
     codeRef.current = value;
     setCode(value);
@@ -140,16 +138,14 @@ const Editor: React.FC<EditorProps> = ({
 
   useEffect(() => {
     const socket = socketRef.current;
-    if (!socket) {
-      return;
-    }
+    if (!socket) return;
 
     const handleCodeChange = ({
-      tabId,
+      tabId: incomingTabId,
       code: newCode,
       currenteditor,
     }: IncomingCodeChange) => {
-      const targetTabId = tabId || activeTabIdRef.current;
+      const targetTabId = incomingTabId || activeTabIdRef.current;
       onCodeChangeRef.current(newCode, targetTabId);
       if (
         targetTabId === activeTabIdRef.current &&
@@ -158,13 +154,31 @@ const Editor: React.FC<EditorProps> = ({
         codeRef.current = newCode;
         setCode(newCode);
       }
-      setCurrentEditor(currenteditor);
+      if (currenteditor !== undefined) {
+        setCurrentEditor(currenteditor);
+      }
+    };
+
+    const handleTabCode = ({
+      tabId: incomingTabId,
+      code: newCode,
+    }: { tabId: string; code: string }) => {
+      if (
+        incomingTabId === activeTabIdRef.current &&
+        newCode !== codeRef.current
+      ) {
+        codeRef.current = newCode;
+        setCode(newCode);
+        onCodeChangeRef.current(newCode, incomingTabId);
+      }
     };
 
     socket.on(ACTIONS.CODE_CHANGE, handleCodeChange);
+    socket.on(ACTIONS.TAB_CODE, handleTabCode);
 
     return () => {
       socket.off(ACTIONS.CODE_CHANGE, handleCodeChange);
+      socket.off(ACTIONS.TAB_CODE, handleTabCode);
     };
   }, [socketRef, setCurrentEditor]);
 
