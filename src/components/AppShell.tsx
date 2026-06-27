@@ -126,7 +126,10 @@ export default function AppShell({
             },
           },
           error: {
-            style: { background: "oklch(0.577 0.245 27.325)", color: "white" },
+            style: {
+              background: "var(--destructive)",
+              color: "var(--destructive-foreground)",
+            },
           },
         }}
       />

@@ -1,8 +1,7 @@
+import { Crown, Pencil } from "lucide-react";
 import randomColor from "randomcolor";
 import { useRef } from "react";
 import Avatar from "react-avatar";
-import { FaCrown } from "react-icons/fa";
-import { FiEdit2 } from "react-icons/fi";
 
 export type ClientModernProps = {
   username: string;
@@ -56,25 +55,24 @@ export default function ClientModern({
         <div className="relative">
           <Avatar
             color={colorRef.current}
-            fgColor="#000"
             name={username}
             round="12px"
             size="40"
           />
           {isOwner && (
             <span
-              className="-right-1 -top-1 absolute inline-flex items-center justify-center rounded-full bg-amber-400 text-amber-950 shadow-sm ring-1 ring-border"
+              className="-right-1 -top-1 absolute inline-flex items-center justify-center rounded-full bg-warning text-warning-foreground shadow-sm ring-1 ring-border"
               title="Owner"
             >
-              <FaCrown className="size-3.5 p-[1px]" />
+              <Crown className="size-3.5 p-[1px]" />
             </span>
           )}
           {isEditor && (
             <span
-              className="-left-1 -bottom-1 absolute inline-flex items-center justify-center rounded-full bg-emerald-400 text-emerald-950 shadow-sm ring-1 ring-border"
+              className="-left-1 -bottom-1 absolute inline-flex items-center justify-center rounded-full bg-success text-success-foreground shadow-sm ring-1 ring-border"
               title="Editor"
             >
-              <FiEdit2 className="size-3.5 p-[1px]" />
+              <Pencil className="size-3.5 p-[1px]" />
             </span>
           )}
         </div>

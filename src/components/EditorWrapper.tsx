@@ -6,39 +6,14 @@ export type { EditorProps } from "./Editor";
 const Editor = lazy(() => import("./Editor"));
 
 const EditorLoading: React.FC = () => (
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      height: "100%",
-      background: "var(--card, #1a1a1a)",
-      color: "var(--foreground, #f8f8f2)",
-      fontFamily: "monospace",
-      fontSize: "14px",
-    }}
-  >
-    <div style={{ textAlign: "center", padding: "20px" }}>
-      <div style={{ marginBottom: "10px", fontSize: "16px" }}>
-        Loading Editor...
-      </div>
-      <div
-        style={{
-          width: "40px",
-          height: "4px",
-          background: "var(--muted, #44475a)",
-          borderRadius: "2px",
-          overflow: "hidden",
-          margin: "0 auto",
-        }}
-      >
+  <div className="flex h-full w-full items-center justify-center bg-card font-mono text-sm">
+    <div className="text-center">
+      <div className="mb-2 text-base">Loading Editor...</div>
+      <div className="mx-auto h-1 w-10 overflow-hidden rounded-sm bg-muted">
         <div
+          className="h-full w-full animate-[loading_1.5s_infinite_ease-in-out] rounded-sm bg-primary"
           style={{
-            width: "100%",
-            height: "100%",
-            background: "var(--primary, #888)",
             animation: "loading 1.5s infinite ease-in-out",
-            borderRadius: "2px",
           }}
         />
       </div>

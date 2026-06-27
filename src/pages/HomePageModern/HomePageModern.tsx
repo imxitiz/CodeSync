@@ -1,6 +1,6 @@
+import { Clock, Info, Trash2, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { FiClock, FiInfo, FiTrash2, FiX } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import AppShell from "@/components/AppShell";
@@ -455,7 +455,7 @@ export default function HomePageModern() {
 
             {/* Recent Rooms — stored locally on this device only */}
             <div className="mx-auto mt-3 flex w-full max-w-md items-center gap-2 rounded-lg border bg-card/80 px-3 py-2 text-xs shadow-sm">
-              <FiClock className="size-3 shrink-0 text-muted-foreground" />
+              <Clock className="size-3 shrink-0 text-muted-foreground" />
               <span className="shrink-0 font-medium text-muted-foreground">
                 Recent rooms
               </span>
@@ -464,7 +464,7 @@ export default function HomePageModern() {
                   className="inline-flex shrink-0 cursor-help text-muted-foreground transition-colors hover:text-foreground"
                   type="button"
                 >
-                  <FiInfo className="size-3" />
+                  <Info className="size-3" />
                   <span className="sr-only">Room history privacy info</span>
                 </TooltipTrigger>
                 <TooltipContent side="top">
@@ -513,7 +513,7 @@ export default function HomePageModern() {
                             onClick={() => handleRemoveRecentRoom(room.roomId)}
                             type="button"
                           >
-                            <FiX className="size-3" />
+                            <X className="size-3" />
                           </button>
                         </div>
                       ))}
@@ -526,7 +526,7 @@ export default function HomePageModern() {
                       type="button"
                       variant="ghost"
                     >
-                      <FiTrash2 className="size-3" />
+                      <Trash2 className="size-3" />
                     </Button>
                   </>
                 )}

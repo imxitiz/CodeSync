@@ -774,7 +774,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
                   Light
                 </button>
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Tip: When importing CSS from tweakcn, we generate both Light and
                 Dark themes. The preview uses your selection above.
               </p>

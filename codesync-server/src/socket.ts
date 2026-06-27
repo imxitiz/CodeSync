@@ -314,13 +314,29 @@ export function setupSocket(
         const currentEditor = getRoomCurrentEditor(roomId);
         const isOwner = roomCreator === userName;
         const canRelease = currenteditor === "" && currentEditor === userName;
+        const perms = getOrCreateRoomPermissions(roomId);
+        const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
+        const canTakeEdit = currenteditor !== "" && userPerms.canEdit;
 
-        if (!(isOwner || canRelease)) {
+        if (!(isOwner || canRelease || canTakeEdit)) {
           return;
         }
 
         setRoomCurrentEditor(roomId, currenteditor);
-        socket.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
+
+        if (currenteditor !== "" && currentEditor !== currenteditor && currentEditor !== "") {
+          const oldEditorPerms = perms.get(currentEditor);
+          if (oldEditorPerms && roomCreator !== currentEditor && oldEditorPerms.canEdit) {
+            const revokedPerms = { ...oldEditorPerms, canEdit: false };
+            perms.set(currentEditor, revokedPerms);
+            io.in(roomId).emit(ACTIONS.PERMISSIONS_UPDATE, {
+              username: currentEditor,
+              permissions: revokedPerms,
+            });
+          }
+        }
+
+        io.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
       }
     );
 
