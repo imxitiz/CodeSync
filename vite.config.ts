@@ -22,7 +22,6 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\/.*/, /^\/socket\.io\/.*/],
         // Add better cache busting for dynamic imports
         cleanupOutdatedCaches: true,
-        // Improve navigation fallback for SPAs
         navigateFallback: "index.html",
         runtimeCaching: [
           // Special handling for HTML documents to avoid hydration issues
@@ -31,9 +30,9 @@ export default defineConfig({
             handler: "NetworkFirst",
             options: {
               cacheName: "html-cache",
-              networkTimeoutSeconds: 1,
+              networkTimeoutSeconds: 3,
               cacheableResponse: {
-                statuses: [0, 200],
+                statuses: [200],
               },
             },
           },
@@ -72,7 +71,7 @@ export default defineConfig({
             options: {
               cacheName: "static-resources",
               cacheableResponse: {
-                statuses: [0, 200],
+                statuses: [200],
               },
             },
           },
@@ -82,9 +81,6 @@ export default defineConfig({
             handler: "NetworkOnly",
           },
         ],
-        // Skip waiting and claim clients immediately for faster updates
-        skipWaiting: true,
-        clientsClaim: true,
       },
       includeAssets: ["logo.ico", "logo.png", "mainlogo.png"],
       manifest: {
