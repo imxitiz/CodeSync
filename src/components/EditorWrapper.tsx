@@ -1,13 +1,10 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, memo, Suspense, useEffect, useState } from "react";
 import type { EditorProps } from "./Editor";
 
-// Re-export EditorProps for consumers
 export type { EditorProps } from "./Editor";
 
-// Dynamically import the Editor component to avoid SSR issues with CodeMirror
 const Editor = lazy(() => import("./Editor"));
 
-// Loading component for the editor
 const EditorLoading: React.FC = () => (
   <div
     style={{
@@ -21,18 +18,8 @@ const EditorLoading: React.FC = () => (
       fontSize: "14px",
     }}
   >
-    <div
-      style={{
-        textAlign: "center",
-        padding: "20px",
-      }}
-    >
-      <div
-        style={{
-          marginBottom: "10px",
-          fontSize: "16px",
-        }}
-      >
+    <div style={{ textAlign: "center", padding: "20px" }}>
+      <div style={{ marginBottom: "10px", fontSize: "16px" }}>
         Loading Editor...
       </div>
       <div
@@ -69,11 +56,9 @@ const EditorWrapper: React.FC<EditorProps> = (props) => {
   const [isClient, setIsClient] = useState<boolean>(false);
 
   useEffect(() => {
-    // Only render the editor on the client side
     setIsClient(true);
   }, []);
 
-  // Don't render anything during SSR
   if (!isClient) {
     return <EditorLoading />;
   }
@@ -91,4 +76,4 @@ const EditorWrapper: React.FC<EditorProps> = (props) => {
   );
 };
 
-export default EditorWrapper;
+export default memo(EditorWrapper);

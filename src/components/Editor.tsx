@@ -2,15 +2,9 @@ import { javascript } from "@codemirror/lang-javascript";
 import { EditorView } from "@codemirror/view";
 import { dracula } from "@uiw/codemirror-theme-dracula";
 import CodeMirror from "@uiw/react-codemirror";
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import type { EditorSocketRef } from "@/pages/EditorPageModern/types";
 import { ACTIONS } from "../utils/constants";
-
-type CodeChangeData = {
-  roomId: string;
-  tabId: string;
-  code: string;
-  currenteditor: string;
-};
 
 type IncomingCodeChange = {
   tabId?: string;
@@ -18,14 +12,8 @@ type IncomingCodeChange = {
   currenteditor?: string;
 };
 
-type Socket = {
-  emit: (event: string, data: CodeChangeData) => void;
-  on: (event: string, callback: (data: IncomingCodeChange) => void) => void;
-  off: (event: string, callback: (data: IncomingCodeChange) => void) => void;
-};
-
 export type EditorProps = {
-  socketRef: RefObject<Socket>;
+  socketRef: EditorSocketRef;
   roomId: string;
   activeTabId: string;
   initialCode: string;
@@ -209,4 +197,4 @@ const Editor: React.FC<EditorProps> = ({
   );
 };
 
-export default Editor;
+export default memo(Editor);

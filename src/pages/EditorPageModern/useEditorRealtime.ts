@@ -61,6 +61,7 @@ export const useEditorRealtime = ({
   const socketRef = useRef<EditorSocket | null>(null);
   const currentEditorRef = useRef(currentEditor);
   const roomCreatorRef = useRef(roomCreator);
+  const handleCodeChangeRef = useRef(handleCodeChange);
 
   useEffect(() => {
     currentEditorRef.current = currentEditor;
@@ -69,6 +70,10 @@ export const useEditorRealtime = ({
   useEffect(() => {
     roomCreatorRef.current = roomCreator;
   }, [roomCreator]);
+
+  useEffect(() => {
+    handleCodeChangeRef.current = handleCodeChange;
+  }, [handleCodeChange]);
 
   const handleErrors = useCallback(() => {
     setServerStatus("disconnected");
@@ -286,7 +291,7 @@ export const useEditorRealtime = ({
         });
 
         socket.on(ACTIONS.TAB_CODE, ({ tabId, code }) => {
-          handleCodeChange(code, tabId);
+          handleCodeChangeRef.current(code, tabId);
         });
 
         socket.on(ACTIONS.TAB_SWITCH, ({ username, tabId }) => {
@@ -317,7 +322,6 @@ export const useEditorRealtime = ({
       setSocketReady(false);
     };
   }, [
-    handleCodeChange,
     handleErrors,
     navigate,
     roomId,

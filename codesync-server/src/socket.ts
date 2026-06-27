@@ -491,6 +491,41 @@ export function setupSocket(
       }
     );
 
+    socket.on(
+      ACTIONS.DESTROY_ROOM,
+      ({ roomId }: { roomId: string }) => {
+        const userName = userSocketMap.get(socket.id);
+        if (!userName) {
+          return;
+        }
+
+        const roomCreator = roomCreatorMap.get(roomId);
+        if (roomCreator !== userName) {
+          return;
+        }
+
+        io.in(roomId).emit(ACTIONS.DISCONNECTED, {
+          socketId: socket.id,
+          username: userName,
+        });
+
+        roomTabsMap.delete(roomId);
+        roomCreatorMap.delete(roomId);
+        roomPermissionsMap.delete(roomId);
+        roomCurrentEditorMap.delete(roomId);
+        userActiveTabMap.delete(socket.id);
+        userSocketMap.delete(socket.id);
+
+        const timer = roomCodeTtlTimers.get(roomId);
+        if (timer) {
+          clearTimeout(timer);
+          roomCodeTtlTimers.delete(roomId);
+        }
+
+        io.to(roomId).disconnectSockets(true);
+      }
+    );
+
     socket.on("disconnecting", () => {
       const rooms = [...socket.rooms].filter((r) => r !== socket.id);
 

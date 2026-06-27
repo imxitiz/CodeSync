@@ -220,6 +220,16 @@ export default function EditorPageModern() {
   };
 
   const leaveRoom = () => {
+    if (isOwner) {
+      if (
+        !window.confirm(
+          "You are the room owner. Leaving will destroy the room. Are you sure?",
+        )
+      ) {
+        return;
+      }
+      socketRef.current?.emit(ACTIONS.DESTROY_ROOM, { roomId: id });
+    }
     if (sessionStorage.getItem("admin") === roomCreator) {
       sessionStorage.removeItem("admin");
     }

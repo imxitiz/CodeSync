@@ -100,4 +100,6 @@ setupSocket(httpServer, isAllowedOrigin);
 
 // Now start listening — the 'listening' event fires, engine.io's init() runs,
 // the ws.WebSocketServer is created, and WebSocket upgrades work.
-httpServer.listen(PORT, "0.0.0.0", () => {});
+
+// continiously increment the port and check where it can run, untill..
+httpServer.listen(PORT, "0.0.0.0", () => { })
