@@ -389,6 +389,11 @@ export default function EditorPageModern() {
     setPermissions((prev) => ({ ...prev, [targetUser]: newPerms }));
     emitPermissionsUpdate(targetUser, newPerms);
     toast.success(`Permissions updated for ${targetUser}`);
+
+    if (!newPerms.canEdit && targetUser === currentEditor) {
+      setCurrentEditor("");
+      emitCurrentEditor("");
+    }
   };
 
   // Redirect if no state
@@ -519,7 +524,10 @@ export default function EditorPageModern() {
                 <div className="flex items-center gap-1">
                   {compactAvatars.slice.map(({ socketId, username }) => {
                     const crown = username === roomCreator;
-                    const pencil = username === currentEditor;
+                    const userPerms =
+                      permissions[username] || DEFAULT_PERMISSIONS;
+                    const pencil =
+                      username === currentEditor && userPerms.canEdit;
                     const me = username === userName;
                     return (
                       <div className="relative" key={socketId}>
@@ -959,7 +967,6 @@ export default function EditorPageModern() {
                   editable={canEditCode}
                   fontSize={fontSize}
                   initialCode={activeTab.code}
-                  key={activeTab.id}
                   onCodeChange={handleCodeChange}
                   roomId={id || ""}
                   setCurrentEditor={setCurrentEditor}
