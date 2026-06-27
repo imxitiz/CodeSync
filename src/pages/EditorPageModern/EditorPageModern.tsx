@@ -243,16 +243,23 @@ export default function EditorPageModern() {
   const toggleEditable = (): void => {
     if (currentEditor === userName) {
       setCurrentEditor("");
-      toast.success("Editor is now read-only");
       emitCurrentEditor("");
-    } else {
       if (!isOwner) {
-        toast.error("Only the room creator can change the editable state");
+        setPermissions((prev) => ({
+          ...prev,
+          [userName]: { ...DEFAULT_PERMISSIONS },
+        }));
+        emitPermissionsUpdate(userName, DEFAULT_PERMISSIONS);
+      }
+      toast.success("Editor is now read-only");
+    } else {
+      if (!isOwner && !myPermissions.canEdit) {
+        toast.error("You don't have permission to edit");
         return;
       }
       setCurrentEditor(userName);
-      toast.success("Editor is now editable");
       emitCurrentEditor(userName);
+      toast.success("Editor is now editable");
     }
   };
 
@@ -636,7 +643,8 @@ export default function EditorPageModern() {
                   </Button>
 
                   {(currentEditor === userName ||
-                    (isOwner && currentEditor !== "")) && (
+                    (isOwner && currentEditor !== "") ||
+                    (myPermissions.canEdit && currentEditor !== "")) && (
                     <Button
                       onClick={toggleEditable}
                       size="sm"

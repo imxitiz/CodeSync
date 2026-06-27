@@ -101,5 +101,26 @@ setupSocket(httpServer, isAllowedOrigin);
 // Now start listening — the 'listening' event fires, engine.io's init() runs,
 // the ws.WebSocketServer is created, and WebSocket upgrades work.
 
-// continiously increment the port and check where it can run, untill..
-httpServer.listen(PORT, "0.0.0.0", () => { })
+// Try to find an available port by incrementing if the current one is in use
+const startServer = (port: number, maxPort = port + 10): void => {
+  httpServer.once("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.log(`Port ${port} is in use, trying ${port + 1}...`);
+      if (port + 1 > maxPort) {
+        console.error(`No available port found up to ${maxPort}, giving up.`);
+        process.exit(1);
+      }
+      httpServer.removeAllListeners("error");
+      startServer(port + 1, maxPort);
+    } else {
+      console.error("Server error:", err);
+      process.exit(1);
+    }
+  });
+
+  httpServer.listen(port, "0.0.0.0", () => {
+    console.log(`Server is running on http://0.0.0.0:${port}`);
+  });
+};
+
+startServer(PORT);
