@@ -2,427 +2,444 @@ import type { ServerType } from "@hono/node-server";
 import type { Socket } from "socket.io";
 import { Server as SocketServer } from "socket.io";
 import { ACTIONS } from "./actions.js";
-
-type UserPermissions = {
-  canEdit: boolean;
-  canCreateTab: boolean;
-  canDeleteTab: boolean;
-  canRenameTab: boolean;
-};
-
-type TabData = { name: string; code: string };
-
-const ROOM_CLEANUP_DELAY_MS = 500;
-const DEFAULT_TAB_ID = "tab-main";
-const DEFAULT_TAB_NAME = "main.js";
-
-const DEFAULT_PERMISSIONS: UserPermissions = {
-  canEdit: false,
-  canCreateTab: false,
-  canDeleteTab: false,
-  canRenameTab: false,
-};
-
-const OWNER_PERMISSIONS: UserPermissions = {
-  canEdit: true,
-  canCreateTab: true,
-  canDeleteTab: true,
-  canRenameTab: true,
-};
+import { repo } from "./db/index.js";
+import {
+	DEFAULT_PERMISSIONS,
+	DEFAULT_TAB_ID,
+	ROOM_CLEANUP_DELAY_MS,
+} from "./db/repository.js";
+import type {
+	ClientEntry,
+	SerializedTab,
+	UserActiveTab,
+} from "./types.js";
 
 export function setupSocket(
-  httpServer: ServerType,
-  isAllowedOrigin: (origin: string | undefined) => boolean
+	httpServer: ServerType,
+	isAllowedOrigin: (origin: string | undefined) => boolean,
 ): SocketServer {
-  const io = new SocketServer(httpServer, {
-    cors: {
-      origin: (origin, callback) => {
-        if (isAllowedOrigin(origin)) {
-          callback(null, true);
-        } else {
-          callback(new Error("CORS policy: This origin is not allowed"));
-        }
-      },
-      methods: ["GET", "POST"],
-      credentials: true,
-    },
-  });
+	const io = new SocketServer(httpServer, {
+		cors: {
+			origin: (origin, callback) => {
+				if (isAllowedOrigin(origin)) {
+					callback(null, true);
+				} else {
+					callback(new Error("CORS policy: This origin is not allowed"));
+				}
+			},
+			methods: ["GET", "POST"],
+			credentials: true,
+		},
+	});
 
-  const userSocketMap = new Map<string, string>();
-  const roomCreatorMap = new Map<string, string>();
-  const roomTabsMap = new Map<string, Map<string, TabData>>();
-  const userActiveTabMap = new Map<string, string>();
-  const roomCurrentEditorMap = new Map<string, string>();
-  const roomPermissionsMap = new Map<string, Map<string, UserPermissions>>();
+	// ───────────────────────── Helpers ─────────────────────────
+	// Room membership is still enumerated via the Socket.IO adapter (the source
+	// of truth for socket lifecycle). Per-socket metadata (username, activeTab)
+	// is batch-read from Redis via a pipeline. When horizontal scaling is added,
+	// @socket.io/redis-adapter makes this adapter cross-instance transparently.
 
-  const getOrCreateRoomTabs = (roomId: string): Map<string, TabData> => {
-    let tabs = roomTabsMap.get(roomId);
-    if (!tabs) {
-      tabs = new Map<string, TabData>();
-      tabs.set(DEFAULT_TAB_ID, { name: DEFAULT_TAB_NAME, code: "" });
-      roomTabsMap.set(roomId, tabs);
-    }
-    return tabs;
-  };
+	const getAllConnectedClients = async (
+		roomId: string,
+	): Promise<ClientEntry[]> => {
+		const socketIds = [...(io.sockets.adapter.rooms.get(roomId) ?? [])];
+		if (socketIds.length === 0) return [];
+		const usernames = await repo.getSocketUsers(socketIds);
+		return socketIds.map((socketId, i) => ({
+			socketId,
+			username: usernames[i] ?? "",
+		}));
+	};
 
-  const getOrCreateRoomPermissions = (
-    roomId: string
-  ): Map<string, UserPermissions> => {
-    let perms = roomPermissionsMap.get(roomId);
-    if (!perms) {
-      perms = new Map<string, UserPermissions>();
-      roomPermissionsMap.set(roomId, perms);
-    }
-    return perms;
-  };
+	const getUserActiveTabs = async (
+		roomId: string,
+	): Promise<UserActiveTab[]> => {
+		const socketIds = [...(io.sockets.adapter.rooms.get(roomId) ?? [])];
+		if (socketIds.length === 0) return [];
+		const [usernames, activeTabs] = await Promise.all([
+			repo.getSocketUsers(socketIds),
+			repo.getSocketActiveTabs(socketIds),
+		]);
+		return socketIds
+			.map((_, i) => ({
+				username: usernames[i] ?? "",
+				activeTabId: activeTabs[i] ?? DEFAULT_TAB_ID,
+			}))
+			.filter((u) => u.username !== "");
+	};
 
-  const getRoomCurrentEditor = (roomId: string): string =>
-    roomCurrentEditorMap.get(roomId) ?? "";
+	const serializeTabs = (
+		tabs: Map<string, { name: string; code: string }>,
+	): SerializedTab[] =>
+		[...tabs.entries()].map(([id, { name, code }]) => ({ id, name, code }));
 
-  const setRoomCurrentEditor = (roomId: string, editor: string) => {
-    roomCurrentEditorMap.set(roomId, editor);
-  };
+	const serializePermissions = <T extends Record<string, unknown>>(
+		perms: Map<string, T>,
+	): Record<string, T> => Object.fromEntries(perms);
 
-  const serializeTabs = (
-    tabs: Map<string, TabData>
-  ): { id: string; name: string; code: string }[] =>
-    [...tabs.entries()].map(([id, { name, code }]) => ({ id, name, code }));
+	// ───────────────────────── Connection ─────────────────────────
 
-  const serializePermissions = (
-    perms: Map<string, UserPermissions>
-  ): Record<string, UserPermissions> => Object.fromEntries(perms);
+	io.on("connection", (socket: Socket) => {
+		// ─────────────── JOIN ───────────────
+		socket.on(
+			ACTIONS.JOIN,
+			async ({ roomId, userName }: { roomId: string; userName: string }) => {
+				// 1. Atomic duplicate-user check via SADD on the usernames SET.
+				const added = await repo.addRoomUsername(roomId, userName);
+				if (!added) {
+					socket.emit(ACTIONS.DUPLICATE_USER, { username: userName });
+					socket.disconnect();
+					return;
+				}
 
-  const getUserActiveTabs = (
-    roomId: string
-  ): { username: string; activeTabId: string }[] => {
-    const room = io.sockets.adapter.rooms.get(roomId);
-    if (!room) return [];
-    return [...room]
-      .map((sid) => ({
-        username: userSocketMap.get(sid) ?? "",
-        activeTabId: userActiveTabMap.get(sid) ?? DEFAULT_TAB_ID,
-      }))
-      .filter((u) => u.username);
-  };
+				// 2. Write per-socket state before joining the room.
+				await Promise.all([
+					repo.setSocketUser(socket.id, userName),
+					repo.setSocketActiveTab(socket.id, DEFAULT_TAB_ID),
+				]);
+				void socket.join(roomId);
 
-  const getAllConnectedClients = (roomId: string) =>
-    [...(io.sockets.adapter.rooms.get(roomId) ?? [])].map((socketId) => ({
-      socketId,
-      username: userSocketMap.get(socketId),
-    }));
+				// 3. Atomically claim room ownership (SETNX). Returns true for the
+				// first joiner, who also gets owner permissions initialized inside
+				// the transaction.
+				const isCreator = await repo.tryInitRoom(roomId, userName);
+				if (!isCreator) {
+					// Non-creator: give default permissions (don't clobber existing).
+					await repo.setUserPermissionIfNotExists(
+						roomId,
+						userName,
+						DEFAULT_PERMISSIONS,
+					);
+				}
 
-  io.on("connection", (socket: Socket) => {
-    socket.on(
-      ACTIONS.JOIN,
-      ({ roomId, userName }: { roomId: string; userName: string }) => {
-        const existingClients = getAllConnectedClients(roomId);
-        if (existingClients.some((c) => c.username === userName)) {
-          socket.emit(ACTIONS.DUPLICATE_USER, { username: userName });
-          socket.disconnect();
-          return;
-        }
+				// 4. Read back the room state needed for the response payloads.
+				const existingClients = await getAllConnectedClients(roomId);
+				// Existing clients exclude the joiner (socket.join is async-flushed).
+				const allClients: ClientEntry[] = [
+					...existingClients.filter((c) => c.socketId !== socket.id),
+					{ socketId: socket.id, username: userName },
+				];
+				const roomCreator = (await repo.getRoomCreator(roomId)) ?? userName;
+				const tabs = await repo.getAllRoomTabs(roomId);
+				const perms = await repo.getAllRoomPermissions(roomId);
+				const userActiveTabs = await getUserActiveTabs(roomId);
 
-        userSocketMap.set(socket.id, userName);
-        void socket.join(roomId);
+				// 5. Notify existing clients that a new user joined.
+				for (const { socketId } of allClients) {
+					if (socketId === socket.id) continue;
+					io.to(socketId).emit(ACTIONS.JOINED, {
+						clients: allClients,
+						username: userName,
+						socketId: socket.id,
+						roomcreator: roomCreator,
+					});
+				}
 
-        let roomCreator: string;
-        if (roomCreatorMap.has(roomId)) {
-          roomCreator = roomCreatorMap.get(roomId) as string;
-        } else {
-          roomCreatorMap.set(roomId, userName);
-          roomCreator = userName;
-        }
+				// 6. Notify the joining socket itself with room creator info.
+				socket.emit(ACTIONS.JOINED, {
+					clients: allClients,
+					username: userName,
+					socketId: socket.id,
+					roomcreator: roomCreator,
+				});
 
-        // Build the full client list including the new socket
-        const newClientEntry = { socketId: socket.id, username: userName };
-        const allClients = [...existingClients, newClientEntry];
+				// 7. Send the full room snapshot (tabs, active tabs, permissions).
+				socket.emit(ACTIONS.TAB_SYNC, {
+					tabs: serializeTabs(tabs),
+					activeTabId: DEFAULT_TAB_ID,
+					userActiveTabs,
+					permissions: serializePermissions(perms),
+				});
 
-        const tabs = getOrCreateRoomTabs(roomId);
-        const perms = getOrCreateRoomPermissions(roomId);
-        if (!roomCurrentEditorMap.has(roomId)) {
-          setRoomCurrentEditor(roomId, "");
-        }
+				await repo.refreshRoomTTL(roomId);
+			},
+		);
 
-        if (roomCreator === userName) {
-          perms.set(userName, { ...OWNER_PERMISSIONS });
-        } else if (!perms.has(userName)) {
-          perms.set(userName, { ...DEFAULT_PERMISSIONS });
-        }
+		// ─────────────── CODE_CHANGE ───────────────
+		socket.on(
+			ACTIONS.CODE_CHANGE,
+			async ({
+				roomId,
+				tabId,
+				code,
+			}: {
+				roomId: string;
+				tabId: string;
+				code: string;
+			}) => {
+				if (!socket.rooms.has(roomId)) return;
 
-        userActiveTabMap.set(socket.id, DEFAULT_TAB_ID);
+				const userName = await repo.getSocketUser(socket.id);
+				if (!userName) return;
 
-        // Notify existing clients that a new user joined
-        for (const { socketId } of existingClients) {
-          io.to(socketId).emit(ACTIONS.JOINED, {
-            clients: allClients,
-            username: userName,
-            socketId: socket.id,
-            roomcreator: roomCreator,
-          });
-        }
+				const [roomCreator, userPerms, currentEditor] = await Promise.all([
+					repo.getRoomCreator(roomId),
+					repo.getUserPermission(roomId, userName),
+					repo.getRoomCurrentEditor(roomId),
+				]);
 
-        // Notify the joining socket itself so it receives room creator info
-        socket.emit(ACTIONS.JOINED, {
-          clients: allClients,
-          username: userName,
-          socketId: socket.id,
-          roomcreator: roomCreator,
-        });
+				const canEdit = roomCreator === userName || userPerms?.canEdit === true;
+				if (!canEdit) return;
+				if (roomCreator !== userName && currentEditor !== userName) return;
 
-        socket.emit(ACTIONS.TAB_SYNC, {
-          tabs: serializeTabs(tabs),
-          activeTabId: DEFAULT_TAB_ID,
-          userActiveTabs: getUserActiveTabs(roomId),
-          permissions: serializePermissions(perms),
-        });
-      }
-    );
+				// Persist the new code, then broadcast using the freshly-read editor.
+				await repo.setTabCode(roomId, tabId, code);
+				await repo.refreshRoomTTL(roomId);
+				socket.in(roomId).emit(ACTIONS.CODE_CHANGE, {
+					tabId,
+					code,
+					currenteditor: currentEditor,
+				});
+			},
+		);
 
-    socket.on(
-      ACTIONS.CODE_CHANGE,
-      ({
-        roomId,
-        tabId,
-        code,
-      }: {
-        roomId: string;
-        tabId: string;
-        code: string;
-      }) => {
-        if (!socket.rooms.has(roomId)) return;
+		// ─────────────── SYNC_CODE ───────────────
+		// Relays code to a target socket in a shared room. Reads only Socket.IO
+		// internals — no repo state involved. Stays synchronous.
+		socket.on(
+			ACTIONS.SYNC_CODE,
+			({
+				socketId,
+				code,
+				currenteditor,
+				tabId,
+			}: {
+				socketId: string;
+				code: string;
+				currenteditor: string;
+				tabId: string;
+			}) => {
+				const targetSocket = io.sockets.sockets.get(socketId);
+				if (!targetSocket) return;
 
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
+				const senderRooms = [...socket.rooms].filter((r) => r !== socket.id);
+				const hasSharedRoom = senderRooms.some((r) =>
+					targetSocket.rooms.has(r),
+				);
 
-        const roomCreator = roomCreatorMap.get(roomId);
-        const perms = getOrCreateRoomPermissions(roomId);
-        const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        const currentEditor = getRoomCurrentEditor(roomId);
-        const canEdit = roomCreator === userName || userPerms.canEdit;
+				if (hasSharedRoom) {
+					targetSocket.emit(ACTIONS.CODE_CHANGE, {
+						tabId,
+						code,
+						currenteditor,
+					});
+				}
+			},
+		);
 
-        if (!canEdit) return;
-        if (roomCreator !== userName && currentEditor !== userName) return;
+		// ─────────────── TAB_CODE_REQUEST ───────────────
+		socket.on(
+			ACTIONS.TAB_CODE_REQUEST,
+			async ({ roomId, tabId }: { roomId: string; tabId: string }) => {
+				if (!socket.rooms.has(roomId)) return;
+				const tab = await repo.getRoomTab(roomId, tabId);
+				if (!tab) return;
+				socket.emit(ACTIONS.TAB_CODE, { tabId, code: tab.code });
+			},
+		);
 
-        const tabs = roomTabsMap.get(roomId);
-        if (tabs) {
-          const tab = tabs.get(tabId);
-          if (tab) tab.code = code;
-        }
+		// ─────────────── SET_CURRENT_EDITOR ───────────────
+		socket.on(
+			ACTIONS.SET_CURRENT_EDITOR,
+			async ({
+				roomId,
+				currenteditor,
+			}: {
+				roomId: string;
+				currenteditor: string;
+			}) => {
+				const userName = await repo.getSocketUser(socket.id);
+				if (!userName) return;
 
-        socket.in(roomId).emit(ACTIONS.CODE_CHANGE, {
-          tabId,
-          code,
-          currenteditor: getRoomCurrentEditor(roomId),
-        });
-      }
-    );
+				const [roomCreator, currentEditor] = await Promise.all([
+					repo.getRoomCreator(roomId),
+					repo.getRoomCurrentEditor(roomId),
+				]);
 
-    socket.on(
-      ACTIONS.SYNC_CODE,
-      ({
-        socketId,
-        code,
-        currenteditor,
-        tabId,
-      }: {
-        socketId: string;
-        code: string;
-        currenteditor: string;
-        tabId: string;
-      }) => {
-        const targetSocket = io.sockets.sockets.get(socketId);
-        if (!targetSocket) return;
+				const isOwner = roomCreator === userName;
+				const canRelease = currenteditor === "" && currentEditor === userName;
+				if (!(isOwner || canRelease)) return;
 
-        const senderRooms = [...socket.rooms].filter((r) => r !== socket.id);
-        const hasSharedRoom = senderRooms.some((r) => targetSocket.rooms.has(r));
+				await repo.setRoomCurrentEditor(roomId, currenteditor);
+				await repo.refreshRoomTTL(roomId);
+				socket.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
+			},
+		);
 
-        if (hasSharedRoom) {
-          targetSocket.emit(ACTIONS.CODE_CHANGE, { tabId, code, currenteditor });
-        }
-      }
-    );
+		// ─────────────── TAB_CREATE ───────────────
+		socket.on(
+			ACTIONS.TAB_CREATE,
+			async ({
+				roomId,
+				tabId,
+				name,
+			}: {
+				roomId: string;
+				tabId: string;
+				name: string;
+			}) => {
+				const userName = await repo.getSocketUser(socket.id);
+				if (!userName) return;
 
-    socket.on(
-      ACTIONS.TAB_CODE_REQUEST,
-      ({ roomId, tabId }: { roomId: string; tabId: string }) => {
-        if (!socket.rooms.has(roomId)) return;
-        const tabs = roomTabsMap.get(roomId);
-        if (!tabs) return;
-        const tab = tabs.get(tabId);
-        if (!tab) return;
-        socket.emit(ACTIONS.TAB_CODE, { tabId, code: tab.code });
-      }
-    );
+				const [roomCreator, userPerms] = await Promise.all([
+					repo.getRoomCreator(roomId),
+					repo.getUserPermission(roomId, userName),
+				]);
+				if (roomCreator !== userName && !userPerms?.canCreateTab) return;
 
-    socket.on(
-      ACTIONS.SET_CURRENT_EDITOR,
-      ({
-        roomId,
-        currenteditor,
-      }: {
-        roomId: string;
-        currenteditor: string;
-      }) => {
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
+				await repo.createTab(roomId, tabId, name);
+				await repo.refreshRoomTTL(roomId);
+				io.in(roomId).emit(ACTIONS.TAB_CREATE, { tabId, name });
+			},
+		);
 
-        const roomCreator = roomCreatorMap.get(roomId);
-        const currentEditor = getRoomCurrentEditor(roomId);
-        const isOwner = roomCreator === userName;
-        const canRelease = currenteditor === "" && currentEditor === userName;
+		// ─────────────── TAB_CLOSE ───────────────
+		socket.on(
+			ACTIONS.TAB_CLOSE,
+			async ({ roomId, tabId }: { roomId: string; tabId: string }) => {
+				const userName = await repo.getSocketUser(socket.id);
+				if (!userName) return;
 
-        if (!(isOwner || canRelease)) return;
+				const [roomCreator, userPerms] = await Promise.all([
+					repo.getRoomCreator(roomId),
+					repo.getUserPermission(roomId, userName),
+				]);
+				if (roomCreator !== userName && !userPerms?.canDeleteTab) return;
 
-        setRoomCurrentEditor(roomId, currenteditor);
-        socket.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
-      }
-    );
+				// Lua-backed: only deletes if more than one tab remains.
+				const deleted = await repo.deleteTabIfMultipleTabs(roomId, tabId);
+				if (!deleted) return;
 
-    socket.on(
-      ACTIONS.TAB_CREATE,
-      ({
-        roomId,
-        tabId,
-        name,
-      }: {
-        roomId: string;
-        tabId: string;
-        name: string;
-      }) => {
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
+				await repo.refreshRoomTTL(roomId);
+				io.in(roomId).emit(ACTIONS.TAB_CLOSE, { tabId });
+			},
+		);
 
-        const roomCreator = roomCreatorMap.get(roomId);
-        const perms = getOrCreateRoomPermissions(roomId);
-        const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        if (roomCreator !== userName && !userPerms.canCreateTab) return;
+		// ─────────────── TAB_RENAME ───────────────
+		socket.on(
+			ACTIONS.TAB_RENAME,
+			async ({
+				roomId,
+				tabId,
+				name,
+			}: {
+				roomId: string;
+				tabId: string;
+				name: string;
+			}) => {
+				const userName = await repo.getSocketUser(socket.id);
+				if (!userName) return;
 
-        const tabs = roomTabsMap.get(roomId);
-        if (tabs) tabs.set(tabId, { name, code: "" });
+				const [roomCreator, userPerms] = await Promise.all([
+					repo.getRoomCreator(roomId),
+					repo.getUserPermission(roomId, userName),
+				]);
+				if (roomCreator !== userName && !userPerms?.canRenameTab) return;
 
-        io.in(roomId).emit(ACTIONS.TAB_CREATE, { tabId, name });
-      }
-    );
+				await repo.renameTab(roomId, tabId, name);
+				await repo.refreshRoomTTL(roomId);
+				io.in(roomId).emit(ACTIONS.TAB_RENAME, { tabId, name });
+			},
+		);
 
-    socket.on(
-      ACTIONS.TAB_CLOSE,
-      ({ roomId, tabId }: { roomId: string; tabId: string }) => {
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
+		// ─────────────── TAB_SWITCH ───────────────
+		socket.on(
+			ACTIONS.TAB_SWITCH,
+			async ({ roomId, tabId }: { roomId: string; tabId: string }) => {
+				const userName = await repo.getSocketUser(socket.id);
+				if (!userName) return;
 
-        const roomCreator = roomCreatorMap.get(roomId);
-        const perms = getOrCreateRoomPermissions(roomId);
-        const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        if (roomCreator !== userName && !userPerms.canDeleteTab) return;
+				await repo.setSocketActiveTab(socket.id, tabId);
+				socket.in(roomId).emit(ACTIONS.TAB_SWITCH, {
+					username: userName,
+					tabId,
+				});
+			},
+		);
 
-        const tabs = roomTabsMap.get(roomId);
-        if (tabs && tabs.size > 1) {
-          tabs.delete(tabId);
-          io.in(roomId).emit(ACTIONS.TAB_CLOSE, { tabId });
-        }
-      }
-    );
+		// ─────────────── PERMISSIONS_UPDATE ───────────────
+		socket.on(
+			ACTIONS.PERMISSIONS_UPDATE,
+			async ({
+				roomId,
+				username,
+				permissions,
+			}: {
+				roomId: string;
+				username: string;
+				permissions: {
+					canEdit: boolean;
+					canCreateTab: boolean;
+					canDeleteTab: boolean;
+					canRenameTab: boolean;
+				};
+			}) => {
+				if (!socket.rooms.has(roomId)) return;
 
-    socket.on(
-      ACTIONS.TAB_RENAME,
-      ({
-        roomId,
-        tabId,
-        name,
-      }: {
-        roomId: string;
-        tabId: string;
-        name: string;
-      }) => {
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
+				const userName = await repo.getSocketUser(socket.id);
+				if (!userName) return;
 
-        const roomCreator = roomCreatorMap.get(roomId);
-        const perms = getOrCreateRoomPermissions(roomId);
-        const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        if (roomCreator !== userName && !userPerms.canRenameTab) return;
+				const roomCreator = await repo.getRoomCreator(roomId);
+				if (roomCreator !== userName) return;
 
-        const tabs = roomTabsMap.get(roomId);
-        if (tabs) {
-          const tab = tabs.get(tabId);
-          if (tab) tab.name = name;
-        }
+				await repo.setUserPermission(roomId, username, permissions);
+				await repo.refreshRoomTTL(roomId);
+				io.in(roomId).emit(ACTIONS.PERMISSIONS_UPDATE, {
+					username,
+					permissions,
+				});
+			},
+		);
 
-        io.in(roomId).emit(ACTIONS.TAB_RENAME, { tabId, name });
-      }
-    );
+		// ─────────────── disconnecting ───────────────
+		socket.on("disconnecting", async () => {
+			const rooms = [...socket.rooms].filter((r) => r !== socket.id);
+			const userName = await repo.getSocketUser(socket.id);
 
-    socket.on(
-      ACTIONS.TAB_SWITCH,
-      ({ roomId, tabId }: { roomId: string; tabId: string }) => {
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
+			// 1. Notify each room that this socket left.
+			for (const room of rooms) {
+				socket.in(room).emit(ACTIONS.DISCONNECTED, {
+					socketId: socket.id,
+					username: userName ?? "",
+				});
+			}
 
-        userActiveTabMap.set(socket.id, tabId);
-        socket.in(roomId).emit(ACTIONS.TAB_SWITCH, { username: userName, tabId });
-      }
-    );
+			// 2. If the leaver was the current editor of any room, clear it and
+			//    notify the rest of the room.
+			if (userName) {
+				for (const room of rooms) {
+					const currentEditor = await repo.getRoomCurrentEditor(room);
+					if (currentEditor === userName) {
+						await repo.setRoomCurrentEditor(room, "");
+						socket.in(room).emit(ACTIONS.SET_CURRENT_EDITOR, {
+							currenteditor: "",
+						});
+					}
+				}
+			}
 
-    socket.on(
-      ACTIONS.PERMISSIONS_UPDATE,
-      ({
-        roomId,
-        username,
-        permissions,
-      }: {
-        roomId: string;
-        username: string;
-        permissions: UserPermissions;
-      }) => {
-        if (!socket.rooms.has(roomId)) return;
+			// 3. Remove per-socket state and room username membership.
+			await Promise.all([
+				repo.deleteSocketState(socket.id),
+				...(userName
+					? rooms.map((r) => repo.removeRoomUsername(r, userName))
+					: []),
+			]);
 
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) return;
+			// 4. Delayed room cleanup — mirrors the original 500ms behavior so a
+			//    quick reconnect doesn't lose state. If the room is empty after
+			//    the delay, delete all room-scoped keys explicitly. The 24h TTL is
+			//    the safety net if this delete is ever missed.
+			for (const room of rooms) {
+				setTimeout(() => {
+					void (async () => {
+						if (!io.sockets.adapter.rooms.get(room)) {
+							await repo.deleteRoomState(room);
+						}
+					})();
+				}, ROOM_CLEANUP_DELAY_MS);
+			}
+		});
+	});
 
-        const roomCreator = roomCreatorMap.get(roomId);
-        if (roomCreator !== userName) return;
-
-        const perms = getOrCreateRoomPermissions(roomId);
-        perms.set(username, permissions);
-        io.in(roomId).emit(ACTIONS.PERMISSIONS_UPDATE, { username, permissions });
-      }
-    );
-
-    socket.on("disconnecting", () => {
-      const rooms = [...socket.rooms].filter((r) => r !== socket.id);
-
-      for (const room of rooms) {
-        socket.in(room).emit(ACTIONS.DISCONNECTED, {
-          socketId: socket.id,
-          username: userSocketMap.get(socket.id),
-        });
-
-        setTimeout(() => {
-          if (!io.sockets.adapter.rooms.get(room)) {
-            roomCreatorMap.delete(room);
-            roomTabsMap.delete(room);
-            roomPermissionsMap.delete(room);
-            roomCurrentEditorMap.delete(room);
-          }
-        }, ROOM_CLEANUP_DELAY_MS);
-      }
-
-      const userName = userSocketMap.get(socket.id);
-      if (userName) {
-        for (const room of rooms) {
-          if (getRoomCurrentEditor(room) === userName) {
-            setRoomCurrentEditor(room, "");
-            socket.in(room).emit(ACTIONS.SET_CURRENT_EDITOR, {
-              currenteditor: "",
-            });
-          }
-        }
-      }
-
-      userActiveTabMap.delete(socket.id);
-      userSocketMap.delete(socket.id);
-    });
-  });
-
-  return io;
+	return io;
 }
