@@ -33,6 +33,6 @@
     "noImplicitReturns": true,
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["src/**/*", "server.ts", "action.ts", "scripts/**/*"],
+  "include": ["src/**/*", "scripts/**/*"],
   "exclude": ["node_modules", "dist", "build", "node_modules/bun-types/**/*"]
 }

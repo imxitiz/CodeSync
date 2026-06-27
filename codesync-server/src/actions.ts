@@ -15,4 +15,15 @@ export const ACTIONS = {
   EDIT_REVOKED: "edit-revoked",
   SET_CURRENT_EDITOR: "set_current_editor",
   DUPLICATE_USER: "duplicate-user",
-};
+  TAB_CREATE: "tab-create",
+  TAB_CLOSE: "tab-close",
+  TAB_RENAME: "tab-rename",
+  TAB_SWITCH: "tab-switch",
+  TAB_SYNC: "tab-sync",
+  TAB_CODE_REQUEST: "tab-code-request",
+  TAB_CODE: "tab-code",
+  PERMISSIONS_UPDATE: "permissions-update",
+  DESTROY_ROOM: "destroy-room",
+} as const;
+
+export type ACTIONS_TYPE = (typeof ACTIONS)[keyof typeof ACTIONS];

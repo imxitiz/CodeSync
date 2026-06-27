@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/theme/ThemeProvider";
 export type AppShellProps = {
   children: ReactNode;
   className?: string;
+  noScroll?: boolean;
 };
 
 /**
@@ -15,7 +16,11 @@ export type AppShellProps = {
  * - Skip-to-content link for a11y
  * - Responsive container
  */
-export default function AppShell({ children, className }: AppShellProps) {
+export default function AppShell({
+  children,
+  className,
+  noScroll,
+}: AppShellProps) {
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
 
   return (
@@ -62,19 +67,19 @@ export default function AppShell({ children, className }: AppShellProps) {
                 <div
                   className={cn(
                     "h-0.5 w-5 bg-foreground transition-all duration-300",
-                    isMenuOpen && "translate-y-1.5 rotate-45"
+                    isMenuOpen && "translate-y-1.5 rotate-45",
                   )}
                 />
                 <div
                   className={cn(
                     "mt-1 h-0.5 w-5 bg-foreground transition-all duration-300",
-                    isMenuOpen && "opacity-0"
+                    isMenuOpen && "opacity-0",
                   )}
                 />
                 <div
                   className={cn(
                     "mt-1 h-0.5 w-5 bg-foreground transition-all duration-300",
-                    isMenuOpen && "-rotate-45 -translate-y-1.5"
+                    isMenuOpen && "-rotate-45 -translate-y-1.5",
                   )}
                 />
               </button>
@@ -99,7 +104,12 @@ export default function AppShell({ children, className }: AppShellProps) {
       </header>
 
       <main
-        className={cn("h-[calc(100svh-56px)] overflow-auto", className)}
+        className={cn(
+          noScroll
+            ? "h-screen overflow-hidden"
+            : "h-[calc(100svh-56px)] overflow-auto",
+          className,
+        )}
         id="content"
       >
         {children}
@@ -116,7 +126,10 @@ export default function AppShell({ children, className }: AppShellProps) {
             },
           },
           error: {
-            style: { background: "oklch(0.577 0.245 27.325)", color: "white" },
+            style: {
+              background: "var(--destructive)",
+              color: "var(--destructive-foreground)",
+            },
           },
         }}
       />

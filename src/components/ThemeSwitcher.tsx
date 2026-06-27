@@ -141,7 +141,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
         setCurrentMode("dark");
       }
     },
-    [isDragging, availableModes, setCurrentMode]
+    [isDragging, availableModes, setCurrentMode],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -178,7 +178,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
         setCurrentMode("dark");
       }
     },
-    [isDragging, availableModes, setCurrentMode]
+    [isDragging, availableModes, setCurrentMode],
   );
 
   const handleTouchEnd = useCallback(() => {
@@ -296,7 +296,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
 
     const observer = new MutationObserver(() => {
       setSiteMode(
-        document.documentElement.classList.contains("dark") ? "dark" : "light"
+        document.documentElement.classList.contains("dark") ? "dark" : "light",
       );
     });
     observer.observe(document.documentElement, {
@@ -344,7 +344,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
   }, [themes, currentMode]);
 
   const onFilePick = async (
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement>,
   ): Promise<void> => {
     const file = e.target.files?.[0];
     if (!file) {
@@ -358,7 +358,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
     try {
       const raw = text.trim();
       const customCount = Object.keys(themes).filter(
-        (k) => !presetThemes[k]
+        (k) => !presetThemes[k],
       ).length;
 
       if (
@@ -403,7 +403,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
 
               if (customCount >= 10) {
                 toast.error(
-                  "Theme limit reached (max 10 custom themes). Delete some before adding new ones."
+                  "Theme limit reached (max 10 custom themes). Delete some before adding new ones.",
                 );
                 return;
               }
@@ -417,14 +417,14 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
               }
             } else {
               throw new Error(
-                "Invalid theme format - missing cssVars.light or cssVars.dark"
+                "Invalid theme format - missing cssVars.light or cssVars.dark",
               );
             }
           })
           .catch((err) => {
             if (err.message.includes("CORS") || err.message.includes("fetch")) {
               toast.error(
-                `CORS error: Open ${raw} in a new tab, copy the JSON content, and paste it here instead.`
+                `CORS error: Open ${raw} in a new tab, copy the JSON content, and paste it here instead.`,
               );
             } else {
               toast.error(`Failed to fetch theme: ${err.message}`);
@@ -442,10 +442,9 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
 
       if (looksCss) {
         const baseName =
-          // biome-ignore lint/suspicious/noAlert: Don't wanna overcomplicate with custom modal
           prompt(
             "Name your theme base (used for light/dark pair):",
-            "custom"
+            "custom",
           ) || "custom";
         const theme = createThemeFromCss(baseName, raw);
         if (!theme.modes || Object.keys(theme.modes).length === 0) {
@@ -455,7 +454,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
         const key = slugify(baseName);
         if (customCount >= 10) {
           toast.error(
-            "Theme limit reached (max 10 custom themes). Delete some before adding new ones."
+            "Theme limit reached (max 10 custom themes). Delete some before adding new ones.",
           );
           return;
         }
@@ -505,7 +504,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
 
         if (customCount >= 10) {
           toast.error(
-            "Theme limit reached (max 10 custom themes). Delete some before adding new ones."
+            "Theme limit reached (max 10 custom themes). Delete some before adding new ones.",
           );
           return;
         }
@@ -516,12 +515,12 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
         const { name, mode, tokens } = parsed;
         if (!(name && tokens) || (mode !== "light" && mode !== "dark")) {
           throw new Error(
-            "Theme must include: name (string), mode ('light'|'dark'), tokens (object)"
+            "Theme must include: name (string), mode ('light'|'dark'), tokens (object)",
           );
         }
         if (customCount >= 10) {
           toast.error(
-            "Theme limit reached (max 10 custom themes). Delete some before adding new ones."
+            "Theme limit reached (max 10 custom themes). Delete some before adding new ones.",
           );
           return;
         }
@@ -530,7 +529,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
         setThemeKey(key);
       } else {
         throw new Error(
-          "Unsupported JSON format. Provide tweakcn registry format or {name,mode,tokens}."
+          "Unsupported JSON format. Provide tweakcn registry format or {name,mode,tokens}.",
         );
       }
 
@@ -549,7 +548,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
     <div
       className={cn(
         "relative flex min-w-0 shrink-0 items-center gap-2",
-        className
+        className,
       )}
     >
       <Select
@@ -581,7 +580,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
                         "truncate",
                         (themeKey || "system-auto") === key
                           ? "font-semibold text-foreground"
-                          : ""
+                          : "",
                       )}
                     >
                       {name} ({mode})
@@ -630,7 +629,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
                 isDragging && "scale-110 shadow-xl",
                 currentMode === "light" && "left-0",
                 currentMode === "auto" && "left-[28px]",
-                currentMode === "dark" && "left-[53px]"
+                currentMode === "dark" && "left-[53px]",
               )}
             >
               {currentMode === "light" && (
@@ -755,7 +754,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
                     "rounded border px-2 py-1",
                     previewMode === "dark"
                       ? "bg-primary text-primary-foreground"
-                      : "hover:bg-accent"
+                      : "hover:bg-accent",
                   )}
                   onClick={() => setPreviewMode("dark")}
                   type="button"
@@ -767,7 +766,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
                     "rounded border px-2 py-1",
                     previewMode === "light"
                       ? "bg-primary text-primary-foreground"
-                      : "hover:bg-accent"
+                      : "hover:bg-accent",
                   )}
                   onClick={() => setPreviewMode("light")}
                   type="button"
@@ -775,7 +774,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
                   Light
                 </button>
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Tip: When importing CSS from tweakcn, we generate both Light and
                 Dark themes. The preview uses your selection above.
               </p>

@@ -1,6 +1,6 @@
+import { Clock, Info, Trash2, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { FiClock, FiTrash2, FiX } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import AppShell from "@/components/AppShell";
@@ -14,20 +14,47 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import {
+  BACKEND_API_URL,
+  clearCustomBackendUrl,
+  getBackendUrl,
+  hasCustomBackendUrl,
+  isValidBackendOrigin,
+  setCustomBackendUrl,
+} from "@/utils/constants";
 import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
 import {
   clearRoomHistory,
   getRecentRooms,
+  isRoomHistoryEnabled,
   type RecentRoom,
   removeRoom,
+  setRoomHistoryEnabled,
 } from "@/utils/roomHistory";
+
+const advancedSettingsId = "advanced-settings-panel";
+const backendHelpText = [
+  "Enter only the server origin (e.g., http://localhost:3000) with no path, query, or credentials.",
+  "Requests go to /api and Socket.IO on this origin, which must allow CORS.",
+].join(" ");
 
 export default function HomePageModern() {
   const [roomId, setRoomId] = useState<string>("");
   const [userName, setUserName] = useState<string>("");
   const [isCheckingServer, setIsCheckingServer] = useState<boolean>(false);
   const [serverStatusMessage, setServerStatusMessage] = useState<string>("");
+  const [isCustomBackend, setIsCustomBackend] = useState<boolean>(false);
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+  const [customBackendInput, setCustomBackendInput] = useState<string>("");
   const [recentRooms, setRecentRooms] = useState<RecentRoom[]>([]);
+  const [isHistoryEnabled, setIsHistoryEnabled] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,8 +65,19 @@ export default function HomePageModern() {
       setRoomId(id);
     }
     wakeUpServer();
-    setRecentRooms(getRecentRooms());
+    const historyEnabled = isRoomHistoryEnabled();
+    setIsHistoryEnabled(historyEnabled);
+    setRecentRooms(historyEnabled ? getRecentRooms() : []);
   }, [location.state]);
+
+  useEffect(() => {
+    const hasCustom = hasCustomBackendUrl();
+    if (hasCustom) {
+      setIsCustomBackend(true);
+      setShowAdvanced(true);
+      setCustomBackendInput(getBackendUrl());
+    }
+  }, []);
 
   const formatTimeAgo = (timestamp: number): string => {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -74,6 +112,15 @@ export default function HomePageModern() {
     toast.success("Room history cleared");
   };
 
+  const handleHistoryPreferenceChange = (enabled: boolean) => {
+    setRoomHistoryEnabled(enabled);
+    setIsHistoryEnabled(enabled);
+    setRecentRooms(enabled ? getRecentRooms() : []);
+    toast.success(
+      enabled ? "Room history enabled" : "Room history disabled and cleared",
+    );
+  };
+
   const handleHealthCheck = (attempt: number, maxRetries: number) => {
     setServerStatusMessage(`Waking up server... (${attempt}/${maxRetries})`);
   };
@@ -94,6 +141,33 @@ export default function HomePageModern() {
     if (e.target.value.length <= 256) {
       setRoomId(e.target.value);
     }
+  };
+
+  const saveCustomBackend = () => {
+    const trimmed = customBackendInput.trim();
+    if (!trimmed) {
+      toast.error("Please enter a backend URL");
+      return;
+    }
+    if (!isValidBackendOrigin(trimmed)) {
+      toast.error(
+        "Invalid URL. Use an http(s) origin like http://localhost:3000 with no path, query, or credentials.",
+      );
+      return;
+    }
+    setCustomBackendUrl(trimmed);
+    setCustomBackendInput(getBackendUrl());
+    setIsCustomBackend(true);
+    toast.success("Custom backend URL saved");
+    wakeUpServer();
+  };
+
+  const resetBackendUrl = () => {
+    clearCustomBackendUrl();
+    setCustomBackendInput("");
+    setIsCustomBackend(false);
+    toast.success("Reset to default backend");
+    wakeUpServer();
   };
 
   const pasteFromClipboard = async () => {
@@ -277,6 +351,83 @@ export default function HomePageModern() {
                     </Button>
                   </div>
                 </div>
+
+                <div className="space-y-2 border-t pt-3">
+                  <button
+                    aria-controls={advancedSettingsId}
+                    aria-expanded={showAdvanced}
+                    className="flex w-full cursor-pointer items-center gap-1 font-medium text-muted-foreground text-xs hover:text-foreground"
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    type="button"
+                  >
+                    <span
+                      className={cn(
+                        "inline-block transition-transform",
+                        showAdvanced && "rotate-90",
+                      )}
+                    >
+                      ▶
+                    </span>
+                    Advanced Settings
+                    {isCustomBackend && (
+                      <span className="ml-1 rounded bg-accent px-1.5 py-0.5 text-[10px]">
+                        custom
+                      </span>
+                    )}
+                  </button>
+                  {showAdvanced && (
+                    <div className="space-y-2" id={advancedSettingsId}>
+                      <label
+                        className="font-medium text-muted-foreground text-xs"
+                        htmlFor="custom-backend"
+                      >
+                        Backend URL
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          aria-label="Custom backend URL"
+                          className="flex-1 text-xs"
+                          id="custom-backend"
+                          onChange={(e) =>
+                            setCustomBackendInput(e.target.value)
+                          }
+                          placeholder={BACKEND_API_URL}
+                          spellCheck="false"
+                          value={customBackendInput}
+                        />
+                        <Button
+                          className="cursor-pointer"
+                          disabled={!customBackendInput.trim()}
+                          onClick={saveCustomBackend}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          Save
+                        </Button>
+                      </div>
+                      {isCustomBackend && (
+                        <div className="flex items-center justify-between">
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            Using: {getBackendUrl()}
+                          </p>
+                          <Button
+                            className="cursor-pointer"
+                            onClick={resetBackendUrl}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            Reset
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-[11px] text-muted-foreground">
+                        {backendHelpText}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </CardContent>
               <CardFooter className="flex flex-col items-stretch gap-2">
                 <Button
@@ -303,63 +454,84 @@ export default function HomePageModern() {
             </Card>
 
             {/* Recent Rooms — stored locally on this device only */}
-            {recentRooms.length > 0 && (
-              <div className="mx-auto mt-4 w-full max-w-md">
-                <div className="flex items-center justify-between px-1">
-                  <h3 className="flex items-center gap-1.5 font-medium text-muted-foreground text-xs">
-                    <FiClock className="size-3" />
-                    Recent rooms
-                    <span className="text-muted-foreground/60">
-                      (this device only)
-                    </span>
-                  </h3>
-                  <Button
-                    className="cursor-pointer"
-                    onClick={handleClearHistory}
-                    size="sm"
-                    title="Clear room history"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <FiTrash2 className="size-3" />
-                    <span className="sr-only sm:not-sr-only">Clear</span>
-                  </Button>
-                </div>
-                <ul className="mt-1.5 space-y-1">
-                  {recentRooms.map((room) => (
-                    <li key={room.roomId}>
-                      <div
-                        className="flex w-full cursor-pointer items-center gap-2 rounded-md border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
-                        onClick={() => handleSelectRecentRoom(room)}
-                        title="Click to fill room details"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <span className="block truncate font-mono text-xs">
-                            {room.roomId.length > 20
-                              ? `${room.roomId.slice(0, 8)}…${room.roomId.slice(-8)}`
-                              : room.roomId}
-                          </span>
-                          <span className="text-muted-foreground text-xs">
-                            as {room.userName} · {formatTimeAgo(room.joinedAt)}
-                          </span>
-                        </div>
-                        <button
-                          aria-label={`Remove ${room.roomId} from history`}
-                          className="shrink-0 cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/20 hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveRecentRoom(room.roomId);
-                          }}
-                          type="button"
+            <div className="mx-auto mt-3 flex w-full max-w-md items-center gap-2 rounded-lg border bg-card/80 px-3 py-2 text-xs shadow-sm">
+              <Clock className="size-3 shrink-0 text-muted-foreground" />
+              <span className="shrink-0 font-medium text-muted-foreground">
+                Recent rooms
+              </span>
+              <Tooltip>
+                <TooltipTrigger
+                  className="inline-flex shrink-0 cursor-help text-muted-foreground transition-colors hover:text-foreground"
+                  type="button"
+                >
+                  <Info className="size-3" />
+                  <span className="sr-only">Room history privacy info</span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="max-w-xs text-balance">
+                    Stored on this device only — never sent to the server.
+                    Enable only on devices you trust.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <Switch
+                aria-label="Save recent rooms locally"
+                checked={isHistoryEnabled}
+                className="shrink-0"
+                onCheckedChange={handleHistoryPreferenceChange}
+                size="sm"
+              />
+              <div className="ml-auto flex min-w-0 flex-1 items-center gap-1.5">
+                {isHistoryEnabled && recentRooms.length > 0 && (
+                  <>
+                    {/* biome-ignore lint/a11y/useSemanticElements: horizontal scroll container uses divs with ARIA roles */}
+                    <div
+                      aria-label="Recent rooms list"
+                      className="scrollbar-none flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
+                      role="list"
+                    >
+                      {recentRooms.map((room) => (
+                        /* biome-ignore lint/a11y/useSemanticElements: horizontal scroll container uses divs with ARIA roles */
+                        <div
+                          className="group relative inline-flex shrink-0 items-center gap-1 rounded-full border bg-background/70 px-2 py-0.5 transition-colors hover:bg-accent"
+                          key={room.roomId}
+                          role="listitem"
                         >
-                          <FiX className="size-3.5" />
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                          <button
+                            className="cursor-pointer truncate font-mono text-[11px] text-foreground"
+                            onClick={() => handleSelectRecentRoom(room)}
+                            title={`Join as ${room.userName} · ${formatTimeAgo(room.joinedAt)}`}
+                            type="button"
+                          >
+                            {room.roomId.length > 18
+                              ? `${room.roomId.slice(0, 7)}…${room.roomId.slice(-5)}`
+                              : room.roomId}
+                          </button>
+                          <button
+                            aria-label="Remove room from history"
+                            className="cursor-pointer rounded-full text-muted-foreground opacity-60 transition-opacity hover:text-destructive group-hover:opacity-100"
+                            onClick={() => handleRemoveRecentRoom(room.roomId)}
+                            type="button"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      className="h-6 shrink-0 cursor-pointer px-1.5"
+                      onClick={handleClearHistory}
+                      size="sm"
+                      title="Clear room history"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </section>
 

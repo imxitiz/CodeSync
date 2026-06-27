@@ -64,7 +64,7 @@ async function fetchTheme(url: string): Promise<ThemeData | null> {
   } catch (error) {
     console.error(
       `Failed to fetch ${url}:`,
-      error instanceof Error ? error.message : String(error)
+      error instanceof Error ? error.message : String(error),
     );
     return null;
   }
@@ -133,12 +133,12 @@ async function main(): Promise<void> {
 
   if (urls.length === 0) {
     console.log(
-      "Usage: node scripts/download-themes.js [theme-names... | theme-urls...]"
+      "Usage: node scripts/download-themes.js [theme-names... | theme-urls...]",
     );
     console.log("Examples:");
     console.log("  node scripts/download-themes.js twitter darkmatter");
     console.log(
-      "  node scripts/download-themes.js https://tweakcn.com/r/themes/twitter.json https://example.com/my-theme.json"
+      "  node scripts/download-themes.js https://tweakcn.com/r/themes/twitter.json https://example.com/my-theme.json",
     );
     process.exit(1);
   }
@@ -156,7 +156,7 @@ async function main(): Promise<void> {
       if (!themeNameRegex.test(input)) {
         console.error(`❌ Invalid theme name: ${input}`);
         console.error(
-          "Theme names may only contain letters, numbers and hyphens, or provide a full URL starting with https://"
+          "Theme names may only contain letters, numbers and hyphens, or provide a full URL starting with https://",
         );
         continue;
       }

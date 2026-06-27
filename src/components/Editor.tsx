@@ -2,25 +2,22 @@ import { javascript } from "@codemirror/lang-javascript";
 import { EditorView } from "@codemirror/view";
 import { dracula } from "@uiw/codemirror-theme-dracula";
 import CodeMirror from "@uiw/react-codemirror";
-import { type RefObject, useEffect, useMemo, useState } from "react";
-import { ACTIONS } from "../../action";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import type { EditorSocketRef } from "@/pages/EditorPageModern/types";
+import { ACTIONS } from "../utils/constants";
 
-type CodeChangeData = {
-  roomId: string;
+type IncomingCodeChange = {
+  tabId?: string;
   code: string;
-  currenteditor: string;
-};
-
-type Socket = {
-  emit: (event: string, data: CodeChangeData) => void;
-  on: (event: string, callback: (data: CodeChangeData) => void) => void;
-  off: (event: string, callback: (data: CodeChangeData) => void) => void;
+  currenteditor?: string;
 };
 
 export type EditorProps = {
-  socketRef: RefObject<Socket>;
+  socketRef: EditorSocketRef;
   roomId: string;
-  onCodeChange: (code: string) => void;
+  activeTabId: string;
+  initialCode: string;
+  onCodeChange: (code: string, tabId: string) => void;
   editable: boolean;
   currentEditor: string;
   setCurrentEditor: (editor: string) => void;
@@ -29,11 +26,11 @@ export type EditorProps = {
   fontSize?: number;
 };
 
-// Added "wrap" prop to control line wrapping (true = wrap at viewport width)
-// Added "darkMode" prop to switch editor theme; light uses CSS variables for colors
 const Editor: React.FC<EditorProps> = ({
   socketRef,
   roomId,
+  activeTabId,
+  initialCode,
   onCodeChange,
   editable,
   currentEditor,
@@ -42,9 +39,24 @@ const Editor: React.FC<EditorProps> = ({
   darkMode = true,
   fontSize = 16,
 }) => {
-  const [code, setCode] = useState<string>("");
+  const [code, setCode] = useState<string>(initialCode);
+  const activeTabIdRef = useRef(activeTabId);
+  const codeRef = useRef(initialCode);
+  const onCodeChangeRef = useRef(onCodeChange);
 
-  // Minimal light theme that follows CSS variables (no external theme needed)
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
+
+  useEffect(() => {
+    onCodeChangeRef.current = onCodeChange;
+  }, [onCodeChange]);
+
+  useEffect(() => {
+    codeRef.current = initialCode;
+    setCode(initialCode);
+  }, [initialCode]);
+
   const lightTheme = useMemo(
     () =>
       EditorView.theme(
@@ -75,20 +87,19 @@ const Editor: React.FC<EditorProps> = ({
               "color-mix(in oklch, var(--primary) 24%, transparent)",
           },
         },
-        { dark: false }
+        { dark: false },
       ),
-    []
+    [],
   );
 
   const themeExt = darkMode ? dracula : lightTheme;
 
-  // Extension that sets font-size and triggers CodeMirror re-measure on change
   const fontSizeTheme = useMemo(
     () =>
       EditorView.theme({
         "&": { fontSize: `${fontSize}px` },
       }),
-    [fontSize]
+    [fontSize],
   );
 
   const extensions = useMemo(() => {
@@ -100,47 +111,71 @@ const Editor: React.FC<EditorProps> = ({
   }, [wrap, themeExt, fontSizeTheme]);
 
   const handleChange = (value: string): void => {
-    if (!editable) {
+    if (!(editable && socketRef.current)) {
       return;
     }
 
-    if (editable && socketRef.current) {
-      setCode(value);
-      onCodeChange(value);
-      socketRef.current.emit(ACTIONS.CODE_CHANGE, {
-        roomId,
-        code: value,
-        currenteditor: currentEditor,
-      });
-    }
+    codeRef.current = value;
+    setCode(value);
+    onCodeChange(value, activeTabId);
+    socketRef.current.emit(ACTIONS.CODE_CHANGE, {
+      roomId,
+      tabId: activeTabId,
+      code: value,
+      currenteditor: currentEditor,
+    });
   };
 
-  // @ts-expect-error
   useEffect(() => {
-    if (socketRef.current) {
-      const handleCodeChange = ({
-        code: newCode,
-        currenteditor,
-      }: {
-        code: string;
-        currenteditor: string;
-      }) => {
-        if (newCode !== null && newCode !== code) {
-          setCode(newCode);
-          onCodeChange(newCode);
-        }
-        setCurrentEditor(currenteditor);
-      };
-
-      socketRef.current.on(ACTIONS.CODE_CHANGE, handleCodeChange);
-
-      return () => {
-        if (socketRef.current) {
-          socketRef.current.off(ACTIONS.CODE_CHANGE, handleCodeChange);
-        }
-      };
+    const socket = socketRef.current;
+    if (!socket) {
+      return;
     }
-  }, [code, onCodeChange, socketRef, setCurrentEditor]);
+
+    const handleCodeChange = ({
+      tabId: incomingTabId,
+      code: newCode,
+      currenteditor,
+    }: IncomingCodeChange) => {
+      const targetTabId = incomingTabId || activeTabIdRef.current;
+      onCodeChangeRef.current(newCode, targetTabId);
+      if (
+        targetTabId === activeTabIdRef.current &&
+        newCode !== codeRef.current
+      ) {
+        codeRef.current = newCode;
+        setCode(newCode);
+      }
+      if (currenteditor !== undefined) {
+        setCurrentEditor(currenteditor);
+      }
+    };
+
+    const handleTabCode = ({
+      tabId: incomingTabId,
+      code: newCode,
+    }: IncomingCodeChange) => {
+      if (
+        incomingTabId === activeTabIdRef.current &&
+        newCode !== codeRef.current
+      ) {
+        codeRef.current = newCode;
+        setCode(newCode);
+        onCodeChangeRef.current(
+          newCode,
+          incomingTabId ?? activeTabIdRef.current,
+        );
+      }
+    };
+
+    socket.on(ACTIONS.CODE_CHANGE, handleCodeChange);
+    socket.on(ACTIONS.TAB_CODE, handleTabCode);
+
+    return () => {
+      socket.off(ACTIONS.CODE_CHANGE, handleCodeChange);
+      socket.off(ACTIONS.TAB_CODE, handleTabCode);
+    };
+  }, [socketRef, setCurrentEditor]);
 
   return (
     <CodeMirror
@@ -153,7 +188,6 @@ const Editor: React.FC<EditorProps> = ({
       extensions={extensions}
       height="100%"
       onChange={handleChange}
-      // theme prop left undefined for light; dark handled by dracula in extensions
       readOnly={!editable}
       style={{ height: "100%", width: "100%", minHeight: 0, minWidth: 0 }}
       theme={darkMode ? dracula : "light"}
@@ -163,4 +197,4 @@ const Editor: React.FC<EditorProps> = ({
   );
 };
 
-export default Editor;
+export default memo(Editor);
