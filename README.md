@@ -154,3 +154,7 @@ The application includes automatic server wake-up functionality:
 ## License
 
 MIT
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and PR guidelines.

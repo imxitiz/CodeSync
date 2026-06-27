@@ -1,62 +1,29 @@
-import {
-  type RefObject,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import Avatar from "react-avatar";
+import { Plus, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { FaCrown } from "react-icons/fa";
-import { FaRegCopy } from "react-icons/fa6";
-import { FiEdit2, FiEye, FiLogOut, FiPlus, FiUsers, FiX } from "react-icons/fi";
-import { MdTextDecrease, MdTextIncrease } from "react-icons/md";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import AppShell from "@/components/AppShell";
-import ClientModern from "@/components/ClientModern";
 import EditorWrapper from "@/components/EditorWrapper";
-import { Button } from "@/components/ui/button";
+import { TopBar } from "@/components/TopBar";
 import { ACTIONS } from "@/utils/constants";
-import { initSocket } from "@/utils/socket";
-
-type Client = {
-  socketId: string;
-  username: string;
-};
-
-type Tab = {
-  id: string;
-  name: string;
-  code: string;
-};
-
-type UserPermissions = {
-  canEdit: boolean;
-  canCreateTab: boolean;
-  canDeleteTab: boolean;
-  canRenameTab: boolean;
-};
-
-type Socket = {
-  // biome-ignore lint/suspicious/noExplicitAny: Socket data can be any shape for real-time events
-  emit: (event: string, data: any) => void;
-  // biome-ignore lint/suspicious/noExplicitAny: Socket callbacks receive any data structure
-  on: (event: string, callback: (data: any) => void) => void;
-  // biome-ignore lint/suspicious/noExplicitAny: Socket callbacks receive any data structure
-  off: (event: string, callback: (data: any) => void) => void;
-  disconnect: () => void;
-};
-
-const DEFAULT_TAB_ID = "tab-main";
-
-const DEFAULT_PERMISSIONS: UserPermissions = {
-  canEdit: false,
-  canCreateTab: false,
-  canDeleteTab: false,
-  canRenameTab: false,
-};
+import EmptyState from "./EmptyState";
+import { getFileIcon } from "./fileIcons";
+import ParticipantsDrawer from "./ParticipantsDrawer";
+import {
+  DEFAULT_PERMISSIONS,
+  DEFAULT_TAB_ID,
+  DEFAULT_TAB_NAME,
+  withEditorAccess,
+} from "./permissions";
+import ShortcutsPanel from "./ShortcutsPanel";
+import type {
+  EditorSocketRef,
+  EditorTab,
+  FollowMode,
+  UserPermissions,
+} from "./types";
+import { useEditorRealtime } from "./useEditorRealtime";
 
 /**
  * EditorPageModern (Top-Bar + Tab Bar + Editor canvas)
@@ -66,33 +33,26 @@ const DEFAULT_PERMISSIONS: UserPermissions = {
  * - No page scroll; only internal areas can scroll
  */
 export default function EditorPageModern() {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [currentEditor, setCurrentEditor] = useState<string>("");
-  const currentEditorRef = useRef<string>(currentEditor);
-  const [roomCreator, setRoomCreator] = useState<string | null>(null);
-  const socketRef = useRef<Socket | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const userName = location.state?.userName || "User";
 
   // Multi-tab state
-  const [tabs, setTabs] = useState<Tab[]>([
-    { id: DEFAULT_TAB_ID, name: "main.js", code: "" },
+  const [tabs, setTabs] = useState<EditorTab[]>([
+    { id: DEFAULT_TAB_ID, name: DEFAULT_TAB_NAME, code: "" },
   ]);
   const [activeTabId, setActiveTabId] = useState<string>(DEFAULT_TAB_ID);
-  const tabsRef = useRef<Tab[]>(tabs);
+  const tabsRef = useRef<EditorTab[]>(tabs);
 
   // Track which tab each user is on: username -> tabId
   const [userActiveTabs, setUserActiveTabs] = useState<Record<string, string>>(
-    {}
+    {},
   );
 
   // Follow mode: username being followed (null = not following)
   const [followingUser, setFollowingUser] = useState<string | null>(null);
-  const [followMode, setFollowMode] = useState<"auto" | "manual" | "off">(
-    "auto"
-  );
+  const [followMode, setFollowMode] = useState<FollowMode>("auto");
 
   // Per-user permissions: username -> permissions
   const [permissions, setPermissions] = useState<
@@ -121,43 +81,70 @@ export default function EditorPageModern() {
   }, []);
 
   // UI state
-  const [serverStatus, setServerStatus] = useState<
-    "connecting" | "connected" | "disconnected"
-  >("connecting");
-  const [connectionMessage, setConnectionMessage] = useState<string>(
-    "Connecting to server..."
-  );
   const [fontSize, setFontSize] = useState(16);
   const [wrapLines, setWrapLines] = useState<boolean>(
-    () => typeof window !== "undefined" && window.innerWidth < 640
+    () => typeof window !== "undefined" && window.innerWidth < 640,
   );
   const [showParticipants, setShowParticipants] = useState<boolean>(false);
+  const [showShortcuts, setShowShortcuts] = useState<boolean>(false);
   const [zen, setZen] = useState<boolean>(false);
+  const [copied, setCopied] = useState<boolean>(false);
+
+  const handleCodeChange = useCallback(
+    (code: string, tabId?: string) => {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === (tabId ?? activeTabId) ? { ...t, code } : t)),
+      );
+    },
+    [activeTabId],
+  );
+
+  const {
+    clients,
+    connectionMessage,
+    currentEditor,
+    emitCurrentEditor,
+    emitPermissionsUpdate,
+    emitTabClose,
+    emitTabCreate,
+    emitTabRename,
+    emitTabSwitch,
+    roomCreator,
+    serverStatus,
+    setCurrentEditor,
+    socketRef,
+  } = useEditorRealtime({
+    roomId: id,
+    userName,
+    navigate,
+    tabsRef,
+    handleCodeChange,
+    setTabs,
+    setActiveTabId,
+    setUserActiveTabs,
+    setFollowingUser,
+    setPermissions,
+  });
 
   // Derived
   const isOwner = userName === roomCreator;
   const myPermissions: UserPermissions =
     permissions[userName] || DEFAULT_PERMISSIONS;
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
-  const canEditCode =
-    isOwner || (userName === currentEditor && myPermissions.canEdit);
+  const canEditCode = isOwner || myPermissions.canEdit;
 
   const applyActiveTab = useCallback(
     (tabId: string) => {
       setActiveTabId(tabId);
       setUserActiveTabs((prev) => ({ ...prev, [userName]: tabId }));
     },
-    [userName]
+    [userName],
   );
 
   // Keep refs in sync
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
-
-  useEffect(() => {
-    currentEditorRef.current = currentEditor;
-  }, [currentEditor]);
 
   const sortedClients = useMemo(
     () =>
@@ -170,21 +157,19 @@ export default function EditorPageModern() {
         }
         return 0;
       }),
-    [clients, roomCreator]
+    [clients, roomCreator],
   );
-
-  const compactAvatars = useMemo(() => {
-    const max = 5;
-    const slice = sortedClients.slice(0, max);
-    const extra = Math.max(0, sortedClients.length - slice.length);
-    return { slice, extra };
-  }, [sortedClients]);
 
   const autoFollowTarget = useMemo(() => {
     if (!roomCreator) {
       return null;
     }
-    const ownerActive = clients.some((client) => client.username === roomCreator);
+    if (currentEditor === userName) {
+      return null;
+    }
+    const ownerActive = clients.some(
+      (client) => client.username === roomCreator,
+    );
     if (ownerActive && roomCreator !== userName) {
       return roomCreator;
     }
@@ -200,25 +185,23 @@ export default function EditorPageModern() {
       const t = tabs.find((tab) => tab.id === tabId);
       return t ? t.name : "unknown";
     },
-    [tabs]
+    [tabs],
   );
 
   // Handlers
-  const handleErrors = () => {
-    setServerStatus("disconnected");
-    setConnectionMessage("Connection lost - Reconnecting...");
-  };
-
-  const copyRoomId = async () => {
+  const copyInviteLink = async () => {
     try {
-      await navigator.clipboard.writeText(id || "");
-      toast.success("Room Id copied to clipboard");
+      const link = `${window.location.origin}/editor/${id}`;
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      toast.success("Invite link copied!");
+      setTimeout(() => setCopied(false), 1600);
     } catch {
-      toast.error("Failed to copy Room Id");
+      toast.error("Failed to copy invite link");
     }
   };
 
-  const copyCode = async (): Promise<string | undefined> => {
+  const copyCode = async () => {
     try {
       if (!activeTab?.code) {
         toast.error("No code to copy");
@@ -226,14 +209,22 @@ export default function EditorPageModern() {
       }
       await navigator.clipboard.writeText(activeTab.code);
       toast.success("Code copied to clipboard");
-      return activeTab.code;
     } catch {
       toast.error("Failed to copy code , please try again");
-      return;
     }
   };
 
   const leaveRoom = () => {
+    if (isOwner) {
+      if (
+        !window.confirm(
+          "You are the room owner. Leaving will destroy the room. Are you sure?",
+        )
+      ) {
+        return;
+      }
+      socketRef.current?.emit(ACTIONS.DESTROY_ROOM, { roomId: id });
+    }
     if (sessionStorage.getItem("admin") === roomCreator) {
       sessionStorage.removeItem("admin");
     }
@@ -247,38 +238,40 @@ export default function EditorPageModern() {
   const toggleEditable = (): void => {
     if (currentEditor === userName) {
       setCurrentEditor("");
-      toast.success("Editor is now read-only");
-      if (socketRef.current) {
-        socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-          roomId: id,
-          currenteditor: "",
-        });
-      }
-    } else {
+      emitCurrentEditor("");
       if (!isOwner) {
-        toast.error("Only the room creator can change the editable state");
+        setPermissions((prev) => ({
+          ...prev,
+          [userName]: { ...DEFAULT_PERMISSIONS },
+        }));
+        emitPermissionsUpdate(userName, DEFAULT_PERMISSIONS);
+      }
+      toast.success("Editor is now read-only");
+    } else {
+      if (!isOwner && !myPermissions.canEdit) {
+        toast.error("You don't have permission to edit");
         return;
       }
       setCurrentEditor(userName);
-      toast.success("Editor is now editable");
-      if (socketRef.current) {
-        socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-          roomId: id,
-          currenteditor: userName,
-        });
+      emitCurrentEditor(userName);
+      if (!isOwner) {
+        const editPerms = withEditorAccess(
+          permissions[userName] || DEFAULT_PERMISSIONS,
+        );
+        setPermissions((prev) => ({ ...prev, [userName]: editPerms }));
+        emitPermissionsUpdate(userName, editPerms);
       }
+      toast.success("You are now the editor");
     }
   };
 
   const handleGrantEditor = (username: string) => {
     setCurrentEditor(username);
-    toast.success(`${username} can now edit the code`);
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-        roomId: id,
-        currenteditor: username,
-      });
-    }
+    emitCurrentEditor(username);
+    const nextPerms = withEditorAccess(
+      permissions[username] || DEFAULT_PERMISSIONS,
+    );
+    handleUpdatePermissions(username, nextPerms);
   };
 
   // Tab management
@@ -289,21 +282,11 @@ export default function EditorPageModern() {
     }
     const tabId = `tab-${uuidv4()}`;
     const name = `file-${tabs.length + 1}.js`;
-    const newTab: Tab = { id: tabId, name, code: "" };
+    const newTab: EditorTab = { id: tabId, name, code: "" };
     setTabs((prev) => [...prev, newTab]);
     applyActiveTab(tabId);
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.TAB_CREATE, {
-        roomId: id,
-        tabId,
-        name,
-      });
-      socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-        roomId: id,
-        tabId,
-        username: userName,
-      });
-    }
+    emitTabCreate(tabId, name);
+    emitTabSwitch(tabId);
   };
 
   const handleCloseTab = (tabId: string) => {
@@ -320,36 +303,26 @@ export default function EditorPageModern() {
       if (activeTabId === tabId && filtered.length > 0) {
         const newActive = filtered[0]?.id || DEFAULT_TAB_ID;
         applyActiveTab(newActive);
-        if (socketRef.current) {
-          socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-            roomId: id,
-            tabId: newActive,
-            username: userName,
-          });
-        }
+        emitTabSwitch(newActive);
       }
       return filtered;
     });
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.TAB_CLOSE, {
-        roomId: id,
-        tabId,
-      });
-    }
+    emitTabClose(tabId);
   };
 
   const handleSwitchTab = (tabId: string) => {
     if (tabId === activeTabId) {
       return;
     }
-    applyActiveTab(tabId);
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-        roomId: id,
-        tabId,
-        username: userName,
-      });
+    if (followingUser) {
+      setFollowingUser(null);
+      setFollowMode("off");
+      toast.success(
+        `Stopped following — switched to ${tabs.find((t) => t.id === tabId)?.name ?? "tab"}`,
+      );
     }
+    applyActiveTab(tabId);
+    emitTabSwitch(tabId);
   };
 
   const handleRenameTab = (tabId: string, newName: string) => {
@@ -362,27 +335,12 @@ export default function EditorPageModern() {
       return;
     }
     setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, name: trimmed } : t))
+      prev.map((t) => (t.id === tabId ? { ...t, name: trimmed } : t)),
     );
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.TAB_RENAME, {
-        roomId: id,
-        tabId,
-        name: trimmed,
-      });
-    }
+    emitTabRename(tabId, trimmed);
     setRenamingTabId(null);
     setRenameValue("");
   };
-
-  const handleCodeChange = useCallback(
-    (code: string) => {
-      setTabs((prev) =>
-        prev.map((t) => (t.id === activeTabId ? { ...t, code } : t))
-      );
-    },
-    [activeTabId]
-  );
 
   useEffect(() => {
     if (followMode !== "auto") {
@@ -403,36 +361,29 @@ export default function EditorPageModern() {
       const targetTab = userActiveTabs[followingUser];
       if (targetTab && targetTab !== activeTabId) {
         applyActiveTab(targetTab);
-        if (socketRef.current) {
-          socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-            roomId: id,
-            tabId: targetTab,
-            username: userName,
-          });
-        }
+        emitTabSwitch(targetTab);
       }
     }
   }, [
     followingUser,
     userActiveTabs,
     activeTabId,
-    id,
-    userName,
     applyActiveTab,
+    emitTabSwitch,
   ]);
 
   useEffect(() => {
-    if (!socketRef.current || !id) {
+    if (!id) {
       return;
     }
     if (!activeTabId) {
       return;
     }
-    socketRef.current.emit(ACTIONS.TAB_CODE_REQUEST, {
+    socketRef.current?.emit(ACTIONS.TAB_CODE_REQUEST, {
       roomId: id,
       tabId: activeTabId,
     });
-  }, [activeTabId, id]);
+  }, [activeTabId, id, socketRef]);
 
   const toggleFollow = (username: string) => {
     if (followingUser === username && followMode === "manual") {
@@ -447,13 +398,7 @@ export default function EditorPageModern() {
       const targetTab = userActiveTabs[username];
       if (targetTab && targetTab !== activeTabId) {
         applyActiveTab(targetTab);
-        if (socketRef.current) {
-          socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-            roomId: id,
-            tabId: targetTab,
-            username: userName,
-          });
-        }
+        emitTabSwitch(targetTab);
       }
     }
   };
@@ -461,311 +406,21 @@ export default function EditorPageModern() {
   // Permissions management
   const handleUpdatePermissions = (
     targetUser: string,
-    newPerms: UserPermissions
+    newPerms: UserPermissions,
   ) => {
     if (!isOwner) {
       toast.error("Only the owner can change permissions");
       return;
     }
     setPermissions((prev) => ({ ...prev, [targetUser]: newPerms }));
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.PERMISSIONS_UPDATE, {
-        roomId: id,
-        username: targetUser,
-        permissions: newPerms,
-      });
-    }
+    emitPermissionsUpdate(targetUser, newPerms);
     toast.success(`Permissions updated for ${targetUser}`);
+
+    if (!newPerms.canEdit && targetUser === currentEditor) {
+      setCurrentEditor("");
+      emitCurrentEditor("");
+    }
   };
-
-  // Socket init and events
-  // biome-ignore lint/correctness/useExhaustiveDependencies: First load only
-  useEffect(() => {
-    document.title = `${id} - CodeSync`;
-
-    const init = async () => {
-      try {
-        setServerStatus("connecting");
-        setConnectionMessage("Connecting to server...");
-
-        socketRef.current = await initSocket();
-
-        if (socketRef.current) {
-          socketRef.current.on("connect", () => {
-            setServerStatus("connected");
-            setConnectionMessage("Connected!");
-          });
-
-          socketRef.current.on("connect_error", handleErrors);
-          socketRef.current.on("connect_failed", handleErrors);
-          socketRef.current.on("disconnect", () => {
-            setServerStatus("disconnected");
-            setConnectionMessage("Connection lost - Reconnecting...");
-          });
-
-          socketRef.current.emit(ACTIONS.JOIN, {
-            roomId: id,
-            userName,
-          });
-
-          socketRef.current.on(
-            ACTIONS.JOINED,
-            ({
-              clients: joinedClients,
-              username,
-              socketId,
-              roomcreator,
-            }: {
-              clients: Client[];
-              username: string;
-              socketId: string;
-              roomcreator: string;
-            }) => {
-              setClients(joinedClients);
-              setRoomCreator(roomcreator);
-              if (
-                username === userName &&
-                roomcreator === username &&
-                sessionStorage.getItem("admin") !== roomcreator &&
-                joinedClients.length !== 1
-              ) {
-                toast.error(
-                  `${username} is already in the ${id} room.\nPlease try another UserName!`
-                );
-                navigate("/", {
-                  state: { id },
-                });
-              }
-              if (roomCreator === username || joinedClients.length === 1) {
-                sessionStorage.setItem("admin", username);
-              }
-              if (username !== userName) {
-                toast.success(`${username} joined the room`);
-                // Sync current tab code to new joiner
-                const currentTabs = tabsRef.current;
-                const currentTab = currentTabs.find(
-                  (t) => t.id === activeTabId
-                );
-                if (currentTab && socketRef.current) {
-                  socketRef.current.emit(ACTIONS.SYNC_CODE, {
-                    socketId,
-                    code: currentTab.code,
-                    currenteditor: currentEditorRef.current,
-                    tabId: activeTabId,
-                  });
-                }
-              }
-            }
-          );
-
-          // Receive tab sync data when joining
-          socketRef.current.on(
-            ACTIONS.TAB_SYNC,
-            ({
-              tabs: syncTabs,
-              activeTabId: syncActiveTabId,
-              userActiveTabs: syncUserActiveTabs,
-              permissions: syncPermissions,
-            }: {
-              tabs: Tab[];
-              activeTabId: string;
-              userActiveTabs: { username: string; activeTabId: string }[];
-              permissions: Record<string, UserPermissions>;
-            }) => {
-              if (syncTabs && syncTabs.length > 0) {
-                setTabs(syncTabs);
-                setActiveTabId(
-                  syncActiveTabId || syncTabs[0]?.id || DEFAULT_TAB_ID
-                );
-              }
-              if (syncUserActiveTabs) {
-                const map: Record<string, string> = {};
-                for (const u of syncUserActiveTabs) {
-                  map[u.username] = u.activeTabId;
-                }
-                setUserActiveTabs(map);
-              }
-              if (syncPermissions) {
-                setPermissions(syncPermissions);
-              }
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.DUPLICATE_USER,
-            ({ username }: { username: string }) => {
-              toast.error(
-                `${username} is already in the ${id} room.\nPlease try another UserName!`
-              );
-              navigate("/", {
-                state: { id },
-              });
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.DISCONNECTED,
-            ({
-              socketId,
-              username,
-            }: {
-              socketId: string;
-              username: string;
-            }) => {
-              toast.success(`${username} left the room`);
-              setClients((prev) =>
-                prev.filter((client) => client.socketId !== socketId)
-              );
-              if (currentEditor === username) {
-                setCurrentEditor("");
-                if (socketRef.current) {
-                  socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-                    roomId: id,
-                    currenteditor: "",
-                  });
-                }
-              }
-              // Stop following if the user left
-              setFollowingUser((prev) => (prev === username ? null : prev));
-              // Remove from user active tabs
-              setUserActiveTabs((prev) => {
-                const next = { ...prev };
-                delete next[username];
-                return next;
-              });
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.SET_CURRENT_EDITOR,
-            ({ currenteditor }: { currenteditor: string }) => {
-              if (currenteditor === userName) {
-                toast.success("You are now the editor");
-              }
-              if (currenteditor === "" && userName === roomCreator) {
-                toast.success(
-                  `${currentEditorRef.current} have released control`
-                );
-              }
-              setCurrentEditor(currenteditor);
-            }
-          );
-
-          // Tab events from other users
-          socketRef.current.on(
-            ACTIONS.TAB_CREATE,
-            ({ tabId, name }: { tabId: string; name: string }) => {
-              setTabs((prev) => {
-                if (prev.some((t) => t.id === tabId)) {
-                  return prev;
-                }
-                return [...prev, { id: tabId, name, code: "" }];
-              });
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.TAB_CLOSE,
-            ({ tabId }: { tabId: string }) => {
-              setTabs((prev) => {
-                const filtered = prev.filter((t) => t.id !== tabId);
-                if (filtered.length === 0) {
-                  return prev;
-                }
-                return filtered;
-              });
-              setActiveTabId((prev) => {
-                if (prev === tabId) {
-                  const remaining = tabsRef.current.filter(
-                    (t) => t.id !== tabId
-                  );
-                  const nextTabId = remaining[0]?.id || DEFAULT_TAB_ID;
-                  setUserActiveTabs((current) => ({
-                    ...current,
-                    [userName]: nextTabId,
-                  }));
-                  if (socketRef.current) {
-                    socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-                      roomId: id,
-                      tabId: nextTabId,
-                      username: userName,
-                    });
-                  }
-                  return nextTabId;
-                }
-                return prev;
-              });
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.TAB_RENAME,
-            ({ tabId, name }: { tabId: string; name: string }) => {
-              setTabs((prev) =>
-                prev.map((t) => (t.id === tabId ? { ...t, name } : t))
-              );
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.TAB_CODE,
-            ({ tabId, code }: { tabId: string; code: string }) => {
-              setTabs((prev) =>
-                prev.map((t) => (t.id === tabId ? { ...t, code } : t))
-              );
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.TAB_SWITCH,
-            ({ username, tabId }: { username: string; tabId: string }) => {
-              setUserActiveTabs((prev) => ({
-                ...prev,
-                [username]: tabId,
-              }));
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.PERMISSIONS_UPDATE,
-            ({
-              username,
-              permissions: newPerms,
-            }: {
-              username: string;
-              permissions: UserPermissions;
-            }) => {
-              setPermissions((prev) => ({
-                ...prev,
-                [username]: newPerms,
-              }));
-              if (username === userName) {
-                toast.success("Your permissions have been updated");
-              }
-            }
-          );
-        }
-      } catch (_error) {
-        setServerStatus("disconnected");
-        setConnectionMessage("Failed to connect to server");
-        toast.error(
-          "Failed to connect to server. Please check your connection."
-        );
-        setTimeout(() => {
-          navigate("/");
-        }, 3000);
-      }
-    };
-
-    init();
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Redirect if no state
   useEffect(() => {
@@ -794,6 +449,30 @@ export default function EditorPageModern() {
     }
     return counts;
   }, [userActiveTabs, userName]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const editing =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable ||
+        !!target?.closest("[contenteditable='true']");
+      if (
+        e.key === "?" &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !editing &&
+        !showParticipants &&
+        !showShortcuts
+      ) {
+        e.preventDefault();
+        setShowShortcuts(true);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [showParticipants, showShortcuts]);
 
   // UI
   return (
@@ -857,240 +536,69 @@ export default function EditorPageModern() {
         <div className="flex h-full flex-col overflow-hidden">
           {/* Top bar (hidden in Zen) */}
           {!zen && (
-            <div className="sticky top-0 z-35 flex items-center gap-1 overflow-x-auto border-b bg-background/90 px-2 py-1.5 backdrop-blur supports-backdrop-filter:bg-background/70 sm:gap-2 sm:px-3">
-              {/* Left: room info */}
-              <div className="min-w-0 shrink-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-sm">Room</span>
-                  <button
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-md border bg-secondary px-2 py-0.5 font-mono text-[11px] text-secondary-foreground transition-colors hover:bg-secondary/80"
-                    onClick={copyRoomId}
-                    title="Click to copy room ID"
-                    type="button"
-                  >
-                    {id && id.length > 12 ? `${id.slice(0, 8)}…` : id}
-                    <FaRegCopy className="size-3 opacity-50" />
-                  </button>
-                </div>
-                <p className="mt-0.5 flex items-center gap-1 text-muted-foreground text-xs">
-                  <span className="max-w-[120px] truncate">{userName}</span>
-                  {serverStatus === "connected" ? (
-                    <span
-                      className="size-1.5 shrink-0 rounded-full bg-emerald-500"
-                      title="Connected"
-                    />
-                  ) : (
-                    <span
-                      aria-live="polite"
-                      className="inline-flex shrink-0 items-center rounded-md border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-200"
-                    >
-                      {connectionMessage}
-                    </span>
-                  )}
-                </p>
-              </div>
-
-              {/* Middle: compact participants */}
-              <div className="hidden min-w-0 flex-1 items-center justify-center gap-1 sm:flex">
-                <div className="flex items-center gap-1">
-                  {compactAvatars.slice.map(({ socketId, username }) => {
-                    const crown = username === roomCreator;
-                    const pencil = username === currentEditor;
-                    const me = username === userName;
-                    return (
-                      <div className="relative" key={socketId}>
-                        <Avatar
-                          fgColor="#000"
-                          name={username}
-                          round="8px"
-                          size="28"
-                        />
-                        {me && (
-                          <span
-                            className="-bottom-0.5 -right-0.5 absolute size-2.5 rounded-full border-2 border-card bg-primary"
-                            title="You"
-                          />
-                        )}
-                        {crown ? (
-                          <span
-                            className="-right-1 -top-1 pointer-events-none absolute inline-flex size-4 items-center justify-center rounded-full bg-amber-400 text-amber-950 shadow-sm ring-1 ring-border"
-                            title="Owner"
-                          >
-                            <FaCrown className="size-2.5" />
-                          </span>
-                        ) : null}
-                        {pencil ? (
-                          <span
-                            className="-left-1 -bottom-1 pointer-events-none absolute inline-flex size-4 items-center justify-center rounded-full bg-emerald-400 text-emerald-950 shadow-sm ring-1 ring-border"
-                            title="Editor"
-                          >
-                            <FiEdit2 className="size-2.5" />
-                          </span>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                  {compactAvatars.extra > 0 && (
-                    <button
-                      aria-label="Show all participants"
-                      className="ms-1 cursor-pointer rounded-md border bg-background px-1.5 py-0.5 text-foreground text-xs hover:bg-accent"
-                      onClick={() => setShowParticipants(true)}
-                      title="Show all participants"
-                      type="button"
-                    >
-                      +{compactAvatars.extra}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Right: tools — grouped with separators */}
-              <div className="ml-auto flex shrink-0 items-center">
-                {/* Editor display controls */}
-                <div className="flex items-center gap-0.5">
-                  <Button
-                    onClick={() => fontSizeChange(2)}
-                    size="sm"
-                    title="Increase editor text size"
-                    variant="ghost"
-                  >
-                    <MdTextIncrease />
-                  </Button>
-                  <Button
-                    onClick={() => fontSizeChange(-2)}
-                    size="sm"
-                    title="Decrease editor text size"
-                    variant="ghost"
-                  >
-                    <MdTextDecrease />
-                  </Button>
-                  <Button
-                    className="hidden sm:inline-flex"
-                    onClick={() => setWrapLines((v) => !v)}
-                    size="sm"
-                    title="Toggle line wrap"
-                    variant={wrapLines ? "secondary" : "ghost"}
-                  >
-                    {wrapLines ? "Wrap" : "Wrap"}
-                  </Button>
-                </div>
-
-                {/* Separator */}
-                <div
-                  aria-hidden="true"
-                  className="mx-1.5 hidden h-5 w-px bg-border sm:block"
-                />
-
-                {/* Code actions */}
-                <div className="flex items-center gap-0.5">
-                  <Button
-                    onClick={copyCode}
-                    size="sm"
-                    title="Copy code"
-                    variant="ghost"
-                  >
-                    <FaRegCopy />
-                    <span className="hidden sm:inline-block">Copy</span>
-                  </Button>
-
-                  {(currentEditor === userName ||
-                    (isOwner && currentEditor !== "")) && (
-                    <Button
-                      onClick={toggleEditable}
-                      size="sm"
-                      title={
-                        currentEditor === userName
-                          ? "Release Control"
-                          : "Take Control"
-                      }
-                      variant={
-                        currentEditor === userName ? "secondary" : "default"
-                      }
-                    >
-                      {currentEditor === userName ? "Release" : "Take"}
-                    </Button>
-                  )}
-                </div>
-
-                {/* Separator */}
-                <div
-                  aria-hidden="true"
-                  className="mx-1.5 hidden h-5 w-px bg-border sm:block"
-                />
-
-                {/* Room actions */}
-                <div className="flex items-center gap-0.5">
-                  <Button
-                    onClick={() => setShowParticipants(true)}
-                    size="sm"
-                    title="Toggle participants"
-                    variant="ghost"
-                  >
-                    <FiUsers />
-                    <span className="hidden sm:inline-block">People</span>
-                  </Button>
-
-                  {followingUser && (
-                    <Button
-                      onClick={() => {
-                        setFollowMode("off");
-                        setFollowingUser(null);
-                        toast.success("Stopped following");
-                      }}
-                      size="sm"
-                      title="Stop following"
-                      variant="secondary"
-                    >
-                      <FiEye />
-                      <span className="hidden sm:inline-block">
-                        {followingUser}
-                      </span>
-                    </Button>
-                  )}
-
-                  <Button
-                    className="hidden sm:inline-flex"
-                    onClick={() => setZen((v) => !v)}
-                    size="sm"
-                    title={zen ? "Exit Zen mode" : "Enter Zen mode"}
-                    variant={zen ? "secondary" : "ghost"}
-                  >
-                    Zen
-                  </Button>
-
-                  <Button
-                    onClick={leaveRoom}
-                    size="sm"
-                    title="Leave room"
-                    variant="destructive"
-                  >
-                    <FiLogOut />
-                    <span className="hidden sm:inline-block">Leave</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
+            <TopBar
+              canEdit={canEditCode}
+              clients={sortedClients}
+              connectionMessage={connectionMessage}
+              connectionStatus={serverStatus}
+              copied={copied}
+              currentEditor={currentEditor}
+              followingUser={followingUser}
+              fontSize={fontSize}
+              isOwner={isOwner}
+              permissions={permissions}
+              roomCreator={roomCreator}
+              roomId={id}
+              serverUrl={
+                import.meta.env.VITE_BACKEND_API_URL || window.location.origin
+              }
+              userName={userName}
+              wrapLines={wrapLines}
+              zen={zen}
+              onCopyCode={copyCode}
+              onCopyInviteLink={copyInviteLink}
+              onFontSizeChange={fontSizeChange}
+              onFollowUser={toggleFollow}
+              onGrantEdit={handleGrantEditor}
+              onLeave={leaveRoom}
+              onStopFollowing={() => {
+                setFollowMode("off");
+                setFollowingUser(null);
+                toast.success("Stopped following");
+              }}
+              onToggleEdit={toggleEditable}
+              onToggleParticipants={() => setShowParticipants(true)}
+              onToggleWrap={() => setWrapLines((v) => !v)}
+              onToggleZen={() => setZen((v) => !v)}
+            />
           )}
 
           {/* Tab bar */}
           {!zen && (
-            <div className="flex items-center gap-0 overflow-x-auto border-b bg-background/80 px-1">
+            <div className="scrollbar-none flex items-center gap-0 overflow-x-auto border-b bg-background/80 px-1">
               {tabs.map((tab) => {
                 const isActive = tab.id === activeTabId;
                 const usersOnTab = tabUserCounts[tab.id];
                 return (
                   <div
                     className={[
-                      "group relative flex items-center gap-1 border-r px-2 py-1.5 text-xs transition-colors",
+                      "group relative flex items-center gap-1.5 border-r px-2 py-1.5 text-xs transition-colors",
                       isActive
-                        ? "bg-card font-medium text-foreground"
+                        ? "border-t-2 border-t-primary bg-card font-medium text-foreground shadow-sm"
                         : "cursor-pointer text-muted-foreground hover:bg-accent/40 hover:text-foreground",
                     ].join(" ")}
                     key={tab.id}
+                    ref={(el) => {
+                      if (isActive && el) {
+                        el.scrollIntoView({
+                          inline: "center",
+                          block: "nearest",
+                        });
+                      }
+                    }}
                   >
                     {renamingTabId === tab.id ? (
                       <input
-                        autoFocus
                         className="w-20 rounded border bg-background px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-primary"
                         onBlur={() => handleRenameTab(tab.id, renameValue)}
                         onChange={(e) => setRenameValue(e.target.value)}
@@ -1107,7 +615,7 @@ export default function EditorPageModern() {
                       />
                     ) : (
                       <button
-                        className="cursor-pointer truncate bg-transparent text-inherit"
+                        className="flex cursor-pointer items-center gap-1.5 bg-transparent text-inherit"
                         onClick={() => handleSwitchTab(tab.id)}
                         onDoubleClick={() => {
                           if (isOwner || myPermissions.canRenameTab) {
@@ -1118,7 +626,16 @@ export default function EditorPageModern() {
                         title={`${tab.name}${usersOnTab ? ` (${usersOnTab.join(", ")})` : ""}`}
                         type="button"
                       >
-                        {tab.name}
+                        {getFileIcon(tab.name)}
+                        <span className="max-w-20 truncate">{tab.name}</span>
+                        {(isOwner || myPermissions.canRenameTab) && (
+                          <span
+                            className="text-[10px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                            title="Double-click to rename"
+                          >
+                            ✎
+                          </span>
+                        )}
                       </button>
                     )}
                     {usersOnTab && usersOnTab.length > 0 && (
@@ -1132,15 +649,21 @@ export default function EditorPageModern() {
                     {tabs.length > 1 &&
                       (isOwner || myPermissions.canDeleteTab) && (
                         <button
-                          className="hidden cursor-pointer rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/20 hover:text-destructive group-hover:inline-flex"
+                          className={[
+                            "cursor-pointer rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/20 hover:text-destructive",
+                            isActive
+                              ? "inline-flex"
+                              : "hidden group-hover:inline-flex",
+                          ].join(" ")}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleCloseTab(tab.id);
                           }}
+                          aria-label={`Close ${tab.name}`}
                           title="Close tab"
                           type="button"
                         >
-                          <FiX className="size-3" />
+                          <X className="size-3" />
                         </button>
                       )}
                   </div>
@@ -1153,7 +676,7 @@ export default function EditorPageModern() {
                   title="New tab"
                   type="button"
                 >
-                  <FiPlus className="size-3" />
+                  <Plus className="size-3" />
                 </button>
               )}
             </div>
@@ -1161,6 +684,12 @@ export default function EditorPageModern() {
 
           {/* Editor canvas (fills remaining height) */}
           <section className="relative min-h-0 flex-1 overflow-hidden">
+            {activeTab?.code === "" && tabs.length === 1 && (
+              <EmptyState
+                currentEditor={currentEditor}
+                participantCount={sortedClients.length}
+              />
+            )}
             {/* Exit Zen small control */}
             {zen && (
               <button
@@ -1174,175 +703,22 @@ export default function EditorPageModern() {
               </button>
             )}
 
-            {/* Participants Panel (overlay) */}
-            {showParticipants && (
-              <div
-                aria-labelledby="participants-title"
-                aria-modal="true"
-                className="absolute inset-0 z-50 grid place-items-center p-3"
-                role="dialog"
-              >
-                <div
-                  className="absolute inset-0 bg-background/70 backdrop-blur-sm"
-                  onClick={() => {
-                    setShowParticipants(false);
-                    setPermDialogUser(null);
-                  }}
-                />
-                <div className="relative z-10 w-full max-w-4xl rounded-lg border bg-card text-card-foreground shadow-lg">
-                  <div className="flex items-center justify-between border-b px-4 py-3">
-                    <h2
-                      className="font-semibold text-sm"
-                      id="participants-title"
-                    >
-                      Participants ({sortedClients.length})
-                    </h2>
-                    <div className="flex items-center gap-2">
-                      {isOwner && (
-                        <span className="text-muted-foreground text-xs">
-                          Click user to grant editor · Gear for permissions
-                        </span>
-                      )}
-                      <Button
-                        onClick={() => {
-                          setShowParticipants(false);
-                          setPermDialogUser(null);
-                        }}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        Close
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="max-h-[70svh] overflow-y-auto px-4 py-3">
-                    <div className="space-y-2">
-                      {sortedClients.map(({ socketId, username }) => (
-                        <div key={socketId}>
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={
-                                isOwner ? "flex-1 cursor-pointer" : "flex-1"
-                              }
-                              onClick={
-                                isOwner
-                                  ? () => handleGrantEditor(username)
-                                  : undefined
-                              }
-                              title={
-                                isOwner ? "Click to grant editor" : undefined
-                              }
-                            >
-                              <ClientModern
-                                activeTab={
-                                  userActiveTabs[username]
-                                    ? getTabName(userActiveTabs[username] ?? "")
-                                    : activeTab?.name
-                                }
-                                canGrantEdit={isOwner}
-                                currentEditor={currentEditor}
-                                isMe={username === userName}
-                                roomcreator={roomCreator}
-                                username={username}
-                              />
-                            </div>
-                            <div className="flex shrink-0 items-center gap-1">
-                              {/* Follow button */}
-                              {username !== userName && (
-                                <Button
-                                  onClick={() => toggleFollow(username)}
-                                  size="sm"
-                                  title={
-                                    followingUser === username
-                                      ? "Stop following"
-                                      : `Follow ${username}`
-                                  }
-                                  variant={
-                                    followingUser === username
-                                      ? "secondary"
-                                      : "ghost"
-                                  }
-                                >
-                                  <FiEye className="size-3" />
-                                </Button>
-                              )}
-                              {/* Permissions button (owner only, not for self) */}
-                              {isOwner && username !== userName && (
-                                <Button
-                                  aria-label="Manage permissions"
-                                  onClick={() =>
-                                    setPermDialogUser(
-                                      permDialogUser === username
-                                        ? null
-                                        : username
-                                    )
-                                  }
-                                  size="sm"
-                                  title="Manage permissions"
-                                  variant={
-                                    permDialogUser === username
-                                      ? "secondary"
-                                      : "ghost"
-                                  }
-                                >
-                                  <span aria-hidden="true">⚙</span>
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                          {/* Inline permissions editor */}
-                          {permDialogUser === username && isOwner && (
-                            <PermissionsEditor
-                              onUpdate={(p) =>
-                                handleUpdatePermissions(username, p)
-                              }
-                              permissions={
-                                permissions[username] || DEFAULT_PERMISSIONS
-                              }
-                              username={username}
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-end gap-2 border-t px-4 py-3">
-                    <Button onClick={copyRoomId} size="sm" variant="outline">
-                      Copy Room Id
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        setShowParticipants(false);
-                        setPermDialogUser(null);
-                      }}
-                      size="sm"
-                    >
-                      Done
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Editor wrapper takes full available space (keyed by tabId to remount) */}
             {activeTab && (
               <div
-                className={`editor-host h-full w-full ${
-                  wrapLines ? "wrap-on" : "no-wrap"
-                }`}
+                className={`editor-host h-full w-full ${wrapLines ? "wrap-on" : "no-wrap"}`}
               >
                 <EditorWrapper
+                  activeTabId={activeTab.id}
                   currentEditor={currentEditor}
                   darkMode={isDark}
                   editable={canEditCode}
                   fontSize={fontSize}
                   initialCode={activeTab.code}
-                  key={activeTab.id}
                   onCodeChange={handleCodeChange}
                   roomId={id || ""}
                   setCurrentEditor={setCurrentEditor}
-                  socketRef={socketRef as RefObject<Socket>}
-                  tabId={activeTab.id}
+                  socketRef={socketRef as EditorSocketRef}
                   wrap={wrapLines}
                 />
               </div>
@@ -1350,91 +726,39 @@ export default function EditorPageModern() {
           </section>
         </div>
       </div>
+
+      <ParticipantsDrawer
+        open={showParticipants}
+        onClose={() => {
+          setShowParticipants(false);
+          setPermDialogUser(null);
+        }}
+        onCopyInvite={copyInviteLink}
+        onDone={() => {
+          setShowParticipants(false);
+          setPermDialogUser(null);
+        }}
+        participants={sortedClients}
+        currentUser={userName}
+        currentEditor={currentEditor}
+        isOwner={isOwner}
+        followingUser={followingUser}
+        onFollow={toggleFollow}
+        onGrantEditor={handleGrantEditor}
+        openPermDialog={permDialogUser}
+        onOpenPermDialog={setPermDialogUser}
+        getActiveTabName={(uname) => {
+          const tid = userActiveTabs[uname];
+          return tid ? getTabName(tid) : undefined;
+        }}
+        userPermissions={permissions}
+        onUpdatePermissions={handleUpdatePermissions}
+      />
+
+      <ShortcutsPanel
+        open={showShortcuts}
+        onClose={() => setShowShortcuts(false)}
+      />
     </AppShell>
-  );
-}
-
-/** Inline permissions editor component */
-function PermissionsEditor({
-  username,
-  permissions: perms,
-  onUpdate,
-}: {
-  username: string;
-  permissions: UserPermissions;
-  onUpdate: (p: UserPermissions) => void;
-}) {
-  const toggle = (key: keyof UserPermissions) => {
-    onUpdate({ ...perms, [key]: !perms[key] });
-  };
-
-  const revokeAll = () => {
-    onUpdate({
-      canEdit: false,
-      canCreateTab: false,
-      canDeleteTab: false,
-      canRenameTab: false,
-    });
-  };
-
-  const grantAll = () => {
-    onUpdate({
-      canEdit: true,
-      canCreateTab: true,
-      canDeleteTab: true,
-      canRenameTab: true,
-    });
-  };
-
-  return (
-    <div className="mt-1 ml-12 rounded-md border bg-background/50 p-3">
-      <p className="mb-2 font-medium text-xs">Permissions for {username}</p>
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            checked={perms.canEdit}
-            className="cursor-pointer accent-primary"
-            onChange={() => toggle("canEdit")}
-            type="checkbox"
-          />
-          Can Edit Code
-        </label>
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            checked={perms.canCreateTab}
-            className="cursor-pointer accent-primary"
-            onChange={() => toggle("canCreateTab")}
-            type="checkbox"
-          />
-          Can Create Tabs
-        </label>
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            checked={perms.canDeleteTab}
-            className="cursor-pointer accent-primary"
-            onChange={() => toggle("canDeleteTab")}
-            type="checkbox"
-          />
-          Can Delete Tabs
-        </label>
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            checked={perms.canRenameTab}
-            className="cursor-pointer accent-primary"
-            onChange={() => toggle("canRenameTab")}
-            type="checkbox"
-          />
-          Can Rename Tabs
-        </label>
-      </div>
-      <div className="mt-2 flex gap-2">
-        <Button onClick={grantAll} size="sm" variant="outline">
-          Grant All
-        </Button>
-        <Button onClick={revokeAll} size="sm" variant="destructive">
-          Revoke All
-        </Button>
-      </div>
-    </div>
   );
 }

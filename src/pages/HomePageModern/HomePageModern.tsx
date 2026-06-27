@@ -1,3 +1,4 @@
+import { Clock, Info, Trash2, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -13,6 +14,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import {
   BACKEND_API_URL,
   clearCustomBackendUrl,
@@ -22,6 +30,14 @@ import {
   setCustomBackendUrl,
 } from "@/utils/constants";
 import { waitForServerHealth, wakeUpServer } from "@/utils/healthCheck";
+import {
+  clearRoomHistory,
+  getRecentRooms,
+  isRoomHistoryEnabled,
+  type RecentRoom,
+  removeRoom,
+  setRoomHistoryEnabled,
+} from "@/utils/roomHistory";
 
 const advancedSettingsId = "advanced-settings-panel";
 const backendHelpText = [
@@ -37,6 +53,8 @@ export default function HomePageModern() {
   const [isCustomBackend, setIsCustomBackend] = useState<boolean>(false);
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [customBackendInput, setCustomBackendInput] = useState<string>("");
+  const [recentRooms, setRecentRooms] = useState<RecentRoom[]>([]);
+  const [isHistoryEnabled, setIsHistoryEnabled] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -47,6 +65,9 @@ export default function HomePageModern() {
       setRoomId(id);
     }
     wakeUpServer();
+    const historyEnabled = isRoomHistoryEnabled();
+    setIsHistoryEnabled(historyEnabled);
+    setRecentRooms(historyEnabled ? getRecentRooms() : []);
   }, [location.state]);
 
   useEffect(() => {
@@ -57,6 +78,48 @@ export default function HomePageModern() {
       setCustomBackendInput(getBackendUrl());
     }
   }, []);
+
+  const formatTimeAgo = (timestamp: number): string => {
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 60) {
+      return "just now";
+    }
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+      return `${minutes}m ago`;
+    }
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+      return `${hours}h ago`;
+    }
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
+
+  const handleSelectRecentRoom = (room: RecentRoom) => {
+    setRoomId(room.roomId);
+    setUserName(room.userName);
+  };
+
+  const handleRemoveRecentRoom = (targetRoomId: string) => {
+    removeRoom(targetRoomId);
+    setRecentRooms(getRecentRooms());
+  };
+
+  const handleClearHistory = () => {
+    clearRoomHistory();
+    setRecentRooms([]);
+    toast.success("Room history cleared");
+  };
+
+  const handleHistoryPreferenceChange = (enabled: boolean) => {
+    setRoomHistoryEnabled(enabled);
+    setIsHistoryEnabled(enabled);
+    setRecentRooms(enabled ? getRecentRooms() : []);
+    toast.success(
+      enabled ? "Room history enabled" : "Room history disabled and cleared",
+    );
+  };
 
   const handleHealthCheck = (attempt: number, maxRetries: number) => {
     setServerStatusMessage(`Waking up server... (${attempt}/${maxRetries})`);
@@ -88,7 +151,7 @@ export default function HomePageModern() {
     }
     if (!isValidBackendOrigin(trimmed)) {
       toast.error(
-        "Invalid URL. Use an http(s) origin like http://localhost:3000 with no path, query, or credentials."
+        "Invalid URL. Use an http(s) origin like http://localhost:3000 with no path, query, or credentials.",
       );
       return;
     }
@@ -176,7 +239,7 @@ export default function HomePageModern() {
       <div className="flex min-h-full flex-col">
         <section className="mx-auto grid w-full max-w-5xl flex-1 grid-cols-1 content-center items-center gap-6 px-4 py-8 md:grid-cols-2 md:gap-12 md:py-0">
           <div>
-            <h1 className="text-balance font-semibold text-foreground text-2xl tracking-tight sm:text-3xl md:text-4xl lg:text-5xl">
+            <h1 className="text-balance font-semibold text-2xl text-foreground tracking-tight sm:text-3xl md:text-4xl lg:text-5xl">
               Collaborate in real-time.
               <br />
               Share code with one link.
@@ -298,7 +361,10 @@ export default function HomePageModern() {
                     type="button"
                   >
                     <span
-                      className={`inline-block transition-transform ${showAdvanced ? "rotate-90" : ""}`}
+                      className={cn(
+                        "inline-block transition-transform",
+                        showAdvanced && "rotate-90",
+                      )}
                     >
                       ▶
                     </span>
@@ -386,6 +452,86 @@ export default function HomePageModern() {
                 </div>
               </CardFooter>
             </Card>
+
+            {/* Recent Rooms — stored locally on this device only */}
+            <div className="mx-auto mt-3 flex w-full max-w-md items-center gap-2 rounded-lg border bg-card/80 px-3 py-2 text-xs shadow-sm">
+              <Clock className="size-3 shrink-0 text-muted-foreground" />
+              <span className="shrink-0 font-medium text-muted-foreground">
+                Recent rooms
+              </span>
+              <Tooltip>
+                <TooltipTrigger
+                  className="inline-flex shrink-0 cursor-help text-muted-foreground transition-colors hover:text-foreground"
+                  type="button"
+                >
+                  <Info className="size-3" />
+                  <span className="sr-only">Room history privacy info</span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="max-w-xs text-balance">
+                    Stored on this device only — never sent to the server.
+                    Enable only on devices you trust.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <Switch
+                aria-label="Save recent rooms locally"
+                checked={isHistoryEnabled}
+                className="shrink-0"
+                onCheckedChange={handleHistoryPreferenceChange}
+                size="sm"
+              />
+              <div className="ml-auto flex min-w-0 flex-1 items-center gap-1.5">
+                {isHistoryEnabled && recentRooms.length > 0 && (
+                  <>
+                    {/* biome-ignore lint/a11y/useSemanticElements: horizontal scroll container uses divs with ARIA roles */}
+                    <div
+                      aria-label="Recent rooms list"
+                      className="scrollbar-none flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
+                      role="list"
+                    >
+                      {recentRooms.map((room) => (
+                        /* biome-ignore lint/a11y/useSemanticElements: horizontal scroll container uses divs with ARIA roles */
+                        <div
+                          className="group relative inline-flex shrink-0 items-center gap-1 rounded-full border bg-background/70 px-2 py-0.5 transition-colors hover:bg-accent"
+                          key={room.roomId}
+                          role="listitem"
+                        >
+                          <button
+                            className="cursor-pointer truncate font-mono text-[11px] text-foreground"
+                            onClick={() => handleSelectRecentRoom(room)}
+                            title={`Join as ${room.userName} · ${formatTimeAgo(room.joinedAt)}`}
+                            type="button"
+                          >
+                            {room.roomId.length > 18
+                              ? `${room.roomId.slice(0, 7)}…${room.roomId.slice(-5)}`
+                              : room.roomId}
+                          </button>
+                          <button
+                            aria-label="Remove room from history"
+                            className="cursor-pointer rounded-full text-muted-foreground opacity-60 transition-opacity hover:text-destructive group-hover:opacity-100"
+                            onClick={() => handleRemoveRecentRoom(room.roomId)}
+                            type="button"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      className="h-6 shrink-0 cursor-pointer px-1.5"
+                      onClick={handleClearHistory}
+                      size="sm"
+                      title="Clear room history"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </section>
 

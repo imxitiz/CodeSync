@@ -81,7 +81,9 @@ export function useTheme(): ThemeContextValue {
   return useContext(ThemeContext);
 }
 
-export function ThemeProvider({ children }: ThemeProviderProps): JSX.Element {
+export function ThemeProvider({
+  children,
+}: ThemeProviderProps): React.ReactElement {
   // Enhanced initialization for service worker compatibility
   const [themeKey, setThemeKeyState] = useState<string>(() => {
     // Delay localStorage access until after mount for better SW compatibility
@@ -209,7 +211,7 @@ export function ThemeProvider({ children }: ThemeProviderProps): JSX.Element {
             mq.removeEventListener?.("change", onChange);
             document.removeEventListener?.(
               "DOMContentLoaded",
-              applyThemeForKey
+              applyThemeForKey,
             );
           };
         } catch (_error) {

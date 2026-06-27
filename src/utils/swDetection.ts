@@ -57,7 +57,7 @@ export function isServedFromServiceWorker(): boolean {
       const resources = performance.getEntriesByType("resource");
       const jsResources = resources.filter((r) => r.name.includes(".js"));
       const cachedResources = jsResources.filter(
-        (r) => (r as PerformanceResourceTiming).transferSize === 0
+        (r) => (r as PerformanceResourceTiming).transferSize === 0,
       );
 
       if (
@@ -237,7 +237,7 @@ export function setupHydrationErrorRecovery(): void {
             window.location.reload();
           }, 100);
         }
-      }
+      },
     );
   }
 }

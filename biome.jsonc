@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "extends": ["ultracite"],
+  "extends": ["ultracite/biome/react"],
   "files": {
     "includes": ["src/**/*", "server.ts", "action.ts", "scripts/**/*"],
     "ignoreUnknown": true
@@ -18,7 +18,8 @@
       "suspicious": {
         "noEmptyBlock": "off",
         "noEmptyBlockStatements": "off",
-        "noUnknownAtRules": "off"
+        "noUnknownAtRules": "off",
+        "noAlert": "off"
       },
       "a11y": {
         "noStaticElementInteractions": "off",
@@ -30,6 +31,15 @@
         "noUnusedImports": "error",
         "useExhaustiveDependencies": "warn"
       }
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true,
+      "cssModules": true
+    },
+    "formatter": {
+      "enabled": true
     }
   },
   "formatter": {

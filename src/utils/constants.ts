@@ -23,6 +23,7 @@ export const ACTIONS = {
   TAB_CODE_REQUEST: "tab-code-request",
   TAB_CODE: "tab-code",
   PERMISSIONS_UPDATE: "permissions-update",
+  DESTROY_ROOM: "destroy-room",
 } as const;
 
 export type ACTIONS = (typeof ACTIONS)[keyof typeof ACTIONS];
@@ -36,10 +37,12 @@ const normalizeBackendUrl = (value: string | null): string | null => {
   if (!value) {
     return null;
   }
+
   const trimmed = value.trim();
   if (!trimmed) {
     return null;
   }
+
   try {
     const parsed = new URL(trimmed);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {

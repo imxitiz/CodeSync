@@ -1,7 +1,7 @@
+import type { Server } from "node:http";
 import { createAdaptorServer } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import type { Server } from "node:http";
 import { setupSocket } from "./socket.js";
 
 const TRAILING_SLASH_REGEX = /\/$/;
@@ -25,19 +25,20 @@ const envOrigins = (process.env.CORS_ORIGIN ?? "")
 const allowAll = envOrigins.length === 1 && envOrigins[0] === "*";
 const isDev = process.env.NODE_ENV !== "production";
 
-console.log("[CORS] CORS_ORIGIN env:", process.env.CORS_ORIGIN);
-console.log("[CORS] Parsed envOrigins:", envOrigins);
-console.log("[CORS] allowAll:", allowAll);
-console.log("[CORS] NODE_ENV:", process.env.NODE_ENV);
-
 const allowedOrigins = new Set(
   [...defaultOrigins, ...envOrigins.filter((o) => o !== "*")].map(normalize)
 );
 
 const isAllowedOrigin = (origin: string | undefined): boolean => {
-  if (!origin) return true;
-  if (allowAll) return true;
-  if (isDev && LOCALHOST_REGEX.test(normalize(origin))) return true;
+  if (!origin) {
+    return true;
+  }
+  if (allowAll) {
+    return true;
+  }
+  if (isDev && LOCALHOST_REGEX.test(normalize(origin))) {
+    return true;
+  }
   return allowedOrigins.has(normalize(origin));
 };
 
@@ -48,7 +49,6 @@ app.use(
   cors({
     origin: (origin) => {
       const allowed = isAllowedOrigin(origin);
-      console.log("[CORS] Request origin:", origin, "-> allowed:", allowed);
       return allowed ? origin : "";
     },
     credentials: true,
@@ -100,6 +100,27 @@ setupSocket(httpServer, isAllowedOrigin);
 
 // Now start listening — the 'listening' event fires, engine.io's init() runs,
 // the ws.WebSocketServer is created, and WebSocket upgrades work.
-httpServer.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on ${PORT}`);
-});
+
+// Try to find an available port by incrementing if the current one is in use
+const startServer = (port: number, maxPort = port + 10): void => {
+  httpServer.once("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.log(`Port ${port} is in use, trying ${port + 1}...`);
+      if (port + 1 > maxPort) {
+        console.error(`No available port found up to ${maxPort}, giving up.`);
+        process.exit(1);
+      }
+      httpServer.removeAllListeners("error");
+      startServer(port + 1, maxPort);
+    } else {
+      console.error("Server error:", err);
+      process.exit(1);
+    }
+  });
+
+  httpServer.listen(port, "0.0.0.0", () => {
+    console.log(`Server is running on http://0.0.0.0:${port}`);
+  });
+};
+
+startServer(PORT);

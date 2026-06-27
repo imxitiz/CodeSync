@@ -83,7 +83,7 @@ type WaitForHealthOptions = {
  * @returns Promise<boolean> - True if server becomes healthy, false if all retries exhausted
  */
 export const waitForServerHealth = async (
-  options: WaitForHealthOptions = {}
+  options: WaitForHealthOptions = {},
 ): Promise<boolean> => {
   const {
     maxRetries = 5,
