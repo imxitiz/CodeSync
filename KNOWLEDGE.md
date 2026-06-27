@@ -84,7 +84,10 @@ The `userActiveTabMap` is cleaned in `disconnecting`, but if a socket disconnect
 
 ## Testing
 
-- No test suite currently exists
+- Server tests: `cd codesync-server && bun test` (Bun's built-in runner)
+- Test location: `codesync-server/src/__tests__/`
+- What's tested: validation logic (tab IDs, code length, permissions), permission computation, edit access control
+- Frontend: No test suite yet (React components need vitest/jsdom setup)
 - Manual testing: Open two browser tabs, create room in one, join from other
 - Health check: `curl http://localhost:3000/api/health`
 

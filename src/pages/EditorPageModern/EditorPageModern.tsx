@@ -1,11 +1,4 @@
-import {
-  type RefObject,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "react-avatar";
 import toast from "react-hot-toast";
 import { FaCrown } from "react-icons/fa";
@@ -23,8 +16,17 @@ import {
   DEFAULT_PERMISSIONS,
   DEFAULT_TAB_ID,
   DEFAULT_TAB_NAME,
+  OWNER_PERMISSIONS,
+  PERMISSION_KEYS,
+  PERMISSION_LABELS,
+  withEditorAccess,
 } from "./permissions";
-import type { EditorSocket, EditorTab, UserPermissions } from "./types";
+import type {
+  EditorSocketRef,
+  EditorTab,
+  FollowMode,
+  UserPermissions,
+} from "./types";
 import { useEditorRealtime } from "./useEditorRealtime";
 
 /**
@@ -54,9 +56,7 @@ export default function EditorPageModern() {
 
   // Follow mode: username being followed (null = not following)
   const [followingUser, setFollowingUser] = useState<string | null>(null);
-  const [followMode, setFollowMode] = useState<"auto" | "manual" | "off">(
-    "auto"
-  );
+  const [followMode, setFollowMode] = useState<FollowMode>("auto");
 
   // Per-user permissions: username -> permissions
   const [permissions, setPermissions] = useState<
@@ -133,8 +133,7 @@ export default function EditorPageModern() {
   const myPermissions: UserPermissions =
     permissions[userName] || DEFAULT_PERMISSIONS;
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
-  const canEditCode =
-    isOwner || (userName === currentEditor && myPermissions.canEdit);
+  const canEditCode = isOwner || myPermissions.canEdit;
 
   const applyActiveTab = useCallback(
     (tabId: string) => {
@@ -249,8 +248,11 @@ export default function EditorPageModern() {
 
   const handleGrantEditor = (username: string) => {
     setCurrentEditor(username);
-    toast.success(`${username} can now edit the code`);
     emitCurrentEditor(username);
+    const nextPerms = withEditorAccess(
+      permissions[username] || DEFAULT_PERMISSIONS
+    );
+    handleUpdatePermissions(username, nextPerms);
   };
 
   // Tab management
@@ -962,7 +964,7 @@ export default function EditorPageModern() {
                   onCodeChange={handleCodeChange}
                   roomId={id || ""}
                   setCurrentEditor={setCurrentEditor}
-                  socketRef={socketRef as RefObject<EditorSocket>}
+                  socketRef={socketRef as EditorSocketRef}
                   wrap={wrapLines}
                 />
               </div>
@@ -989,63 +991,28 @@ function PermissionsEditor({
   };
 
   const revokeAll = () => {
-    onUpdate({
-      canEdit: false,
-      canCreateTab: false,
-      canDeleteTab: false,
-      canRenameTab: false,
-    });
+    onUpdate({ ...DEFAULT_PERMISSIONS });
   };
 
   const grantAll = () => {
-    onUpdate({
-      canEdit: true,
-      canCreateTab: true,
-      canDeleteTab: true,
-      canRenameTab: true,
-    });
+    onUpdate({ ...OWNER_PERMISSIONS });
   };
 
   return (
     <div className="mt-1 ml-12 rounded-md border bg-background/50 p-3">
       <p className="mb-2 font-medium text-xs">Permissions for {username}</p>
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            checked={perms.canEdit}
-            className="cursor-pointer accent-primary"
-            onChange={() => toggle("canEdit")}
-            type="checkbox"
-          />
-          Can Edit Code
-        </label>
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            checked={perms.canCreateTab}
-            className="cursor-pointer accent-primary"
-            onChange={() => toggle("canCreateTab")}
-            type="checkbox"
-          />
-          Can Create Tabs
-        </label>
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            checked={perms.canDeleteTab}
-            className="cursor-pointer accent-primary"
-            onChange={() => toggle("canDeleteTab")}
-            type="checkbox"
-          />
-          Can Delete Tabs
-        </label>
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            checked={perms.canRenameTab}
-            className="cursor-pointer accent-primary"
-            onChange={() => toggle("canRenameTab")}
-            type="checkbox"
-          />
-          Can Rename Tabs
-        </label>
+        {PERMISSION_KEYS.map((key) => (
+          <label className="flex cursor-pointer items-center gap-2" key={key}>
+            <input
+              checked={perms[key]}
+              className="cursor-pointer accent-primary"
+              onChange={() => toggle(key)}
+              type="checkbox"
+            />
+            {PERMISSION_LABELS[key]}
+          </label>
+        ))}
       </div>
       <div className="mt-2 flex gap-2">
         <Button onClick={grantAll} size="sm" variant="outline">

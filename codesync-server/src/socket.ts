@@ -2,84 +2,22 @@ import type { ServerType } from "@hono/node-server";
 import type { Socket } from "socket.io";
 import { Server as SocketServer } from "socket.io";
 import { ACTIONS } from "./actions.js";
-
-type UserPermissions = {
-  canEdit: boolean;
-  canCreateTab: boolean;
-  canDeleteTab: boolean;
-  canRenameTab: boolean;
-};
-
-type TabData = { name: string; code: string };
+import {
+  DEFAULT_PERMISSIONS,
+  DEFAULT_TAB_ID,
+  DEFAULT_TAB_NAME,
+  isValidCode,
+  isValidTabId,
+  MAX_TABS_PER_ROOM,
+  normalizePermissions,
+  OWNER_PERMISSIONS,
+  sanitizeTabName,
+  type TabData,
+  type UserPermissions,
+} from "./validation.js";
 
 const ROOM_CLEANUP_DELAY_MS = 500;
 const ROOM_CODE_TTL_MS = 60 * 1000;
-const DEFAULT_TAB_ID = "tab-main";
-const DEFAULT_TAB_NAME = "main.js";
-const MAX_TABS_PER_ROOM = 10;
-const MAX_TAB_ID_LENGTH = 80;
-const MAX_TAB_NAME_LENGTH = 64;
-const MAX_CODE_LENGTH = 1_000_000;
-const TAB_ID_REGEX = /^[a-zA-Z0-9_-]+$/;
-
-const DEFAULT_PERMISSIONS: UserPermissions = {
-  canEdit: false,
-  canCreateTab: false,
-  canDeleteTab: false,
-  canRenameTab: false,
-};
-
-const OWNER_PERMISSIONS: UserPermissions = {
-  canEdit: true,
-  canCreateTab: true,
-  canDeleteTab: true,
-  canRenameTab: true,
-};
-
-const sanitizeTabName = (name: unknown): string | null => {
-  if (typeof name !== "string") {
-    return null;
-  }
-  const trimmed = name.trim();
-  if (!trimmed || trimmed.length > MAX_TAB_NAME_LENGTH) {
-    return null;
-  }
-  return trimmed;
-};
-
-const isValidTabId = (tabId: unknown): tabId is string =>
-  typeof tabId === "string" &&
-  tabId.length > 0 &&
-  tabId.length <= MAX_TAB_ID_LENGTH &&
-  TAB_ID_REGEX.test(tabId);
-
-const isValidCode = (code: unknown): code is string =>
-  typeof code === "string" && code.length <= MAX_CODE_LENGTH;
-
-const normalizePermissions = (value: unknown): UserPermissions | null => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const input = value as Record<string, unknown>;
-  const allowedKeys = [
-    "canEdit",
-    "canCreateTab",
-    "canDeleteTab",
-    "canRenameTab",
-  ];
-  if (Object.keys(input).some((key) => !allowedKeys.includes(key))) {
-    return null;
-  }
-  if (allowedKeys.some((key) => typeof input[key] !== "boolean")) {
-    return null;
-  }
-  return {
-    canEdit: input.canEdit,
-    canCreateTab: input.canCreateTab,
-    canDeleteTab: input.canDeleteTab,
-    canRenameTab: input.canRenameTab,
-  };
-};
 
 export function setupSocket(
   httpServer: ServerType,

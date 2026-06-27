@@ -17,11 +17,31 @@ export const OWNER_PERMISSIONS: UserPermissions = {
   canRenameTab: true,
 };
 
+/** Single source of truth — add new permissions here. */
+export const PERMISSION_KEYS: (keyof UserPermissions)[] = [
+  "canEdit",
+  "canCreateTab",
+  "canDeleteTab",
+  "canRenameTab",
+];
+
+export const PERMISSION_LABELS: Record<keyof UserPermissions, string> = {
+  canEdit: "Can Edit Code",
+  canCreateTab: "Can Create Tabs",
+  canDeleteTab: "Can Delete Tabs",
+  canRenameTab: "Can Rename Tabs",
+};
+
+/**
+ * Normalizes permissions so that when `canEdit` is true, all other fields
+ * are guaranteed booleans (no `undefined` leakage). When `canEdit` is false
+ * the other permissions are preserved — only `canEdit` is forced to `false`.
+ */
 export const normalizeEditorPermissions = (
   permissions: UserPermissions
 ): UserPermissions => {
   if (!permissions.canEdit) {
-    return { ...DEFAULT_PERMISSIONS };
+    return { ...permissions, canEdit: false };
   }
 
   return {
