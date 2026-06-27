@@ -19,45 +19,13 @@ import ClientModern from "@/components/ClientModern";
 import EditorWrapper from "@/components/EditorWrapper";
 import { Button } from "@/components/ui/button";
 import { ACTIONS } from "@/utils/constants";
-import { saveRoom } from "@/utils/roomHistory";
-import { initSocket } from "@/utils/socket";
-
-type Client = {
-  socketId: string;
-  username: string;
-};
-
-type Tab = {
-  id: string;
-  name: string;
-  code: string;
-};
-
-type UserPermissions = {
-  canEdit: boolean;
-  canCreateTab: boolean;
-  canDeleteTab: boolean;
-  canRenameTab: boolean;
-};
-
-type Socket = {
-  // biome-ignore lint/suspicious/noExplicitAny: Socket data can be any shape for real-time events
-  emit: (event: string, data: any) => void;
-  // biome-ignore lint/suspicious/noExplicitAny: Socket callbacks receive any data structure
-  on: (event: string, callback: (data: any) => void) => void;
-  // biome-ignore lint/suspicious/noExplicitAny: Socket callbacks receive any data structure
-  off: (event: string, callback: (data: any) => void) => void;
-  disconnect: () => void;
-};
-
-const DEFAULT_TAB_ID = "tab-main";
-
-const DEFAULT_PERMISSIONS: UserPermissions = {
-  canEdit: false,
-  canCreateTab: false,
-  canDeleteTab: false,
-  canRenameTab: false,
-};
+import {
+  DEFAULT_PERMISSIONS,
+  DEFAULT_TAB_ID,
+  DEFAULT_TAB_NAME,
+} from "./permissions";
+import type { EditorSocket, EditorTab, UserPermissions } from "./types";
+import { useEditorRealtime } from "./useEditorRealtime";
 
 /**
  * EditorPageModern (Top-Bar + Tab Bar + Editor canvas)
@@ -67,23 +35,17 @@ const DEFAULT_PERMISSIONS: UserPermissions = {
  * - No page scroll; only internal areas can scroll
  */
 export default function EditorPageModern() {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [currentEditor, setCurrentEditor] = useState<string>("");
-  const currentEditorRef = useRef<string>(currentEditor);
-  const [roomCreator, setRoomCreator] = useState<string | null>(null);
-  const roomCreatorRef = useRef<string | null>(roomCreator);
-  const socketRef = useRef<Socket | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const userName = location.state?.userName || "User";
 
   // Multi-tab state
-  const [tabs, setTabs] = useState<Tab[]>([
-    { id: DEFAULT_TAB_ID, name: "main.js", code: "" },
+  const [tabs, setTabs] = useState<EditorTab[]>([
+    { id: DEFAULT_TAB_ID, name: DEFAULT_TAB_NAME, code: "" },
   ]);
   const [activeTabId, setActiveTabId] = useState<string>(DEFAULT_TAB_ID);
-  const tabsRef = useRef<Tab[]>(tabs);
+  const tabsRef = useRef<EditorTab[]>(tabs);
 
   // Track which tab each user is on: username -> tabId
   const [userActiveTabs, setUserActiveTabs] = useState<Record<string, string>>(
@@ -123,18 +85,48 @@ export default function EditorPageModern() {
   }, []);
 
   // UI state
-  const [serverStatus, setServerStatus] = useState<
-    "connecting" | "connected" | "disconnected"
-  >("connecting");
-  const [connectionMessage, setConnectionMessage] = useState<string>(
-    "Connecting to server..."
-  );
   const [fontSize, setFontSize] = useState(16);
   const [wrapLines, setWrapLines] = useState<boolean>(
     () => typeof window !== "undefined" && window.innerWidth < 640
   );
   const [showParticipants, setShowParticipants] = useState<boolean>(false);
   const [zen, setZen] = useState<boolean>(false);
+
+  const handleCodeChange = useCallback(
+    (code: string, tabId?: string) => {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === (tabId ?? activeTabId) ? { ...t, code } : t))
+      );
+    },
+    [activeTabId]
+  );
+
+  const {
+    clients,
+    connectionMessage,
+    currentEditor,
+    emitCurrentEditor,
+    emitPermissionsUpdate,
+    emitTabClose,
+    emitTabCreate,
+    emitTabRename,
+    emitTabSwitch,
+    roomCreator,
+    serverStatus,
+    setCurrentEditor,
+    socketRef,
+  } = useEditorRealtime({
+    roomId: id,
+    userName,
+    navigate,
+    tabsRef,
+    handleCodeChange,
+    setTabs,
+    setActiveTabId,
+    setUserActiveTabs,
+    setFollowingUser,
+    setPermissions,
+  });
 
   // Derived
   const isOwner = userName === roomCreator;
@@ -156,14 +148,6 @@ export default function EditorPageModern() {
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
-
-  useEffect(() => {
-    currentEditorRef.current = currentEditor;
-  }, [currentEditor]);
-
-  useEffect(() => {
-    roomCreatorRef.current = roomCreator;
-  }, [roomCreator]);
 
   const sortedClients = useMemo(
     () =>
@@ -212,11 +196,6 @@ export default function EditorPageModern() {
   );
 
   // Handlers
-  const handleErrors = () => {
-    setServerStatus("disconnected");
-    setConnectionMessage("Connection lost - Reconnecting...");
-  };
-
   const copyRoomId = async () => {
     try {
       await navigator.clipboard.writeText(id || "");
@@ -256,12 +235,7 @@ export default function EditorPageModern() {
     if (currentEditor === userName) {
       setCurrentEditor("");
       toast.success("Editor is now read-only");
-      if (socketRef.current) {
-        socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-          roomId: id,
-          currenteditor: "",
-        });
-      }
+      emitCurrentEditor("");
     } else {
       if (!isOwner) {
         toast.error("Only the room creator can change the editable state");
@@ -269,24 +243,14 @@ export default function EditorPageModern() {
       }
       setCurrentEditor(userName);
       toast.success("Editor is now editable");
-      if (socketRef.current) {
-        socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-          roomId: id,
-          currenteditor: userName,
-        });
-      }
+      emitCurrentEditor(userName);
     }
   };
 
   const handleGrantEditor = (username: string) => {
     setCurrentEditor(username);
     toast.success(`${username} can now edit the code`);
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-        roomId: id,
-        currenteditor: username,
-      });
-    }
+    emitCurrentEditor(username);
   };
 
   // Tab management
@@ -297,21 +261,11 @@ export default function EditorPageModern() {
     }
     const tabId = `tab-${uuidv4()}`;
     const name = `file-${tabs.length + 1}.js`;
-    const newTab: Tab = { id: tabId, name, code: "" };
+    const newTab: EditorTab = { id: tabId, name, code: "" };
     setTabs((prev) => [...prev, newTab]);
     applyActiveTab(tabId);
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.TAB_CREATE, {
-        roomId: id,
-        tabId,
-        name,
-      });
-      socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-        roomId: id,
-        tabId,
-        username: userName,
-      });
-    }
+    emitTabCreate(tabId, name);
+    emitTabSwitch(tabId);
   };
 
   const handleCloseTab = (tabId: string) => {
@@ -328,22 +282,11 @@ export default function EditorPageModern() {
       if (activeTabId === tabId && filtered.length > 0) {
         const newActive = filtered[0]?.id || DEFAULT_TAB_ID;
         applyActiveTab(newActive);
-        if (socketRef.current) {
-          socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-            roomId: id,
-            tabId: newActive,
-            username: userName,
-          });
-        }
+        emitTabSwitch(newActive);
       }
       return filtered;
     });
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.TAB_CLOSE, {
-        roomId: id,
-        tabId,
-      });
-    }
+    emitTabClose(tabId);
   };
 
   const handleSwitchTab = (tabId: string) => {
@@ -351,13 +294,7 @@ export default function EditorPageModern() {
       return;
     }
     applyActiveTab(tabId);
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-        roomId: id,
-        tabId,
-        username: userName,
-      });
-    }
+    emitTabSwitch(tabId);
   };
 
   const handleRenameTab = (tabId: string, newName: string) => {
@@ -372,25 +309,10 @@ export default function EditorPageModern() {
     setTabs((prev) =>
       prev.map((t) => (t.id === tabId ? { ...t, name: trimmed } : t))
     );
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.TAB_RENAME, {
-        roomId: id,
-        tabId,
-        name: trimmed,
-      });
-    }
+    emitTabRename(tabId, trimmed);
     setRenamingTabId(null);
     setRenameValue("");
   };
-
-  const handleCodeChange = useCallback(
-    (code: string) => {
-      setTabs((prev) =>
-        prev.map((t) => (t.id === activeTabId ? { ...t, code } : t))
-      );
-    },
-    [activeTabId]
-  );
 
   useEffect(() => {
     if (followMode !== "auto") {
@@ -411,36 +333,29 @@ export default function EditorPageModern() {
       const targetTab = userActiveTabs[followingUser];
       if (targetTab && targetTab !== activeTabId) {
         applyActiveTab(targetTab);
-        if (socketRef.current) {
-          socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-            roomId: id,
-            tabId: targetTab,
-            username: userName,
-          });
-        }
+        emitTabSwitch(targetTab);
       }
     }
   }, [
     followingUser,
     userActiveTabs,
     activeTabId,
-    id,
-    userName,
     applyActiveTab,
+    emitTabSwitch,
   ]);
 
   useEffect(() => {
-    if (!(socketRef.current && id)) {
+    if (!id) {
       return;
     }
     if (!activeTabId) {
       return;
     }
-    socketRef.current.emit(ACTIONS.TAB_CODE_REQUEST, {
+    socketRef.current?.emit(ACTIONS.TAB_CODE_REQUEST, {
       roomId: id,
       tabId: activeTabId,
     });
-  }, [activeTabId, id]);
+  }, [activeTabId, id, socketRef]);
 
   const toggleFollow = (username: string) => {
     if (followingUser === username && followMode === "manual") {
@@ -455,13 +370,7 @@ export default function EditorPageModern() {
       const targetTab = userActiveTabs[username];
       if (targetTab && targetTab !== activeTabId) {
         applyActiveTab(targetTab);
-        if (socketRef.current) {
-          socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-            roomId: id,
-            tabId: targetTab,
-            username: userName,
-          });
-        }
+        emitTabSwitch(targetTab);
       }
     }
   };
@@ -476,292 +385,9 @@ export default function EditorPageModern() {
       return;
     }
     setPermissions((prev) => ({ ...prev, [targetUser]: newPerms }));
-    if (socketRef.current) {
-      socketRef.current.emit(ACTIONS.PERMISSIONS_UPDATE, {
-        roomId: id,
-        username: targetUser,
-        permissions: newPerms,
-      });
-    }
+    emitPermissionsUpdate(targetUser, newPerms);
     toast.success(`Permissions updated for ${targetUser}`);
   };
-
-  // Socket init and events
-  // biome-ignore lint/correctness/useExhaustiveDependencies: First load only
-  useEffect(() => {
-    document.title = `${id} - CodeSync`;
-
-    const init = async () => {
-      try {
-        setServerStatus("connecting");
-        setConnectionMessage("Connecting to server...");
-
-        socketRef.current = await initSocket();
-
-        if (socketRef.current) {
-          socketRef.current.on("connect", () => {
-            setServerStatus("connected");
-            setConnectionMessage("Connected!");
-          });
-
-          socketRef.current.on("connect_error", handleErrors);
-          socketRef.current.on("connect_failed", handleErrors);
-          socketRef.current.on("disconnect", () => {
-            setServerStatus("disconnected");
-            setConnectionMessage("Connection lost - Reconnecting...");
-          });
-
-          socketRef.current.emit(ACTIONS.JOIN, {
-            roomId: id,
-            userName,
-          });
-          if (id) {
-            saveRoom(id, userName);
-          }
-
-          socketRef.current.on(
-            ACTIONS.JOINED,
-            ({
-              clients: joinedClients,
-              username,
-              roomcreator,
-            }: {
-              clients: Client[];
-              username: string;
-              roomcreator: string;
-            }) => {
-              setClients(joinedClients);
-              setRoomCreator(roomcreator);
-              if (
-                username === userName &&
-                roomcreator === username &&
-                sessionStorage.getItem("admin") !== roomcreator &&
-                joinedClients.length !== 1
-              ) {
-                toast.error(
-                  `${username} is already in the ${id} room.\nPlease try another UserName!`
-                );
-                navigate("/", {
-                  state: { id },
-                });
-              }
-              if (roomCreator === username || joinedClients.length === 1) {
-                sessionStorage.setItem("admin", username);
-              }
-              if (username !== userName) {
-                toast.success(`${username} joined the room`);
-              }
-            }
-          );
-
-          // Receive tab sync data when joining
-          socketRef.current.on(
-            ACTIONS.TAB_SYNC,
-            ({
-              tabs: syncTabs,
-              activeTabId: syncActiveTabId,
-              userActiveTabs: syncUserActiveTabs,
-              permissions: syncPermissions,
-            }: {
-              tabs: Tab[];
-              activeTabId: string;
-              userActiveTabs: { username: string; activeTabId: string }[];
-              permissions: Record<string, UserPermissions>;
-            }) => {
-              if (syncTabs && syncTabs.length > 0) {
-                setTabs(syncTabs);
-                setActiveTabId(
-                  syncActiveTabId || syncTabs[0]?.id || DEFAULT_TAB_ID
-                );
-              }
-              if (syncUserActiveTabs) {
-                const map: Record<string, string> = {};
-                for (const u of syncUserActiveTabs) {
-                  map[u.username] = u.activeTabId;
-                }
-                setUserActiveTabs(map);
-              }
-              if (syncPermissions) {
-                setPermissions(syncPermissions);
-              }
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.DUPLICATE_USER,
-            ({ username }: { username: string }) => {
-              toast.error(
-                `${username} is already in the ${id} room.\nPlease try another UserName!`
-              );
-              navigate("/", {
-                state: { id },
-              });
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.DISCONNECTED,
-            ({
-              socketId,
-              username,
-            }: {
-              socketId: string;
-              username: string;
-            }) => {
-              toast.success(`${username} left the room`);
-              setClients((prev) =>
-                prev.filter((client) => client.socketId !== socketId)
-              );
-              if (currentEditor === username) {
-                setCurrentEditor("");
-                if (socketRef.current) {
-                  socketRef.current.emit(ACTIONS.SET_CURRENT_EDITOR, {
-                    roomId: id,
-                    currenteditor: "",
-                  });
-                }
-              }
-              // Stop following if the user left
-              setFollowingUser((prev) => (prev === username ? null : prev));
-              // Remove from user active tabs
-              setUserActiveTabs((prev) => {
-                const next = { ...prev };
-                delete next[username];
-                return next;
-              });
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.SET_CURRENT_EDITOR,
-            ({ currenteditor }: { currenteditor: string }) => {
-              if (currenteditor === userName) {
-                toast.success("You are now the editor");
-              }
-              if (currenteditor === "" && userName === roomCreatorRef.current) {
-                toast.success(
-                  `${currentEditorRef.current} have released control`
-                );
-              }
-              setCurrentEditor(currenteditor);
-            }
-          );
-
-          // Tab events from other users
-          socketRef.current.on(
-            ACTIONS.TAB_CREATE,
-            ({ tabId, name }: { tabId: string; name: string }) => {
-              setTabs((prev) => {
-                if (prev.some((t) => t.id === tabId)) {
-                  return prev;
-                }
-                return [...prev, { id: tabId, name, code: "" }];
-              });
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.TAB_CLOSE,
-            ({ tabId }: { tabId: string }) => {
-              setTabs((prev) => {
-                const filtered = prev.filter((t) => t.id !== tabId);
-                if (filtered.length === 0) {
-                  return prev;
-                }
-                return filtered;
-              });
-              setActiveTabId((prev) => {
-                if (prev === tabId) {
-                  const remaining = tabsRef.current.filter(
-                    (t) => t.id !== tabId
-                  );
-                  const nextTabId = remaining[0]?.id || DEFAULT_TAB_ID;
-                  setUserActiveTabs((current) => ({
-                    ...current,
-                    [userName]: nextTabId,
-                  }));
-                  if (socketRef.current) {
-                    socketRef.current.emit(ACTIONS.TAB_SWITCH, {
-                      roomId: id,
-                      tabId: nextTabId,
-                      username: userName,
-                    });
-                  }
-                  return nextTabId;
-                }
-                return prev;
-              });
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.TAB_RENAME,
-            ({ tabId, name }: { tabId: string; name: string }) => {
-              setTabs((prev) =>
-                prev.map((t) => (t.id === tabId ? { ...t, name } : t))
-              );
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.TAB_CODE,
-            ({ tabId, code }: { tabId: string; code: string }) => {
-              setTabs((prev) =>
-                prev.map((t) => (t.id === tabId ? { ...t, code } : t))
-              );
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.TAB_SWITCH,
-            ({ username, tabId }: { username: string; tabId: string }) => {
-              setUserActiveTabs((prev) => ({
-                ...prev,
-                [username]: tabId,
-              }));
-            }
-          );
-
-          socketRef.current.on(
-            ACTIONS.PERMISSIONS_UPDATE,
-            ({
-              username,
-              permissions: newPerms,
-            }: {
-              username: string;
-              permissions: UserPermissions;
-            }) => {
-              setPermissions((prev) => ({
-                ...prev,
-                [username]: newPerms,
-              }));
-              if (username === userName) {
-                toast.success("Your permissions have been updated");
-              }
-            }
-          );
-        }
-      } catch (_error) {
-        setServerStatus("disconnected");
-        setConnectionMessage("Failed to connect to server");
-        toast.error(
-          "Failed to connect to server. Please check your connection."
-        );
-        setTimeout(() => {
-          navigate("/");
-        }, 3000);
-      }
-    };
-
-    init();
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Redirect if no state
   useEffect(() => {
@@ -1336,7 +962,7 @@ export default function EditorPageModern() {
                   onCodeChange={handleCodeChange}
                   roomId={id || ""}
                   setCurrentEditor={setCurrentEditor}
-                  socketRef={socketRef as RefObject<Socket>}
+                  socketRef={socketRef as RefObject<EditorSocket>}
                   wrap={wrapLines}
                 />
               </div>
