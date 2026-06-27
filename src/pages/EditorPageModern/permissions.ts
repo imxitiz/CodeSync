@@ -38,7 +38,7 @@ export const PERMISSION_LABELS: Record<keyof UserPermissions, string> = {
  * the other permissions are preserved — only `canEdit` is forced to `false`.
  */
 export const normalizeEditorPermissions = (
-  permissions: UserPermissions
+  permissions: UserPermissions,
 ): UserPermissions => {
   if (!permissions.canEdit) {
     return { ...permissions, canEdit: false };
@@ -53,7 +53,7 @@ export const normalizeEditorPermissions = (
 };
 
 export const withEditorAccess = (
-  permissions: UserPermissions = DEFAULT_PERMISSIONS
+  permissions: UserPermissions = DEFAULT_PERMISSIONS,
 ): UserPermissions =>
   normalizeEditorPermissions({
     ...permissions,
@@ -62,7 +62,7 @@ export const withEditorAccess = (
 
 export const togglePermission = (
   permissions: UserPermissions,
-  key: keyof UserPermissions
+  key: keyof UserPermissions,
 ): UserPermissions =>
   normalizeEditorPermissions({
     ...permissions,
@@ -70,5 +70,5 @@ export const togglePermission = (
   });
 
 export const canShowTabPermissionControls = (
-  permissions: UserPermissions
+  permissions: UserPermissions,
 ): boolean => permissions.canEdit;

@@ -73,7 +73,7 @@ export const getRecentRooms = (): RecentRoom[] => {
           item !== null &&
           typeof (item as RecentRoom).roomId === "string" &&
           typeof (item as RecentRoom).userName === "string" &&
-          typeof (item as RecentRoom).joinedAt === "number"
+          typeof (item as RecentRoom).joinedAt === "number",
       )
       .slice(0, MAX_ROOMS);
   } catch {
@@ -90,7 +90,7 @@ export const saveRoom = (roomId: string, userName: string): void => {
     rooms.unshift({ roomId, userName, joinedAt: Date.now() });
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify(rooms.slice(0, MAX_ROOMS))
+      JSON.stringify(rooms.slice(0, MAX_ROOMS)),
     );
   } catch {
     // localStorage may be unavailable (private browsing, quota exceeded, etc.)

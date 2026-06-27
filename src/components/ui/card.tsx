@@ -8,7 +8,7 @@ function Card({ className, ...props }: CardProps) {
     <div
       className={cn(
         "rounded-lg border bg-card text-card-foreground shadow-sm",
-        className
+        className,
       )}
       {...props}
     />
@@ -33,7 +33,7 @@ function CardTitle({ className, ...props }: CardTitleProps) {
     <h3
       className={cn(
         "font-semibold text-lg leading-none tracking-tight",
-        className
+        className,
       )}
       {...props}
     />
@@ -64,9 +64,9 @@ function CardFooter({ className, ...props }: CardFooterProps) {
 
 export {
   Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
 };

@@ -67,19 +67,19 @@ export default function AppShell({
                 <div
                   className={cn(
                     "h-0.5 w-5 bg-foreground transition-all duration-300",
-                    isMenuOpen && "translate-y-1.5 rotate-45"
+                    isMenuOpen && "translate-y-1.5 rotate-45",
                   )}
                 />
                 <div
                   className={cn(
                     "mt-1 h-0.5 w-5 bg-foreground transition-all duration-300",
-                    isMenuOpen && "opacity-0"
+                    isMenuOpen && "opacity-0",
                   )}
                 />
                 <div
                   className={cn(
                     "mt-1 h-0.5 w-5 bg-foreground transition-all duration-300",
-                    isMenuOpen && "-rotate-45 -translate-y-1.5"
+                    isMenuOpen && "-rotate-45 -translate-y-1.5",
                   )}
                 />
               </button>
@@ -108,7 +108,7 @@ export default function AppShell({
           noScroll
             ? "h-screen overflow-hidden"
             : "h-[calc(100svh-56px)] overflow-auto",
-          className
+          className,
         )}
         id="content"
       >

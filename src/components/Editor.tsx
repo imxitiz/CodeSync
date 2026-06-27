@@ -99,9 +99,9 @@ const Editor: React.FC<EditorProps> = ({
               "color-mix(in oklch, var(--primary) 24%, transparent)",
           },
         },
-        { dark: false }
+        { dark: false },
       ),
-    []
+    [],
   );
 
   const themeExt = darkMode ? dracula : lightTheme;
@@ -111,7 +111,7 @@ const Editor: React.FC<EditorProps> = ({
       EditorView.theme({
         "&": { fontSize: `${fontSize}px` },
       }),
-    [fontSize]
+    [fontSize],
   );
 
   const extensions = useMemo(() => {
@@ -175,7 +175,7 @@ const Editor: React.FC<EditorProps> = ({
         setCode(newCode);
         onCodeChangeRef.current(
           newCode,
-          incomingTabId ?? activeTabIdRef.current
+          incomingTabId ?? activeTabIdRef.current,
         );
       }
     };

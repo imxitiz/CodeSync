@@ -51,7 +51,7 @@ export default function EditorPageModern() {
 
   // Track which tab each user is on: username -> tabId
   const [userActiveTabs, setUserActiveTabs] = useState<Record<string, string>>(
-    {}
+    {},
   );
 
   // Follow mode: username being followed (null = not following)
@@ -87,7 +87,7 @@ export default function EditorPageModern() {
   // UI state
   const [fontSize, setFontSize] = useState(16);
   const [wrapLines, setWrapLines] = useState<boolean>(
-    () => typeof window !== "undefined" && window.innerWidth < 640
+    () => typeof window !== "undefined" && window.innerWidth < 640,
   );
   const [showParticipants, setShowParticipants] = useState<boolean>(false);
   const [zen, setZen] = useState<boolean>(false);
@@ -95,10 +95,10 @@ export default function EditorPageModern() {
   const handleCodeChange = useCallback(
     (code: string, tabId?: string) => {
       setTabs((prev) =>
-        prev.map((t) => (t.id === (tabId ?? activeTabId) ? { ...t, code } : t))
+        prev.map((t) => (t.id === (tabId ?? activeTabId) ? { ...t, code } : t)),
       );
     },
-    [activeTabId]
+    [activeTabId],
   );
 
   const {
@@ -140,7 +140,7 @@ export default function EditorPageModern() {
       setActiveTabId(tabId);
       setUserActiveTabs((prev) => ({ ...prev, [userName]: tabId }));
     },
-    [userName]
+    [userName],
   );
 
   // Keep refs in sync
@@ -159,7 +159,7 @@ export default function EditorPageModern() {
         }
         return 0;
       }),
-    [clients, roomCreator]
+    [clients, roomCreator],
   );
 
   const compactAvatars = useMemo(() => {
@@ -174,7 +174,7 @@ export default function EditorPageModern() {
       return null;
     }
     const ownerActive = clients.some(
-      (client) => client.username === roomCreator
+      (client) => client.username === roomCreator,
     );
     if (ownerActive && roomCreator !== userName) {
       return roomCreator;
@@ -191,7 +191,7 @@ export default function EditorPageModern() {
       const t = tabs.find((tab) => tab.id === tabId);
       return t ? t.name : "unknown";
     },
-    [tabs]
+    [tabs],
   );
 
   // Handlers
@@ -250,7 +250,7 @@ export default function EditorPageModern() {
     setCurrentEditor(username);
     emitCurrentEditor(username);
     const nextPerms = withEditorAccess(
-      permissions[username] || DEFAULT_PERMISSIONS
+      permissions[username] || DEFAULT_PERMISSIONS,
     );
     handleUpdatePermissions(username, nextPerms);
   };
@@ -309,7 +309,7 @@ export default function EditorPageModern() {
       return;
     }
     setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, name: trimmed } : t))
+      prev.map((t) => (t.id === tabId ? { ...t, name: trimmed } : t)),
     );
     emitTabRename(tabId, trimmed);
     setRenamingTabId(null);
@@ -380,7 +380,7 @@ export default function EditorPageModern() {
   // Permissions management
   const handleUpdatePermissions = (
     targetUser: string,
-    newPerms: UserPermissions
+    newPerms: UserPermissions,
   ) => {
     if (!isOwner) {
       toast.error("Only the owner can change permissions");
@@ -714,7 +714,6 @@ export default function EditorPageModern() {
                   >
                     {renamingTabId === tab.id ? (
                       <input
-                        autoFocus
                         className="w-20 rounded border bg-background px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-primary"
                         onBlur={() => handleRenameTab(tab.id, renameValue)}
                         onChange={(e) => setRenameValue(e.target.value)}
@@ -898,7 +897,7 @@ export default function EditorPageModern() {
                                     setPermDialogUser(
                                       permDialogUser === username
                                         ? null
-                                        : username
+                                        : username,
                                     )
                                   }
                                   size="sm"

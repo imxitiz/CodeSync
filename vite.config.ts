@@ -12,17 +12,8 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       workbox: {
-        globPatterns: [
-          "**/*.{js,ts,tsx,css,ico,png,svg,webp,jpg,jpeg}",
-          "assets/**/*.{js,ts,tsx,css,woff2,woff,ttf}",
-          // Specifically handle HTML with version hash
-          "index.html",
-        ],
-        // Exclude API routes and socket.io from caching
-        navigateFallbackDenylist: [/^\/api\/.*/, /^\/socket\.io\/.*/],
-        // Add better cache busting for dynamic imports
+        cacheId: "codesync-v1",
         cleanupOutdatedCaches: true,
-        navigateFallback: "index.html",
         runtimeCaching: [
           // Special handling for HTML documents to avoid hydration issues
           {
@@ -137,8 +128,16 @@ export default defineConfig({
   ],
   // SSG configuration
   ssgOptions: {
-    script: "async",
+    script: "sync",
     formatting: "none",
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        preserveModules: false,
+        hoistTransitiveImports: false,
+      },
+    },
   },
   resolve: {
     alias: {

@@ -118,7 +118,7 @@ export default function HomePageModern() {
     setIsHistoryEnabled(enabled);
     setRecentRooms(enabled ? getRecentRooms() : []);
     toast.success(
-      enabled ? "Room history enabled" : "Room history disabled and cleared"
+      enabled ? "Room history enabled" : "Room history disabled and cleared",
     );
   };
 
@@ -152,7 +152,7 @@ export default function HomePageModern() {
     }
     if (!isValidBackendOrigin(trimmed)) {
       toast.error(
-        "Invalid URL. Use an http(s) origin like http://localhost:3000 with no path, query, or credentials."
+        "Invalid URL. Use an http(s) origin like http://localhost:3000 with no path, query, or credentials.",
       );
       return;
     }
@@ -365,7 +365,7 @@ export default function HomePageModern() {
                       <span
                         className={cn(
                           "inline-block transition-transform",
-                          showAdvanced && "rotate-90"
+                          showAdvanced && "rotate-90",
                         )}
                       >
                         ▶

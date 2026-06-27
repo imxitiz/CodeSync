@@ -80,7 +80,7 @@ export const presetThemes = buildPresetThemes();
 // Apply theme with specific mode - enhanced for service worker compatibility
 export function applyTheme(
   theme: Theme | null | undefined,
-  mode: string | null = null
+  mode: string | null = null,
 ): void {
   // Enhanced checks for service worker cached content
   if (!theme) {
@@ -95,7 +95,7 @@ export function applyTheme(
     // If document is not ready, try again after DOM loads
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", () =>
-        applyTheme(theme, mode)
+        applyTheme(theme, mode),
       );
       return;
     }
@@ -171,7 +171,7 @@ export function saveCustomThemes(customThemes: Record<string, Theme>): void {
   try {
     window.localStorage.setItem(
       CUSTOM_THEMES_STORAGE_KEY,
-      JSON.stringify(customThemes)
+      JSON.stringify(customThemes),
     );
   } catch (_error) {}
 }
@@ -268,7 +268,7 @@ export function parseCssVariables(cssText: string): {
 // Build single theme from tweakcn CSS string with both light and dark modes
 export function createThemeFromCss(
   baseName: string,
-  cssText: string
+  cssText: string,
 ): ModernTheme {
   const { lightTokens, darkTokens } = parseCssVariables(cssText);
 

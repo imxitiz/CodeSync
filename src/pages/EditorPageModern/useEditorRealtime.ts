@@ -55,7 +55,7 @@ export const useEditorRealtime = ({
   const [serverStatus, setServerStatus] =
     useState<EditorServerStatus>("connecting");
   const [connectionMessage, setConnectionMessage] = useState(
-    "Connecting to server..."
+    "Connecting to server...",
   );
 
   const socketRef = useRef<EditorSocket | null>(null);
@@ -82,35 +82,35 @@ export const useEditorRealtime = ({
         currenteditor: nextEditor,
       });
     },
-    [roomId]
+    [roomId],
   );
 
   const emitTabCreate = useCallback(
     (tabId: string, name: string) => {
       socketRef.current?.emit(ACTIONS.TAB_CREATE, { roomId, tabId, name });
     },
-    [roomId]
+    [roomId],
   );
 
   const emitTabClose = useCallback(
     (tabId: string) => {
       socketRef.current?.emit(ACTIONS.TAB_CLOSE, { roomId, tabId });
     },
-    [roomId]
+    [roomId],
   );
 
   const emitTabRename = useCallback(
     (tabId: string, name: string) => {
       socketRef.current?.emit(ACTIONS.TAB_RENAME, { roomId, tabId, name });
     },
-    [roomId]
+    [roomId],
   );
 
   const emitTabSwitch = useCallback(
     (tabId: string) => {
       socketRef.current?.emit(ACTIONS.TAB_SWITCH, { roomId, tabId });
     },
-    [roomId]
+    [roomId],
   );
 
   const emitPermissionsUpdate = useCallback(
@@ -121,7 +121,7 @@ export const useEditorRealtime = ({
         permissions,
       });
     },
-    [roomId]
+    [roomId],
   );
 
   useEffect(() => {
@@ -166,7 +166,7 @@ export const useEditorRealtime = ({
               joinedClients.length !== 1
             ) {
               toast.error(
-                `${username} is already in the ${roomId} room.\nPlease try another UserName!`
+                `${username} is already in the ${roomId} room.\nPlease try another UserName!`,
               );
               navigate("/", { state: { id: roomId } });
             }
@@ -179,7 +179,7 @@ export const useEditorRealtime = ({
             if (username !== userName) {
               toast.success(`${username} joined the room`);
             }
-          }
+          },
         );
 
         socket.on(
@@ -198,7 +198,7 @@ export const useEditorRealtime = ({
             if (syncTabs?.length) {
               setTabs(syncTabs);
               setActiveTabId(
-                syncActiveTabId || syncTabs[0]?.id || DEFAULT_TAB_ID
+                syncActiveTabId || syncTabs[0]?.id || DEFAULT_TAB_ID,
               );
             }
             if (syncUserActiveTabs) {
@@ -207,19 +207,19 @@ export const useEditorRealtime = ({
                   syncUserActiveTabs.map((user) => [
                     user.username,
                     user.activeTabId,
-                  ])
-                )
+                  ]),
+                ),
               );
             }
             if (syncPermissions) {
               setPermissions(syncPermissions);
             }
-          }
+          },
         );
 
         socket.on(ACTIONS.DUPLICATE_USER, ({ username }) => {
           toast.error(
-            `${username} is already in the ${roomId} room.\nPlease try another UserName!`
+            `${username} is already in the ${roomId} room.\nPlease try another UserName!`,
           );
           navigate("/", { state: { id: roomId } });
         });
@@ -227,7 +227,7 @@ export const useEditorRealtime = ({
         socket.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
           toast.success(`${username} left the room`);
           setClients((prev) =>
-            prev.filter((client) => client.socketId !== socketId)
+            prev.filter((client) => client.socketId !== socketId),
           );
           if (currentEditorRef.current === username) {
             setCurrentEditor("");
@@ -254,7 +254,7 @@ export const useEditorRealtime = ({
           setTabs((prev) =>
             prev.some((tab) => tab.id === tabId)
               ? prev
-              : [...prev, { id: tabId, name, code: "" }]
+              : [...prev, { id: tabId, name, code: "" }],
           );
         });
 
@@ -281,7 +281,7 @@ export const useEditorRealtime = ({
 
         socket.on(ACTIONS.TAB_RENAME, ({ tabId, name }) => {
           setTabs((prev) =>
-            prev.map((tab) => (tab.id === tabId ? { ...tab, name } : tab))
+            prev.map((tab) => (tab.id === tabId ? { ...tab, name } : tab)),
           );
         });
 
@@ -300,7 +300,7 @@ export const useEditorRealtime = ({
             if (username === userName) {
               toast.success("Your permissions have been updated");
             }
-          }
+          },
         );
       } catch {
         setServerStatus("disconnected");
