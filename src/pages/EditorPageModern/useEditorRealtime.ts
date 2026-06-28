@@ -10,9 +10,13 @@ import {
 import toast from "react-hot-toast";
 import type { NavigateFunction } from "react-router-dom";
 import { ACTIONS } from "@/utils/constants";
-import { saveRoom } from "@/utils/roomHistory";
+import { saveRoom, updateRoomToken } from "@/utils/roomHistory";
 import { initSocket } from "@/utils/socket";
-import { DEFAULT_TAB_ID } from "./permissions";
+import {
+  DEFAULT_PERMISSIONS,
+  DEFAULT_TAB_ID,
+  OWNER_PERMISSIONS,
+} from "./permissions";
 import type {
   Client,
   EditorServerStatus,
@@ -26,6 +30,7 @@ type UserActiveTab = { username: string; activeTabId: string };
 type UseEditorRealtimeOptions = {
   roomId: string | undefined;
   userName: string;
+  reclaimToken?: string;
   navigate: NavigateFunction;
   tabsRef: MutableRefObject<EditorTab[]>;
   handleCodeChange: (code: string, tabId: string) => void;
@@ -39,6 +44,7 @@ type UseEditorRealtimeOptions = {
 export const useEditorRealtime = ({
   roomId,
   userName,
+  reclaimToken,
   navigate,
   tabsRef,
   handleCodeChange,
@@ -129,6 +135,13 @@ export const useEditorRealtime = ({
     [roomId],
   );
 
+  const emitTransferOwner = useCallback(
+    (newOwner: string) => {
+      socketRef.current?.emit(ACTIONS.TRANSFER_OWNER, { roomId, newOwner });
+    },
+    [roomId],
+  );
+
   useEffect(() => {
     document.title = `${roomId} - CodeSync`;
 
@@ -154,27 +167,64 @@ export const useEditorRealtime = ({
           setConnectionMessage("Connection lost - Reconnecting...");
         });
 
-        socket.emit(ACTIONS.JOIN, { roomId, userName });
+        socket.emit(ACTIONS.JOIN, { roomId, userName, reclaimToken });
         if (roomId) {
-          saveRoom(roomId, userName);
+          saveRoom(roomId, userName, reclaimToken);
         }
+
+        socket.on(
+          ACTIONS.RECLAIM_RESULT,
+          (result: { ok: boolean; token?: string | null; owner?: string }) => {
+            if (
+              result.ok &&
+              typeof result.token === "string" &&
+              result.token.length > 0 &&
+              roomId
+            ) {
+              // Server verified us as the true owner and issued a fresh token.
+              // Persist so we can reclaim again after another disconnect.
+              updateRoomToken(roomId, result.token);
+            }
+            // If `owner` is present, the room is telling everyone the true owner
+            // just returned — no extra client action needed beyond UI updates
+            // triggered by JOINED/JOIN events.
+          },
+        );
+
+        socket.on(
+          ACTIONS.OWNER_TRANSFERRED,
+          ({
+            oldOwner,
+            newOwner,
+            token,
+          }: {
+            oldOwner: string;
+            newOwner: string;
+            token?: string;
+          }) => {
+            setRoomCreator(newOwner);
+            setPermissions((prev) => ({
+              ...prev,
+              [newOwner]: { ...OWNER_PERMISSIONS },
+              [oldOwner]: { ...DEFAULT_PERMISSIONS },
+            }));
+            if (token && roomId) {
+              updateRoomToken(roomId, token);
+            }
+            if (oldOwner === userName) {
+              // We were just demoted — drop local edit state.
+              setCurrentEditor("");
+              setFollowingUser(null);
+            }
+            toast.success(`Ownership transferred to ${newOwner}`);
+          },
+        );
 
         socket.on(
           ACTIONS.JOINED,
           ({ clients: joinedClients, username, roomcreator }) => {
             setClients(joinedClients);
             setRoomCreator(roomcreator);
-            if (
-              username === userName &&
-              roomcreator === username &&
-              sessionStorage.getItem("admin") !== roomcreator &&
-              joinedClients.length !== 1
-            ) {
-              toast.error(
-                `${username} is already in the ${roomId} room.\nPlease try another UserName!`,
-              );
-              navigate("/", { state: { id: roomId } });
-            }
             if (
               roomCreatorRef.current === username ||
               joinedClients.length === 1
@@ -324,6 +374,7 @@ export const useEditorRealtime = ({
   }, [
     handleErrors,
     navigate,
+    reclaimToken,
     roomId,
     setActiveTabId,
     setFollowingUser,
@@ -344,6 +395,7 @@ export const useEditorRealtime = ({
     emitTabCreate,
     emitTabRename,
     emitTabSwitch,
+    emitTransferOwner,
     roomCreator,
     serverStatus,
     setCurrentEditor,

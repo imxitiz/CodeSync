@@ -17,6 +17,7 @@ import {
   withEditorAccess,
 } from "./permissions";
 import ShortcutsPanel from "./ShortcutsPanel";
+import TransferOwnerDialog from "./TransferOwnerDialog";
 import type {
   EditorSocketRef,
   EditorTab,
@@ -37,6 +38,7 @@ export default function EditorPageModern() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const userName = location.state?.userName || "User";
+  const reclaimToken = location.state?.reclaimToken;
 
   // Multi-tab state
   const [tabs, setTabs] = useState<EditorTab[]>([
@@ -109,13 +111,16 @@ export default function EditorPageModern() {
     emitTabCreate,
     emitTabRename,
     emitTabSwitch,
+    emitTransferOwner,
     roomCreator,
     serverStatus,
     setCurrentEditor,
+    socketReady,
     socketRef,
   } = useEditorRealtime({
     roomId: id,
     userName,
+    reclaimToken,
     navigate,
     tabsRef,
     handleCodeChange,
@@ -214,17 +219,37 @@ export default function EditorPageModern() {
     }
   };
 
+  const [showTransferDialog, setShowTransferDialog] = useState(false);
+
   const leaveRoom = () => {
-    if (isOwner) {
-      if (
-        !window.confirm(
-          "You are the room owner. Leaving will destroy the room. Are you sure?",
-        )
-      ) {
-        return;
-      }
-      socketRef.current?.emit(ACTIONS.DESTROY_ROOM, { roomId: id });
+    if (isOwner && clients.length > 1) {
+      // Owner with other participants — offer transfer or destroy.
+      setShowTransferDialog(true);
+      return;
     }
+    // Non-owner, or owner alone — leave/destroy directly.
+    if (isOwner) {
+      socketRef.current?.emit(ACTIONS.DESTROY_ROOM, {
+        roomId: id,
+        reclaimToken,
+      });
+    }
+    if (sessionStorage.getItem("admin") === roomCreator) {
+      sessionStorage.removeItem("admin");
+    }
+    navigate("/");
+  };
+
+  const handleTransferAndLeave = (newOwner: string) => {
+    emitTransferOwner(newOwner);
+    if (sessionStorage.getItem("admin") === roomCreator) {
+      sessionStorage.removeItem("admin");
+    }
+    navigate("/");
+  };
+
+  const handleDestroyAndLeave = () => {
+    socketRef.current?.emit(ACTIONS.DESTROY_ROOM, { roomId: id, reclaimToken });
     if (sessionStorage.getItem("admin") === roomCreator) {
       sessionStorage.removeItem("admin");
     }
@@ -688,6 +713,8 @@ export default function EditorPageModern() {
               <EmptyState
                 currentEditor={currentEditor}
                 participantCount={sortedClients.length}
+                isOwner={isOwner}
+                canEdit={canEditCode}
               />
             )}
             {/* Exit Zen small control */}
@@ -709,6 +736,7 @@ export default function EditorPageModern() {
                 className={`editor-host h-full w-full ${wrapLines ? "wrap-on" : "no-wrap"}`}
               >
                 <EditorWrapper
+                  key={activeTab.id}
                   activeTabId={activeTab.id}
                   currentEditor={currentEditor}
                   darkMode={isDark}
@@ -718,6 +746,7 @@ export default function EditorPageModern() {
                   onCodeChange={handleCodeChange}
                   roomId={id || ""}
                   setCurrentEditor={setCurrentEditor}
+                  socketReady={socketReady}
                   socketRef={socketRef as EditorSocketRef}
                   wrap={wrapLines}
                 />
@@ -741,6 +770,7 @@ export default function EditorPageModern() {
         participants={sortedClients}
         currentUser={userName}
         currentEditor={currentEditor}
+        roomCreator={roomCreator}
         isOwner={isOwner}
         followingUser={followingUser}
         onFollow={toggleFollow}
@@ -753,6 +783,14 @@ export default function EditorPageModern() {
         }}
         userPermissions={permissions}
         onUpdatePermissions={handleUpdatePermissions}
+      />
+
+      <TransferOwnerDialog
+        open={showTransferDialog}
+        onClose={() => setShowTransferDialog(false)}
+        participants={sortedClients.filter((c) => c.username !== userName)}
+        onTransfer={handleTransferAndLeave}
+        onDestroy={handleDestroyAndLeave}
       />
 
       <ShortcutsPanel

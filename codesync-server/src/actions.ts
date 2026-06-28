@@ -1,29 +1,7 @@
-export const ACTIONS = {
-  JOIN: "join",
-  JOINED: "joined",
-  DISCONNECTED: "disconnected",
-  CODE_CHANGE: "code-change",
-  SYNC_CODE: "sync-code",
-  LEAVE: "leave",
-  USER_JOINED: "user-joined",
-  USER_LEFT: "user-left",
-  CHANGE_EDITOR: "change-editor",
-  EDITOR_CHANGED: "editor-changed",
-  GRANT_EDIT: "grant-edit",
-  EDIT_GRANTED: "edit-granted",
-  REVOKE_EDIT: "revoke-edit",
-  EDIT_REVOKED: "edit-revoked",
-  SET_CURRENT_EDITOR: "set_current_editor",
-  DUPLICATE_USER: "duplicate-user",
-  TAB_CREATE: "tab-create",
-  TAB_CLOSE: "tab-close",
-  TAB_RENAME: "tab-rename",
-  TAB_SWITCH: "tab-switch",
-  TAB_SYNC: "tab-sync",
-  TAB_CODE_REQUEST: "tab-code-request",
-  TAB_CODE: "tab-code",
-  PERMISSIONS_UPDATE: "permissions-update",
-  DESTROY_ROOM: "destroy-room",
-} as const;
-
-export type ACTIONS_TYPE = (typeof ACTIONS)[keyof typeof ACTIONS];
+/**
+ * Server-side re-export of shared Socket.IO action constants.
+ *
+ * DO NOT add actions here — add them in shared/actions.ts instead.
+ * This file exists so server imports stay local: `./actions.js`.
+ */
+export { ACTIONS, type ActionsType as ACTIONS_TYPE } from "../../shared/actions.js";

@@ -4,6 +4,8 @@
  * Privacy notes:
  * - Data is stored **only** on the user's device (localStorage).
  * - No room history is sent to the server.
+ * - Reclaim tokens are opaque HMAC-signed blobs — they cannot be forged or
+ *   tampered with, and they are bound to a specific room + username + time.
  * - Users can clear their history or disable it entirely.
  */
 
@@ -15,6 +17,7 @@ export type RecentRoom = {
   roomId: string;
   userName: string;
   joinedAt: number;
+  reclaimToken?: string;
 };
 
 const hasLocalStorage = (): boolean => {
@@ -53,6 +56,19 @@ export const setRoomHistoryEnabled = (enabled: boolean): void => {
   }
 };
 
+const isRecentRoom = (item: unknown): item is RecentRoom => {
+  if (typeof item !== "object" || item === null) {
+    return false;
+  }
+  const r = item as Record<string, unknown>;
+  return (
+    typeof r.roomId === "string" &&
+    typeof r.userName === "string" &&
+    typeof r.joinedAt === "number" &&
+    (r.reclaimToken === undefined || typeof r.reclaimToken === "string")
+  );
+};
+
 export const getRecentRooms = (): RecentRoom[] => {
   if (!isRoomHistoryEnabled()) {
     return [];
@@ -66,34 +82,58 @@ export const getRecentRooms = (): RecentRoom[] => {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed
-      .filter(
-        (item): item is RecentRoom =>
-          typeof item === "object" &&
-          item !== null &&
-          typeof (item as RecentRoom).roomId === "string" &&
-          typeof (item as RecentRoom).userName === "string" &&
-          typeof (item as RecentRoom).joinedAt === "number",
-      )
-      .slice(0, MAX_ROOMS);
+    return parsed.filter(isRecentRoom).slice(0, MAX_ROOMS);
   } catch {
     return [];
   }
 };
 
-export const saveRoom = (roomId: string, userName: string): void => {
+export const saveRoom = (
+  roomId: string,
+  userName: string,
+  reclaimToken?: string,
+): void => {
   if (!isRoomHistoryEnabled()) {
     return;
   }
   try {
     const rooms = getRecentRooms().filter((room) => room.roomId !== roomId);
-    rooms.unshift({ roomId, userName, joinedAt: Date.now() });
+    const next: RecentRoom = {
+      roomId,
+      userName,
+      joinedAt: Date.now(),
+    };
+    if (typeof reclaimToken === "string" && reclaimToken.length > 0) {
+      next.reclaimToken = reclaimToken;
+    }
+    rooms.unshift(next);
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify(rooms.slice(0, MAX_ROOMS)),
     );
   } catch {
     // localStorage may be unavailable (private browsing, quota exceeded, etc.)
+  }
+};
+
+export const updateRoomToken = (roomId: string, reclaimToken: string): void => {
+  if (!isRoomHistoryEnabled()) {
+    return;
+  }
+  try {
+    const rooms = getRecentRooms();
+    const idx = rooms.findIndex((r) => r.roomId === roomId);
+    if (idx === -1) {
+      return;
+    }
+    const existing = rooms[idx];
+    if (!existing) {
+      return;
+    }
+    rooms[idx] = { ...existing, reclaimToken };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
+  } catch {
+    // ignore
   }
 };
 

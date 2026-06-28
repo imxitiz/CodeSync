@@ -2,6 +2,7 @@ import type { Server } from "node:http";
 import { createAdaptorServer } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { randomBytes } from "node:crypto";
 import { setupSocket } from "./socket.js";
 
 const TRAILING_SLASH_REGEX = /\/$/;
@@ -41,6 +42,35 @@ const isAllowedOrigin = (origin: string | undefined): boolean => {
   }
   return allowedOrigins.has(normalize(origin));
 };
+
+// ---------------------------------------------------------------------------
+// Owner-reclaim secret
+// ---------------------------------------------------------------------------
+// Used to sign HMAC tokens that let the original room owner reclaim creator
+// rights after an accidental disconnect. MUST be set in production so tokens
+// survive server restarts. If unset, a random secret is generated and the
+// server will fail to start (fail-secure — we do NOT silently allow unverified
+// reclaims).
+// ---------------------------------------------------------------------------
+let OWNER_SECRET: string | undefined = process.env.CODESYNC_OWNER_SECRET;
+if (!OWNER_SECRET) {
+  if (process.env.NODE_ENV === "production") {
+    console.error(
+      "[codesync] FATAL: CODESYNC_OWNER_SECRET env var is required in production.\n" +
+        "Generate one:  node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+    );
+    process.exit(1);
+  }
+  // Dev only — ephemeral, logged so the developer knows it's temporary.
+  const devSecret = randomBytes(32).toString("hex");
+  console.warn(
+    `[codesync] WARNING: CODESYNC_OWNER_SECRET not set — using ephemeral dev secret.\n` +
+      `Tokens will NOT survive server restarts. Set it for persistent dev:\n` +
+      `  export CODESYNC_OWNER_SECRET=${devSecret}`
+  );
+  process.env.CODESYNC_OWNER_SECRET = devSecret;
+  OWNER_SECRET = devSecret;
+}
 
 const app = new Hono();
 
@@ -96,7 +126,7 @@ const httpServer = createAdaptorServer({
 
 // Attach Socket.IO FIRST — this registers its 'listening' event listener
 // which calls engine.io's init() to create the ws.WebSocketServer.
-setupSocket(httpServer, isAllowedOrigin);
+setupSocket(httpServer, isAllowedOrigin, OWNER_SECRET);
 
 // Now start listening — the 'listening' event fires, engine.io's init() runs,
 // the ws.WebSocketServer is created, and WebSocket upgrades work.

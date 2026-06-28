@@ -91,8 +91,9 @@ bun run format
 | Path | Purpose |
 |---|---|
 | `server.ts` | Express + Socket.IO backend, CORS, room management |
-| `action.ts` | Socket event action constants (shared server-side) |
-| `src/utils/constants.ts` | Frontend action constants + `BACKEND_API_URL` |
+| `shared/actions.ts` | **Single source of truth** for Socket.IO event constants (DRY) |
+| `codesync-server/src/actions.ts` | Re-exports from `shared/actions.ts` for server convenience |
+| `src/utils/constants.ts` | Re-exports ACTIONS from `shared/actions.ts` + `BACKEND_API_URL` |
 | `src/utils/socket.ts` | Socket.IO client initialization |
 | `src/utils/healthCheck.ts` | Server health check before socket connect |
 | `src/utils/swDetection.ts` | Service worker cache detection utilities |
@@ -117,7 +118,8 @@ bun run format
 
 ## Core Modules & Responsibilities
 
-### Socket Events (`action.ts` / `src/utils/constants.ts`)
+### Socket Events (`shared/actions.ts` — Single Source of Truth)
+Both server and frontend import from `shared/actions.ts`. Do NOT duplicate.
 ```typescript
 const ACTIONS = {
   JOIN: "join",           // Client → Server: join room
@@ -129,6 +131,7 @@ const ACTIONS = {
   REVOKE_EDIT: "revoke-edit", // Room creator revokes edit access
   DUPLICATE_USER: "duplicate-user",  // Reject duplicate usernames
   DISCONNECTED: "disconnected",     // User left notification
+  // ...see shared/actions.ts for full list
 } as const;
 ```
 
@@ -226,7 +229,7 @@ bun add -d vitest @testing-library/react @testing-library/jest-dom jsdom
 1. **Socket event handling** — `server.ts` room join/leave/duplicate logic.
 2. **Health check** — `healthCheck.ts` success/timeout/failure paths.
 3. **Theme system** — `applyTheme()` sets correct CSS variables, preset loading.
-4. **Action constants** — `action.ts` and `constants.ts` stay in sync.
+4. **Action constants** — `shared/actions.ts` is the single source; server/frontend re-export.
 5. **CORS logic** — `corsOrigin()` allows/blocks correct origins.
 
 **Key commands** (once configured):
@@ -257,7 +260,7 @@ bun run test --coverage # with coverage
 
 1. **Create feature folder**: `src/features/<name>/` or extend existing page/component.
 2. **Add components**: Keep in `src/components/` or co-locate in the feature folder. Export via barrel `index.ts`.
-3. **Socket events**: Add new action to `action.ts` AND `src/utils/constants.ts` (keep in sync). Handle on both client and server.
+3. **Socket events**: Add new action to `shared/actions.ts` ONLY. Both server and frontend import from there — no duplication needed. Handle on both client and server.
 4. **Styling**: Use Tailwind + theme CSS variables. No hardcoded colors. Use `cn()` for conditional classes.
 5. **Environment config**: Add new env vars to both `.env.example` and document in this file's Configuration section.
 6. **Feature flag** (if applicable): Gate behind `VITE_FEATURE_<NAME>` env var.

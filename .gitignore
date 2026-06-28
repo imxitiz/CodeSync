@@ -26,3 +26,10 @@ dist-ssr
 dev-dist/
 .vite-react-ssg-temp/
 *.bak
+
+# Environment files — secrets must NEVER be committed
+.env
+.env.local
+.env.*.local
+codesync-server/.env
+codesync-server/.env.local

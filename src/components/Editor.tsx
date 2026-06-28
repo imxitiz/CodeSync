@@ -2,7 +2,7 @@ import { javascript } from "@codemirror/lang-javascript";
 import { EditorView } from "@codemirror/view";
 import { dracula } from "@uiw/codemirror-theme-dracula";
 import CodeMirror from "@uiw/react-codemirror";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorSocketRef } from "@/pages/EditorPageModern/types";
 import { ACTIONS } from "../utils/constants";
 
@@ -14,6 +14,7 @@ type IncomingCodeChange = {
 
 export type EditorProps = {
   socketRef: EditorSocketRef;
+  socketReady: boolean;
   roomId: string;
   activeTabId: string;
   initialCode: string;
@@ -28,6 +29,7 @@ export type EditorProps = {
 
 const Editor: React.FC<EditorProps> = ({
   socketRef,
+  socketReady,
   roomId,
   activeTabId,
   initialCode,
@@ -42,20 +44,51 @@ const Editor: React.FC<EditorProps> = ({
   const [code, setCode] = useState<string>(initialCode);
   const activeTabIdRef = useRef(activeTabId);
   const codeRef = useRef(initialCode);
+  const currentEditorRef = useRef(currentEditor);
   const onCodeChangeRef = useRef(onCodeChange);
+  const editorViewRef = useRef<EditorView | null>(null);
+  const isInternalChange = useRef(false);
 
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
 
   useEffect(() => {
+    currentEditorRef.current = currentEditor;
+  }, [currentEditor]);
+
+  useEffect(() => {
     onCodeChangeRef.current = onCodeChange;
   }, [onCodeChange]);
+
+  const applyRemoteCode = useCallback((newCode: string) => {
+    const view = editorViewRef.current;
+    if (view) {
+      const currentDoc = view.state.doc.toString();
+      if (currentDoc !== newCode) {
+        isInternalChange.current = true;
+        view.dispatch({
+          changes: {
+            from: 0,
+            to: currentDoc.length,
+            insert: newCode,
+          },
+        });
+        isInternalChange.current = false;
+      }
+    } else {
+      setCode(newCode);
+    }
+    codeRef.current = newCode;
+  }, []);
 
   useEffect(() => {
     codeRef.current = initialCode;
     setCode(initialCode);
-  }, [initialCode]);
+    if (editorViewRef.current) {
+      applyRemoteCode(initialCode);
+    }
+  }, [initialCode, applyRemoteCode]);
 
   const lightTheme = useMemo(
     () =>
@@ -111,24 +144,31 @@ const Editor: React.FC<EditorProps> = ({
   }, [wrap, themeExt, fontSizeTheme]);
 
   const handleChange = (value: string): void => {
+    if (isInternalChange.current) {
+      return;
+    }
     if (!(editable && socketRef.current)) {
       return;
     }
 
     codeRef.current = value;
     setCode(value);
-    onCodeChange(value, activeTabId);
+    onCodeChangeRef.current(value, activeTabId);
     socketRef.current.emit(ACTIONS.CODE_CHANGE, {
       roomId,
       tabId: activeTabId,
       code: value,
-      currenteditor: currentEditor,
+      currenteditor: currentEditorRef.current,
     });
   };
 
+  const handleCreateEditor = useCallback((view: EditorView) => {
+    editorViewRef.current = view;
+  }, []);
+
   useEffect(() => {
     const socket = socketRef.current;
-    if (!socket) {
+    if (!(socket && socketReady)) {
       return;
     }
 
@@ -143,8 +183,7 @@ const Editor: React.FC<EditorProps> = ({
         targetTabId === activeTabIdRef.current &&
         newCode !== codeRef.current
       ) {
-        codeRef.current = newCode;
-        setCode(newCode);
+        applyRemoteCode(newCode);
       }
       if (currenteditor !== undefined) {
         setCurrentEditor(currenteditor);
@@ -159,8 +198,7 @@ const Editor: React.FC<EditorProps> = ({
         incomingTabId === activeTabIdRef.current &&
         newCode !== codeRef.current
       ) {
-        codeRef.current = newCode;
-        setCode(newCode);
+        applyRemoteCode(newCode);
         onCodeChangeRef.current(
           newCode,
           incomingTabId ?? activeTabIdRef.current,
@@ -175,7 +213,7 @@ const Editor: React.FC<EditorProps> = ({
       socket.off(ACTIONS.CODE_CHANGE, handleCodeChange);
       socket.off(ACTIONS.TAB_CODE, handleTabCode);
     };
-  }, [socketRef, setCurrentEditor]);
+  }, [socketRef, socketReady, setCurrentEditor, applyRemoteCode]);
 
   return (
     <CodeMirror
@@ -188,6 +226,7 @@ const Editor: React.FC<EditorProps> = ({
       extensions={extensions}
       height="100%"
       onChange={handleChange}
+      onCreateEditor={handleCreateEditor}
       readOnly={!editable}
       style={{ height: "100%", width: "100%", minHeight: 0, minWidth: 0 }}
       theme={darkMode ? dracula : "light"}

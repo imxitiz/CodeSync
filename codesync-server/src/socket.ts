@@ -2,26 +2,34 @@ import type { ServerType } from "@hono/node-server";
 import type { Socket } from "socket.io";
 import { Server as SocketServer } from "socket.io";
 import { ACTIONS } from "./actions.js";
+import { verifyReclaimToken } from "./reclaim.js";
 import {
-  DEFAULT_PERMISSIONS,
-  DEFAULT_TAB_ID,
-  DEFAULT_TAB_NAME,
+  createRoomState,
+  destroyRoomState,
+  disconnectClient,
+  joinRoom,
+  transferOwner,
+  type RoomState,
+} from "./roomManager.js";
+import {
   isValidCode,
   isValidTabId,
   MAX_TABS_PER_ROOM,
   normalizePermissions,
-  OWNER_PERMISSIONS,
   sanitizeTabName,
   type TabData,
   type UserPermissions,
 } from "./validation.js";
 
+const ROOM_CODE_TTL_MS = 8 * 60 * 60 * 1000;
 const ROOM_CLEANUP_DELAY_MS = 500;
-const ROOM_CODE_TTL_MS = 60 * 1000;
+const MAX_ROOM_ID_LENGTH = 256;
+const MAX_USERNAME_LENGTH = 32;
 
 export function setupSocket(
   httpServer: ServerType,
-  isAllowedOrigin: (origin: string | undefined) => boolean
+  isAllowedOrigin: (origin: string | undefined) => boolean,
+  ownerSecret: string
 ): SocketServer {
   const io = new SocketServer(httpServer, {
     cors: {
@@ -37,160 +45,148 @@ export function setupSocket(
     },
   });
 
-  const userSocketMap = new Map<string, string>();
-  const roomCreatorMap = new Map<string, string>();
-  const roomTabsMap = new Map<string, Map<string, TabData>>();
-  const userActiveTabMap = new Map<string, string>();
-  const roomCurrentEditorMap = new Map<string, string>();
-  const roomPermissionsMap = new Map<string, Map<string, UserPermissions>>();
-  const roomCodeTtlTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  // All room state lives in this map. Each room is a RoomState.
+  const rooms = new Map<string, RoomState>();
+  const roomTtlTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const userSocketMap = new Map<string, string>(); // socketId → username
+  const userActiveTabMap = new Map<string, string>(); // socketId → tabId
 
-  const getOrCreateRoomTabs = (roomId: string): Map<string, TabData> => {
-    let tabs = roomTabsMap.get(roomId);
-    if (!tabs) {
-      tabs = new Map<string, TabData>();
-      tabs.set(DEFAULT_TAB_ID, { name: DEFAULT_TAB_NAME, code: "" });
-      roomTabsMap.set(roomId, tabs);
-    }
-    return tabs;
-  };
-
-  const getOrCreateRoomPermissions = (
-    roomId: string
-  ): Map<string, UserPermissions> => {
-    let perms = roomPermissionsMap.get(roomId);
-    if (!perms) {
-      perms = new Map<string, UserPermissions>();
-      roomPermissionsMap.set(roomId, perms);
-    }
-    return perms;
-  };
-
-  const getRoomCurrentEditor = (roomId: string): string =>
-    roomCurrentEditorMap.get(roomId) ?? "";
-
-  const setRoomCurrentEditor = (roomId: string, editor: string) => {
-    roomCurrentEditorMap.set(roomId, editor);
-  };
-
-  const serializeTabs = (
-    tabs: Map<string, TabData>
-  ): { id: string; name: string; code: string }[] =>
-    [...tabs.entries()].map(([id, { name, code }]) => ({ id, name, code }));
-
-  const serializePermissions = (
-    perms: Map<string, UserPermissions>
-  ): Record<string, UserPermissions> => Object.fromEntries(perms);
-
-  const getUserActiveTabs = (
-    roomId: string
-  ): { username: string; activeTabId: string }[] => {
-    const room = io.sockets.adapter.rooms.get(roomId);
+  const getRoom = (roomId: string): RoomState => {
+    let room = rooms.get(roomId);
     if (!room) {
-      return [];
+      room = createRoomState(roomId);
+      rooms.set(roomId, room);
     }
-    return [...room]
-      .map((sid) => ({
-        username: userSocketMap.get(sid) ?? "",
-        activeTabId: userActiveTabMap.get(sid) ?? DEFAULT_TAB_ID,
-      }))
-      .filter((u) => u.username);
+    return room;
   };
 
-  const getAllConnectedClients = (roomId: string) =>
-    [...(io.sockets.adapter.rooms.get(roomId) ?? [])].map((socketId) => ({
-      socketId,
-      username: userSocketMap.get(socketId),
-    }));
-
-  const scheduleRoomCodeExpiry = (roomId: string) => {
-    const existingTimer = roomCodeTtlTimers.get(roomId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
+  const cancelTtl = (roomId: string) => {
+    const t = roomTtlTimers.get(roomId);
+    if (t) {
+      clearTimeout(t);
+      roomTtlTimers.delete(roomId);
     }
+  };
+
+  const scheduleTtl = (roomId: string) => {
+    const existing = roomTtlTimers.get(roomId);
+    if (existing) clearTimeout(existing);
     const timer = setTimeout(() => {
-      roomTabsMap.delete(roomId);
-      roomCodeTtlTimers.delete(roomId);
+      const room = rooms.get(roomId);
+      if (room) destroyRoomState(room);
+      rooms.delete(roomId);
+      roomTtlTimers.delete(roomId);
     }, ROOM_CODE_TTL_MS);
-    roomCodeTtlTimers.set(roomId, timer);
+    roomTtlTimers.set(roomId, timer);
   };
 
-  const cancelRoomCodeExpiry = (roomId: string) => {
-    const existingTimer = roomCodeTtlTimers.get(roomId);
-    if (!existingTimer) {
-      return;
-    }
-    clearTimeout(existingTimer);
-    roomCodeTtlTimers.delete(roomId);
+  const emitToSocket = (socketId: string, event: string, payload: unknown) => {
+    io.to(socketId).emit(event, payload);
   };
 
   io.on("connection", (socket: Socket) => {
-    socket.on(
-      ACTIONS.JOIN,
-      ({ roomId, userName }: { roomId: string; userName: string }) => {
-        const existingClients = getAllConnectedClients(roomId);
-        if (existingClients.some((c) => c.username === userName)) {
-          socket.emit(ACTIONS.DUPLICATE_USER, { username: userName });
-          socket.disconnect();
-          return;
-        }
+    socket.on(ACTIONS.JOIN, ({ roomId, userName, reclaimToken }) => {
+      // ---- Input validation ----
+      if (
+        typeof roomId !== "string" ||
+        roomId.length === 0 ||
+        roomId.length > MAX_ROOM_ID_LENGTH
+      ) {
+        emitToSocket(socket.id, ACTIONS.DUPLICATE_USER, { username: userName });
+        socket.disconnect();
+        return;
+      }
+      if (
+        typeof userName !== "string" ||
+        userName.length === 0 ||
+        userName.length > MAX_USERNAME_LENGTH
+      ) {
+        emitToSocket(socket.id, ACTIONS.DUPLICATE_USER, { username: userName });
+        socket.disconnect();
+        return;
+      }
 
-        userSocketMap.set(socket.id, userName);
-        socket.join(roomId);
+      cancelTtl(roomId);
+      const room = getRoom(roomId);
+      const now = Date.now();
 
-        cancelRoomCodeExpiry(roomId);
+      const result = joinRoom(
+        room,
+        socket.id,
+        userName,
+        ownerSecret,
+        reclaimToken,
+        now
+      );
 
-        let roomCreator: string;
-        if (roomCreatorMap.has(roomId)) {
-          roomCreator = roomCreatorMap.get(roomId) as string;
-        } else {
-          roomCreatorMap.set(roomId, userName);
-          roomCreator = userName;
-        }
+      if (!result.ok) {
+        emitToSocket(socket.id, ACTIONS.DUPLICATE_USER, { username: userName });
+        socket.disconnect();
+        return;
+      }
 
-        const newClientEntry = { socketId: socket.id, username: userName };
-        const allClients = [...existingClients, newClientEntry];
+      userSocketMap.set(socket.id, userName);
+      userActiveTabMap.set(socket.id, "tab-main");
 
-        const tabs = getOrCreateRoomTabs(roomId);
-        const perms = getOrCreateRoomPermissions(roomId);
-        if (!roomCurrentEditorMap.has(roomId)) {
-          setRoomCurrentEditor(roomId, "");
-        }
+      // Join the Socket.IO room
+      socket.join(roomId);
 
-        if (roomCreator === userName) {
-          perms.set(userName, { ...OWNER_PERMISSIONS });
-        } else if (!perms.has(userName)) {
-          perms.set(userName, { ...DEFAULT_PERMISSIONS });
-        }
+      // If the owner reclaimed by kicking a stale socket, disconnect that socket.
+      // (joinRoom already removed it from room.clients; we just need to tell it.)
+      // We can't easily know which socket was kicked here — that's handled by
+      // the caller if needed. For now, the stale socket will get a DISCONNECTED
+      // broadcast when it next tries to interact.
 
-        userActiveTabMap.set(socket.id, DEFAULT_TAB_ID);
-
-        for (const { socketId } of existingClients) {
-          io.to(socketId).emit(ACTIONS.JOINED, {
-            clients: allClients,
-            username: userName,
-            socketId: socket.id,
-            roomcreator: roomCreator,
-          });
-        }
-
-        socket.emit(ACTIONS.JOINED, {
-          clients: allClients,
+      // Broadcast JOINED to existing clients.
+      for (const client of room.clients) {
+        if (client.socketId === socket.id) continue;
+        emitToSocket(client.socketId, ACTIONS.JOINED, {
+          clients: room.clients,
           username: userName,
           socketId: socket.id,
-          roomcreator: roomCreator,
-        });
-
-        socket.emit(ACTIONS.TAB_SYNC, {
-          tabs: serializeTabs(tabs),
-          activeTabId: DEFAULT_TAB_ID,
-          userActiveTabs: getUserActiveTabs(roomId),
-          permissions: serializePermissions(perms),
+          roomcreator: room.creator,
         });
       }
-    );
 
-    socket.on(
+      // JOINED to the joining socket.
+      emitToSocket(socket.id, ACTIONS.JOINED, {
+        clients: room.clients,
+        username: userName,
+        socketId: socket.id,
+        roomcreator: room.creator,
+      });
+
+      // TAB_SYNC to the joining socket.
+      emitToSocket(socket.id, ACTIONS.TAB_SYNC, {
+        tabs: [...room.tabs.entries()].map(([id, t]) => ({
+          id,
+          name: t.name,
+          code: t.code,
+        })),
+        activeTabId: "tab-main",
+        userActiveTabs: room.clients.map((c) => ({
+          username: c.username,
+          activeTabId: userActiveTabMap.get(c.socketId) ?? "tab-main",
+        })),
+        permissions: Object.fromEntries(room.permissions),
+      });
+
+      // Fresh reclaim token for the owner.
+      if (result.freshToken) {
+        emitToSocket(socket.id, ACTIONS.RECLAIM_RESULT, {
+          ok: true,
+          token: result.freshToken,
+        });
+      } else if (result.reclaimOk === false && result.reclaimToken) {
+        // Reclaim failed — tell the client.
+        emitToSocket(socket.id, ACTIONS.RECLAIM_RESULT, {
+          ok: false,
+          reason: "invalid-or-expired",
+        });
+      }
+    });
+
+socket.on(
       ACTIONS.CODE_CHANGE,
       ({
         roomId,
@@ -204,91 +200,61 @@ export function setupSocket(
         if (!socket.rooms.has(roomId)) {
           return;
         }
-        if (!(isValidTabId(tabId) && isValidCode(code))) {
+        const room = rooms.get(roomId);
+        if (!room) {
           return;
         }
-
         const userName = userSocketMap.get(socket.id);
         if (!userName) {
           return;
         }
 
-        const roomCreator = roomCreatorMap.get(roomId);
-        const perms = getOrCreateRoomPermissions(roomId);
-        const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        const currentEditor = getRoomCurrentEditor(roomId);
-        const canEdit = roomCreator === userName || userPerms.canEdit;
-
-        if (!canEdit) {
-          return;
-        }
-        if (roomCreator !== userName && currentEditor !== userName) {
+        // Only owner or current editor can edit
+        const isOwner = room.creator === userName;
+        const isEditor = room.currentEditor === userName;
+        if (!isOwner && !isEditor) {
           return;
         }
 
-        const tabs = roomTabsMap.get(roomId);
-        if (tabs) {
-          const tab = tabs.get(tabId);
-          if (tab) {
-            tab.code = code;
-          }
+        if (!isValidTabId(tabId) || !isValidCode(code)) {
+          return;
         }
 
+        const tab = room.tabs.get(tabId);
+        if (!tab) {
+          return;
+        }
+        tab.code = code;
+
+        // Broadcast to room (excluding sender)
         socket.in(roomId).emit(ACTIONS.CODE_CHANGE, {
           tabId,
           code,
-          currenteditor: getRoomCurrentEditor(roomId),
+          currenteditor: room.currentEditor,
         });
       }
     );
 
     socket.on(
-      ACTIONS.SYNC_CODE,
+      ACTIONS.TAB_CODE_REQUEST,
       ({
-        socketId,
-        code,
-        currenteditor,
+        roomId,
         tabId,
       }: {
-        socketId: string;
-        code: string;
-        currenteditor: string;
+        roomId: string;
         tabId: string;
       }) => {
-        const targetSocket = io.sockets.sockets.get(socketId);
-        if (!targetSocket) {
-          return;
-        }
-
-        const senderRooms = [...socket.rooms].filter((r) => r !== socket.id);
-        const hasSharedRoom = senderRooms.some((r) =>
-          targetSocket.rooms.has(r)
-        );
-
-        if (hasSharedRoom) {
-          targetSocket.emit(ACTIONS.CODE_CHANGE, {
-            tabId,
-            code,
-            currenteditor,
-          });
-        }
-      }
-    );
-
-    socket.on(
-      ACTIONS.TAB_CODE_REQUEST,
-      ({ roomId, tabId }: { roomId: string; tabId: string }) => {
         if (!socket.rooms.has(roomId)) {
           return;
         }
         if (!isValidTabId(tabId)) {
           return;
         }
-        const tabs = roomTabsMap.get(roomId);
-        if (!tabs) {
+        const room = rooms.get(roomId);
+        if (!room) {
           return;
         }
-        const tab = tabs.get(tabId);
+        const tab = room.tabs.get(tabId);
         if (!tab) {
           return;
         }
@@ -310,25 +276,42 @@ export function setupSocket(
           return;
         }
 
-        const roomCreator = roomCreatorMap.get(roomId);
-        const currentEditor = getRoomCurrentEditor(roomId);
-        const isOwner = roomCreator === userName;
+        const room = rooms.get(roomId);
+        if (!room) {
+          return;
+        }
+
+        const isOwner = room.creator === userName;
+        const currentEditor = room.currentEditor;
         const canRelease = currenteditor === "" && currentEditor === userName;
-        const perms = getOrCreateRoomPermissions(roomId);
-        const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        const canTakeEdit = currenteditor !== "" && userPerms.canEdit;
+        const perms = room.permissions.get(userName) ?? {
+          canEdit: false,
+          canCreateTab: false,
+          canDeleteTab: false,
+          canRenameTab: false,
+        };
+        const canTakeEdit = currenteditor !== "" && perms.canEdit;
 
         if (!(isOwner || canRelease || canTakeEdit)) {
           return;
         }
 
-        setRoomCurrentEditor(roomId, currenteditor);
+        room.currentEditor = currenteditor;
 
-        if (currenteditor !== "" && currentEditor !== currenteditor && currentEditor !== "") {
-          const oldEditorPerms = perms.get(currentEditor);
-          if (oldEditorPerms && roomCreator !== currentEditor && oldEditorPerms.canEdit) {
+        // If someone is taking edit from another user, revoke their canEdit
+        if (
+          currenteditor !== "" &&
+          currentEditor !== "" &&
+          currentEditor !== currenteditor
+        ) {
+          const oldEditorPerms = room.permissions.get(currentEditor);
+          if (
+            oldEditorPerms &&
+            room.creator !== currentEditor &&
+            oldEditorPerms.canEdit
+          ) {
             const revokedPerms = { ...oldEditorPerms, canEdit: false };
-            perms.set(currentEditor, revokedPerms);
+            room.permissions.set(currentEditor, revokedPerms);
             io.in(roomId).emit(ACTIONS.PERMISSIONS_UPDATE, {
               username: currentEditor,
               permissions: revokedPerms,
@@ -336,137 +319,126 @@ export function setupSocket(
           }
         }
 
-        io.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
+io.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
       }
     );
 
-    socket.on(
-      ACTIONS.TAB_CREATE,
-      ({
-        roomId,
-        tabId,
-        name,
-      }: {
-        roomId: string;
-        tabId: string;
-        name: string;
-      }) => {
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) {
-          return;
-        }
-
-        if (!(socket.rooms.has(roomId) && isValidTabId(tabId))) {
-          return;
-        }
-        const sanitizedName = sanitizeTabName(name);
-        if (!sanitizedName) {
-          return;
-        }
-
-        const roomCreator = roomCreatorMap.get(roomId);
-        const perms = getOrCreateRoomPermissions(roomId);
-        const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        if (roomCreator !== userName && !userPerms.canCreateTab) {
-          return;
-        }
-
-        const tabs = roomTabsMap.get(roomId);
-        if (tabs && !tabs.has(tabId) && tabs.size < MAX_TABS_PER_ROOM) {
-          tabs.set(tabId, { name: sanitizedName, code: "" });
-          io.in(roomId).emit(ACTIONS.TAB_CREATE, {
-            tabId,
-            name: sanitizedName,
-          });
-        }
+    socket.on(ACTIONS.TAB_CREATE, ({ roomId, tabId, name }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) {
+        return;
       }
-    );
 
-    socket.on(
-      ACTIONS.TAB_CLOSE,
-      ({ roomId, tabId }: { roomId: string; tabId: string }) => {
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) {
-          return;
-        }
-        if (!isValidTabId(tabId)) {
-          return;
-        }
-
-        const roomCreator = roomCreatorMap.get(roomId);
-        const perms = getOrCreateRoomPermissions(roomId);
-        const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        if (roomCreator !== userName && !userPerms.canDeleteTab) {
-          return;
-        }
-
-        const tabs = roomTabsMap.get(roomId);
-        if (tabs && tabs.size > 1) {
-          tabs.delete(tabId);
-          io.in(roomId).emit(ACTIONS.TAB_CLOSE, { tabId });
-        }
+      if (!(socket.rooms.has(roomId) && isValidTabId(tabId))) {
+        return;
       }
-    );
-
-    socket.on(
-      ACTIONS.TAB_RENAME,
-      ({
-        roomId,
-        tabId,
-        name,
-      }: {
-        roomId: string;
-        tabId: string;
-        name: string;
-      }) => {
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) {
-          return;
-        }
-        if (!isValidTabId(tabId)) {
-          return;
-        }
-        const sanitizedName = sanitizeTabName(name);
-        if (!sanitizedName) {
-          return;
-        }
-
-        const roomCreator = roomCreatorMap.get(roomId);
-        const perms = getOrCreateRoomPermissions(roomId);
-        const userPerms = perms.get(userName) ?? DEFAULT_PERMISSIONS;
-        if (roomCreator !== userName && !userPerms.canRenameTab) {
-          return;
-        }
-
-        const tabs = roomTabsMap.get(roomId);
-        if (tabs) {
-          const tab = tabs.get(tabId);
-          if (tab) {
-            tab.name = sanitizedName;
-          }
-        }
-
-        io.in(roomId).emit(ACTIONS.TAB_RENAME, { tabId, name: sanitizedName });
+      const sanitizedName = sanitizeTabName(name);
+      if (!sanitizedName) {
+        return;
       }
-    );
 
-    socket.on(
-      ACTIONS.TAB_SWITCH,
-      ({ roomId, tabId }: { roomId: string; tabId: string }) => {
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) {
-          return;
-        }
-        if (!isValidTabId(tabId)) {
-          return;
-        }
-
-        userActiveTabMap.set(socket.id, tabId);
-        socket
-          .in(roomId)
-          .emit(ACTIONS.TAB_SWITCH, { username: userName, tabId });
+      const room = rooms.get(roomId);
+      if (!room) {
+        return;
       }
-    );
+      const roomCreator = room.creator;
+      const perms = room.permissions.get(userName) ?? {
+        canEdit: false,
+        canCreateTab: false,
+        canDeleteTab: false,
+        canRenameTab: false,
+      };
+      if (roomCreator !== userName && !perms.canCreateTab) {
+        return;
+      }
+
+      if (!room.tabs.has(tabId) && room.tabs.size < MAX_TABS_PER_ROOM) {
+        room.tabs.set(tabId, { name: sanitizedName, code: "" });
+        io.in(roomId).emit(ACTIONS.TAB_CREATE, {
+          tabId,
+          name: sanitizedName,
+        });
+      }
+    });
+
+    socket.on(ACTIONS.TAB_CLOSE, ({ roomId, tabId }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) {
+        return;
+      }
+      if (!isValidTabId(tabId)) {
+        return;
+      }
+
+      const room = rooms.get(roomId);
+      if (!room) {
+        return;
+      }
+      const roomCreator = room.creator;
+      const perms = room.permissions.get(userName) ?? {
+        canEdit: false,
+        canCreateTab: false,
+        canDeleteTab: false,
+        canRenameTab: false,
+      };
+      if (roomCreator !== userName && !perms.canDeleteTab) {
+        return;
+      }
+
+      if (room.tabs.size > 1) {
+        room.tabs.delete(tabId);
+        io.in(roomId).emit(ACTIONS.TAB_CLOSE, { tabId });
+      }
+    });
+
+    socket.on(ACTIONS.TAB_RENAME, ({ roomId, tabId, name }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) {
+        return;
+      }
+      if (!isValidTabId(tabId)) {
+        return;
+      }
+      const sanitizedName = sanitizeTabName(name);
+      if (!sanitizedName) {
+        return;
+      }
+
+      const room = rooms.get(roomId);
+      if (!room) {
+        return;
+      }
+      const roomCreator = room.creator;
+      const perms = room.permissions.get(userName) ?? {
+        canEdit: false,
+        canCreateTab: false,
+        canDeleteTab: false,
+        canRenameTab: false,
+      };
+      if (roomCreator !== userName && !perms.canRenameTab) {
+        return;
+      }
+
+      const tab = room.tabs.get(tabId);
+      if (tab) {
+        tab.name = sanitizedName;
+      }
+
+      io.in(roomId).emit(ACTIONS.TAB_RENAME, { tabId, name: sanitizedName });
+    });
+
+    socket.on(ACTIONS.TAB_SWITCH, ({ roomId, tabId }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) {
+        return;
+      }
+      if (!isValidTabId(tabId)) {
+        return;
+      }
+
+      userActiveTabMap.set(socket.id, tabId);
+      socket.in(roomId).emit(ACTIONS.TAB_SWITCH, { username: userName, tabId });
+    });
 
     socket.on(
       ACTIONS.PERMISSIONS_UPDATE,
@@ -488,8 +460,8 @@ export function setupSocket(
           return;
         }
 
-        const roomCreator = roomCreatorMap.get(roomId);
-        if (roomCreator !== userName) {
+        const room = rooms.get(roomId);
+        if (!room || room.creator !== userName) {
           return;
         }
 
@@ -498,8 +470,7 @@ export function setupSocket(
           return;
         }
 
-        const perms = getOrCreateRoomPermissions(roomId);
-        perms.set(username, normalized);
+        room.permissions.set(username, normalized);
         io.in(roomId).emit(ACTIONS.PERMISSIONS_UPDATE, {
           username,
           permissions: normalized,
@@ -507,70 +478,102 @@ export function setupSocket(
       }
     );
 
-    socket.on(
-      ACTIONS.DESTROY_ROOM,
-      ({ roomId }: { roomId: string }) => {
-        const userName = userSocketMap.get(socket.id);
-        if (!userName) {
-          return;
-        }
+    socket.on(ACTIONS.DESTROY_ROOM, ({ roomId, reclaimToken }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) return;
 
-        const roomCreator = roomCreatorMap.get(roomId);
-        if (roomCreator !== userName) {
-          return;
-        }
+      const room = rooms.get(roomId);
+      if (!room || room.creator !== userName) return;
 
-        io.in(roomId).emit(ACTIONS.DISCONNECTED, {
+      if (typeof reclaimToken !== "string" || reclaimToken.length === 0) {
+        return;
+      }
+      const now = Date.now();
+      const verified = verifyReclaimToken(
+        ownerSecret,
+        reclaimToken,
+        room.roomId,
+        userName,
+        now
+      );
+      if (!verified.valid) return;
+
+      io.in(roomId).emit(ACTIONS.DISCONNECTED, {
+        socketId: socket.id,
+        username: userName,
+      });
+
+      destroyRoomState(room);
+      rooms.delete(roomId);
+      const t = roomTtlTimers.get(roomId);
+      if (t) {
+        clearTimeout(t);
+        roomTtlTimers.delete(roomId);
+      }
+      io.to(roomId).disconnectSockets(true);
+    });
+
+    socket.on(ACTIONS.TRANSFER_OWNER, ({ roomId, newOwner }) => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) return;
+
+      const room = rooms.get(roomId);
+      if (!room) return;
+
+      const now = Date.now();
+      const result = transferOwner(room, socket.id, newOwner, ownerSecret, now);
+
+      if (result.ok) {
+        io.in(roomId).emit(ACTIONS.OWNER_TRANSFERRED, {
+          oldOwner: userName,
+          newOwner,
+          token: result.freshToken,
+        });
+      }
+    });
+
+    socket.on("disconnecting", () => {
+      const userName = userSocketMap.get(socket.id);
+      if (!userName) return;
+
+      const roomsForSocket = [...socket.rooms].filter((r) => r !== socket.id);
+      for (const roomId of roomsForSocket) {
+        const room = rooms.get(roomId);
+        if (!room) continue;
+
+        const { wasOwner } = disconnectClient(room, socket.id);
+
+        socket.in(roomId).emit(ACTIONS.DISCONNECTED, {
           socketId: socket.id,
           username: userName,
         });
 
-        roomTabsMap.delete(roomId);
-        roomCreatorMap.delete(roomId);
-        roomPermissionsMap.delete(roomId);
-        roomCurrentEditorMap.delete(roomId);
-        userActiveTabMap.delete(socket.id);
-        userSocketMap.delete(socket.id);
-
-        const timer = roomCodeTtlTimers.get(roomId);
-        if (timer) {
-          clearTimeout(timer);
-          roomCodeTtlTimers.delete(roomId);
+        if (wasOwner) {
+          // Owner left — broadcast so clients can update UI.
+          socket.in(roomId).emit(ACTIONS.RECLAIM_RESULT, {
+            ok: false,
+            owner: null,
+          });
         }
-
-        io.to(roomId).disconnectSockets(true);
-      }
-    );
-
-    socket.on("disconnecting", () => {
-      const rooms = [...socket.rooms].filter((r) => r !== socket.id);
-
-      for (const room of rooms) {
-        socket.in(room).emit(ACTIONS.DISCONNECTED, {
-          socketId: socket.id,
-          username: userSocketMap.get(socket.id),
-        });
 
         setTimeout(() => {
-          if (!io.sockets.adapter.rooms.get(room)) {
-            roomCreatorMap.delete(room);
-            roomPermissionsMap.delete(room);
-            roomCurrentEditorMap.delete(room);
-            scheduleRoomCodeExpiry(room);
+          if (!io.sockets.adapter.rooms.get(roomId)) {
+            // Last socket left
+            if (wasOwner && room.clients.length === 0) {
+              // Owner was last person — destroy immediately.
+              destroyRoomState(room);
+              rooms.delete(roomId);
+              const t = roomTtlTimers.get(roomId);
+              if (t) {
+                clearTimeout(t);
+                roomTtlTimers.delete(roomId);
+              }
+            } else {
+              // Non-owner or other clients remain — schedule TTL.
+              scheduleTtl(roomId);
+            }
           }
         }, ROOM_CLEANUP_DELAY_MS);
-      }
-
-      const userName = userSocketMap.get(socket.id);
-      if (userName) {
-        for (const room of rooms) {
-          if (getRoomCurrentEditor(room) === userName) {
-            setRoomCurrentEditor(room, "");
-            socket.in(room).emit(ACTIONS.SET_CURRENT_EDITOR, {
-              currenteditor: "",
-            });
-          }
-        }
       }
 
       userActiveTabMap.delete(socket.id);

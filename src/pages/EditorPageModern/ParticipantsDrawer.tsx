@@ -1,6 +1,7 @@
-import { Eye, Pencil, X } from "lucide-react";
+import { Eye, X } from "lucide-react";
 import { useEffect, useId, useRef } from "react";
 import Avatar from "react-avatar";
+import OwnerRepresentation from "./representation-icon";
 import type { UserPermissions } from "./types";
 
 type Participant = {
@@ -16,6 +17,7 @@ type Props = {
   participants: Participant[];
   currentUser: string;
   currentEditor: string;
+  roomCreator: string | null;
   isOwner: boolean;
   followingUser: string | null;
   onFollow: (username: string) => void;
@@ -35,6 +37,7 @@ export default function ParticipantsDrawer({
   participants,
   currentUser,
   currentEditor,
+  roomCreator,
   isOwner,
   followingUser,
   onFollow,
@@ -81,7 +84,7 @@ export default function ParticipantsDrawer({
       )}
       <aside
         className={[
-          "absolute inset-y-0 right-0 flex w-[85vw] max-w-sm flex-col border-l bg-card shadow-xl transition-transform duration-200 sm:w-72",
+          "absolute inset-y-0 right-0 flex w-[85vw] max-w-sm flex-col border-l bg-sidebar shadow-xl transition-transform duration-200 sm:w-72",
           open ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
         role="dialog"
@@ -89,14 +92,17 @@ export default function ParticipantsDrawer({
         aria-labelledby={titleId}
         aria-modal="true"
       >
-        <header className="flex shrink-0 items-center justify-between border-b px-4 py-3">
-          <h2 id={titleId} className="font-semibold text-foreground text-sm">
+        <header className="flex shrink-0 items-center justify-between border-b border-sidebar px-4 py-3">
+          <h2
+            id={titleId}
+            className="font-semibold text-sidebar-foreground text-sm"
+          >
             Participants ({participants.length})
           </h2>
           <button
             ref={closeRef}
             aria-label="Close participants drawer"
-            className="inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             type="button"
             onClick={onClose}
           >
@@ -136,37 +142,34 @@ export default function ParticipantsDrawer({
                   >
                     <div
                       className={[
-                        "group flex items-center justify-between rounded-md border px-3 py-2 text-card-foreground shadow-xs transition-colors",
+                        "group flex items-center justify-between rounded-md border px-3 py-2 text-sidebar-foreground shadow-xs transition-colors",
                         isMe
-                          ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
-                          : "border-border bg-card/60",
+                          ? "border-sidebar-primary/50 bg-sidebar-primary/10 ring-1 ring-sidebar-primary/30"
+                          : "border-sidebar-border bg-sidebar-accent/50",
                         isOwner && !isMe
-                          ? "hover:bg-accent/50"
-                          : "hover:bg-accent/40",
+                          ? "hover:bg-sidebar-accent/70"
+                          : "hover:bg-sidebar-accent/60",
                       ].join(" ")}
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="relative">
                           <AvatarPreset name={username} />
-                          {isEditor && (
-                            <span
-                              className="-left-1 -bottom-1 pointer-events-none absolute inline-flex size-4 items-center justify-center rounded-full bg-success text-success-foreground shadow-sm ring-1 ring-border"
-                              title="Editor"
-                            >
-                              <Pencil className="size-3.5 p-[1px]" />
-                            </span>
-                          )}
+                          <OwnerRepresentation
+                            roomCreator={roomCreator}
+                            username={username}
+                            isEditor={isEditor}
+                          />
                         </div>
                         <div className="min-w-0">
                           <p className="truncate font-medium text-sm">
                             {username}
                             {isMe && (
-                              <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 font-medium text-primary text-xs">
+                              <span className="ml-1.5 rounded-full bg-sidebar-primary/15 px-1.5 py-0.5 font-medium text-sidebar-primary text-xs">
                                 You
                               </span>
                             )}
                           </p>
-                          <p className="truncate text-muted-foreground text-xs">
+                          <p className="truncate text-sidebar-foreground/70 text-xs">
                             {isMe
                               ? "You"
                               : isEditor
@@ -189,9 +192,9 @@ export default function ParticipantsDrawer({
                             : `Follow ${username}`
                         }
                         className={[
-                          "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                          "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                           followingUser === username
-                            ? "bg-primary/15 text-primary"
+                            ? "bg-sidebar-primary/15 text-sidebar-primary"
                             : "",
                         ].join(" ")}
                         type="button"
@@ -205,10 +208,10 @@ export default function ParticipantsDrawer({
                         aria-label={`Manage permissions for ${username}`}
                         aria-pressed={openPermDialog === username}
                         className={[
-                          "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring",
+                          "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                           openPermDialog === username
-                            ? "bg-primary/15 text-primary"
-                            : "text-muted-foreground hover:text-foreground",
+                            ? "bg-sidebar-primary/15 text-sidebar-primary"
+                            : "text-sidebar-foreground/70 hover:text-sidebar-foreground",
                         ].join(" ")}
                         type="button"
                         onClick={() => handleTogglePerm(username)}
@@ -224,7 +227,7 @@ export default function ParticipantsDrawer({
                   </div>
                 </div>
                 {isOwner && !isMe && openPermDialog === username && (
-                  <div className="mt-1 ml-2 rounded-md border bg-background/50 p-3">
+                  <div className="mt-1 ml-2 rounded-md border border-sidebar-border bg-sidebar-accent/50 p-3">
                     <p className="mb-2 font-medium text-xs">
                       Permissions for {username}
                     </p>
@@ -307,7 +310,7 @@ export default function ParticipantsDrawer({
                     <div className="mt-2 flex gap-2">
                       <button
                         type="button"
-                        className="inline-flex cursor-pointer items-center rounded-md border bg-background px-2 py-1 text-xs transition-colors hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+                        className="inline-flex cursor-pointer items-center rounded-md border border-sidebar-border bg-sidebar-accent px-2 py-1 text-xs transition-colors hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
                         onClick={() =>
                           onUpdatePermissions(username, {
                             canEdit: true,
@@ -321,7 +324,7 @@ export default function ParticipantsDrawer({
                       </button>
                       <button
                         type="button"
-                        className="inline-flex cursor-pointer items-center rounded-md border bg-destructive/10 px-2 py-1 text-xs text-destructive transition-colors hover:bg-destructive/20 focus-visible:ring-2 focus-visible:ring-ring"
+                        className="inline-flex cursor-pointer items-center rounded-md border border-sidebar-border bg-destructive/10 px-2 py-1 text-xs text-destructive transition-colors hover:bg-destructive/20 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
                         onClick={() =>
                           onUpdatePermissions(username, {
                             canEdit: false,
@@ -341,9 +344,9 @@ export default function ParticipantsDrawer({
           })}
         </div>
 
-        <footer className="flex shrink-0 items-center justify-between gap-2 border-t px-4 py-3">
+        <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-sidebar-border px-4 py-3">
           <button
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 font-medium text-xs transition-colors hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border bg-sidebar-accent px-3 py-1.5 font-medium text-xs text-sidebar-foreground transition-colors hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             onClick={onCopyInvite}
             type="button"
             aria-label="Copy invite link"
@@ -351,7 +354,7 @@ export default function ParticipantsDrawer({
             Copy Invite Link
           </button>
           <button
-            className="inline-flex cursor-pointer items-center rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground text-xs transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex cursor-pointer items-center rounded-md bg-sidebar-primary px-3 py-1.5 font-medium text-sidebar-primary-foreground text-xs transition-colors hover:bg-sidebar-primary/90 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             onClick={onDone}
             type="button"
             aria-label="Done"
