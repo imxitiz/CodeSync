@@ -1,9 +1,11 @@
 import {
   Check,
+  Clock,
   Copy,
   Crown,
   Eye,
   EyeOff,
+  Lock,
   LogOut,
   MoreVertical,
   Pencil,
@@ -62,6 +64,8 @@ export type TopBarProps = {
   onGrantEdit: (username: string) => void;
   canEdit: boolean;
   isOwner: boolean;
+  activeTabPermission?: "VIEWER" | "EDITOR" | "REQUESTED";
+  onRequestTabEdit?: () => void;
 };
 
 export default function TopBar({
@@ -91,6 +95,8 @@ export default function TopBar({
   isOwner,
   onFollowUser,
   onGrantEdit,
+  activeTabPermission,
+  onRequestTabEdit,
 }: TopBarProps) {
   const maxAvatars = 5;
   const visibleClients = clients.slice(0, maxAvatars);
@@ -103,7 +109,11 @@ export default function TopBar({
   const isCurrentEditor = currentEditor === userName;
   const canTakeEdit = canEdit && currentEditor !== "";
   const showEditToggle =
-    isCurrentEditor || (isOwner && currentEditor !== "") || canTakeEdit;
+    isCurrentEditor ||
+    (isOwner && currentEditor !== "") ||
+    canTakeEdit ||
+    activeTabPermission === "VIEWER" ||
+    activeTabPermission === "REQUESTED";
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -303,31 +313,66 @@ export default function TopBar({
               <TooltipContent>Copy code</TooltipContent>
             </Tooltip>
 
-            {showEditToggle && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    aria-label={
-                      isCurrentEditor
-                        ? "Release editing control"
-                        : "Take editing control"
-                    }
-                    onClick={onToggleEdit}
-                    size="icon"
-                    variant={isCurrentEditor ? "secondary" : "default"}
-                  >
-                    {isCurrentEditor ? (
-                      <Eye className="size-4" />
-                    ) : (
-                      <Pencil className="size-4" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isCurrentEditor ? "Release control" : "Take control"}
-                </TooltipContent>
-              </Tooltip>
-            )}
+            {showEditToggle &&
+              (activeTabPermission === "VIEWER" ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label="Request edit access for current tab"
+                      onClick={onRequestTabEdit}
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5"
+                    >
+                      <Lock className="size-3.5" />
+                      <span className="hidden text-xs sm:inline">Request</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Request edit access for this tab
+                  </TooltipContent>
+                </Tooltip>
+              ) : activeTabPermission === "REQUESTED" ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label="Edit request pending"
+                      disabled
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 opacity-60"
+                    >
+                      <Clock className="size-3.5" />
+                      <span className="hidden text-xs sm:inline">Pending</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Waiting for owner to approve</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label={
+                        isCurrentEditor
+                          ? "Release editing control"
+                          : "Take editing control"
+                      }
+                      onClick={onToggleEdit}
+                      size="icon"
+                      variant={isCurrentEditor ? "secondary" : "default"}
+                    >
+                      {isCurrentEditor ? (
+                        <Eye className="size-4" />
+                      ) : (
+                        <Pencil className="size-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isCurrentEditor ? "Release control" : "Take control"}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
           </div>
 
           <Separator />

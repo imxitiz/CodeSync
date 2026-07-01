@@ -37,6 +37,10 @@ export const ACTIONS = {
   RECLAIM_RESULT: "reclaim-result",
   TRANSFER_OWNER: "transfer-owner",
   OWNER_TRANSFERRED: "owner-transferred",
+  TAB_PERMISSION_REQUEST: "tab-permission-request",
+  TAB_PERMISSION_GRANT: "tab-permission-grant",
+  TAB_PERMISSION_REVOKE: "tab-permission-revoke",
+  TAB_PERMISSIONS_UPDATE: "tab-permissions-update",
 } as const;
 
 export type ActionsType = (typeof ACTIONS)[keyof typeof ACTIONS];

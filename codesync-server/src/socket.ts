@@ -12,6 +12,7 @@ import {
   type RoomState,
 } from "./roomManager.js";
 import {
+  canWriteTab,
   isValidCode,
   isValidTabId,
   MAX_TABS_PER_ROOM,
@@ -169,6 +170,14 @@ export function setupSocket(
           activeTabId: userActiveTabMap.get(c.socketId) ?? "tab-main",
         })),
         permissions: Object.fromEntries(room.permissions),
+        // ── NEW ────────────────────────────────────────
+        tabPermissions: Object.fromEntries(
+          [...room.tabPermissions.entries()].map(([tid, entry]) => [
+            tid,
+            Object.fromEntries(entry.levels),
+          ])
+        ),
+        tabEditors: Object.fromEntries(room.tabEditors),
       });
 
       // Fresh reclaim token for the owner.
@@ -209,10 +218,7 @@ socket.on(
           return;
         }
 
-        // Only owner or current editor can edit
-        const isOwner = room.creator === userName;
-        const isEditor = room.currentEditor === userName;
-        if (!isOwner && !isEditor) {
+        if (!canWriteTab(room, userName, tabId)) {
           return;
         }
 
@@ -226,11 +232,15 @@ socket.on(
         }
         tab.code = code;
 
+        // Track per-tab editor
+        room.tabEditors.set(tabId, userName);
+
         // Broadcast to room (excluding sender)
         socket.in(roomId).emit(ACTIONS.CODE_CHANGE, {
           tabId,
           code,
-          currenteditor: room.currentEditor,
+          currenteditor: userName,
+          tabEditors: Object.fromEntries(room.tabEditors),
         });
       }
     );
@@ -267,9 +277,11 @@ socket.on(
       ({
         roomId,
         currenteditor,
+        tabId,
       }: {
         roomId: string;
         currenteditor: string;
+        tabId?: string;
       }) => {
         const userName = userSocketMap.get(socket.id);
         if (!userName) {
@@ -282,44 +294,74 @@ socket.on(
         }
 
         const isOwner = room.creator === userName;
-        const currentEditor = room.currentEditor;
-        const canRelease = currenteditor === "" && currentEditor === userName;
-        const perms = room.permissions.get(userName) ?? {
-          canEdit: false,
-          canCreateTab: false,
-          canDeleteTab: false,
-          canRenameTab: false,
-        };
-        const canTakeEdit = currenteditor !== "" && perms.canEdit;
 
-        if (!(isOwner || canRelease || canTakeEdit)) {
-          return;
-        }
-
-        room.currentEditor = currenteditor;
-
-        // If someone is taking edit from another user, revoke their canEdit
-        if (
-          currenteditor !== "" &&
-          currentEditor !== "" &&
-          currentEditor !== currenteditor
-        ) {
-          const oldEditorPerms = room.permissions.get(currentEditor);
-          if (
-            oldEditorPerms &&
-            room.creator !== currentEditor &&
-            oldEditorPerms.canEdit
-          ) {
-            const revokedPerms = { ...oldEditorPerms, canEdit: false };
-            room.permissions.set(currentEditor, revokedPerms);
-            io.in(roomId).emit(ACTIONS.PERMISSIONS_UPDATE, {
-              username: currentEditor,
-              permissions: revokedPerms,
-            });
+        if (tabId) {
+          // Per-tab editor slot
+          if (currenteditor === "") {
+            const holder = room.tabEditors.get(tabId);
+            if (holder === userName || isOwner) {
+              room.tabEditors.delete(tabId);
+            } else {
+              return;
+            }
+          } else if (currenteditor === userName) {
+            if (!isOwner && !canWriteTab(room, userName, tabId)) return;
+            const existing = room.tabEditors.get(tabId);
+            if (existing && existing !== userName && !isOwner) return;
+            room.tabEditors.set(tabId, userName);
+          } else if (isOwner) {
+            if (!canWriteTab(room, currenteditor, tabId)) return;
+            room.tabEditors.set(tabId, currenteditor);
+          } else {
+            return;
           }
-        }
 
-io.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
+          io.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, {
+            currenteditor,
+            tabId,
+            tabEditors: Object.fromEntries(room.tabEditors),
+          });
+        } else {
+          // Legacy room-wide behavior
+          const currentEditor = room.currentEditor;
+          const canRelease = currenteditor === "" && currentEditor === userName;
+          const perms = room.permissions.get(userName) ?? {
+            canEdit: false,
+            canCreateTab: false,
+            canDeleteTab: false,
+            canRenameTab: false,
+          };
+          const canTakeEdit = currenteditor !== "" && perms.canEdit;
+
+          if (!(isOwner || canRelease || canTakeEdit)) {
+            return;
+          }
+
+          room.currentEditor = currenteditor;
+
+          // If someone is taking edit from another user, revoke their canEdit
+          if (
+            currenteditor !== "" &&
+            currentEditor !== "" &&
+            currentEditor !== currenteditor
+          ) {
+            const oldEditorPerms = room.permissions.get(currentEditor);
+            if (
+              oldEditorPerms &&
+              room.creator !== currentEditor &&
+              oldEditorPerms.canEdit
+            ) {
+              const revokedPerms = { ...oldEditorPerms, canEdit: false };
+              room.permissions.set(currentEditor, revokedPerms);
+              io.in(roomId).emit(ACTIONS.PERMISSIONS_UPDATE, {
+                username: currentEditor,
+                permissions: revokedPerms,
+              });
+            }
+          }
+
+          io.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
+        }
       }
     );
 
@@ -387,6 +429,8 @@ io.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
 
       if (room.tabs.size > 1) {
         room.tabs.delete(tabId);
+        room.tabPermissions.delete(tabId);
+        room.tabEditors.delete(tabId);
         io.in(roomId).emit(ACTIONS.TAB_CLOSE, { tabId });
       }
     });
@@ -474,6 +518,136 @@ io.in(roomId).emit(ACTIONS.SET_CURRENT_EDITOR, { currenteditor });
         io.in(roomId).emit(ACTIONS.PERMISSIONS_UPDATE, {
           username,
           permissions: normalized,
+        });
+      }
+    );
+
+    socket.on(
+      ACTIONS.TAB_PERMISSION_REQUEST,
+      ({ roomId, tabId }: { roomId: string; tabId: string }) => {
+        const userName = userSocketMap.get(socket.id);
+        if (!userName) return;
+        if (!socket.rooms.has(roomId)) return;
+        if (!isValidTabId(tabId)) return;
+
+        const room = rooms.get(roomId);
+        if (!room) return;
+
+        const tab = room.tabs.get(tabId);
+        if (!tab) return;
+
+        // Cannot request if already EDITOR or owner.
+        if (room.creator === userName) return;
+        if (canWriteTab(room, userName, tabId)) return;
+
+        // Set REQUESTED level.
+        let entry = room.tabPermissions.get(tabId);
+        if (!entry) {
+          entry = { levels: new Map() };
+          room.tabPermissions.set(tabId, entry);
+        }
+        entry.levels.set(userName, "REQUESTED");
+
+        // Broadcast so owner sees the request.
+        io.in(roomId).emit(ACTIONS.TAB_PERMISSIONS_UPDATE, {
+          tabId,
+          permissions: Object.fromEntries(entry.levels),
+        });
+      }
+    );
+
+    socket.on(
+      ACTIONS.TAB_PERMISSION_GRANT,
+      ({
+        roomId,
+        tabId,
+        targetUser,
+        level,
+      }: {
+        roomId: string;
+        tabId: string;
+        targetUser: string;
+        level: "EDITOR" | "VIEWER";
+      }) => {
+        const userName = userSocketMap.get(socket.id);
+        if (!userName) return;
+        if (!socket.rooms.has(roomId)) return;
+
+        const room = rooms.get(roomId);
+        if (!room || room.creator !== userName) return; // OWNER ONLY
+
+        if (!isValidTabId(tabId)) return;
+        const tab = room.tabs.get(tabId);
+        if (!tab) return;
+
+        // Target must be in the room.
+        const targetClient = room.clients.find((c) => c.username === targetUser);
+        if (!targetClient) return;
+
+        // Validate level.
+        if (level !== "EDITOR" && level !== "VIEWER") return;
+
+        // Set permission.
+        let entry = room.tabPermissions.get(tabId);
+        if (!entry) {
+          entry = { levels: new Map() };
+          room.tabPermissions.set(tabId, entry);
+        }
+        entry.levels.set(targetUser, level);
+
+        // If granting EDITOR, auto-assign the tab editor slot.
+        if (level === "EDITOR") {
+          room.tabEditors.set(tabId, targetUser);
+        }
+
+        // Broadcast update.
+        io.in(roomId).emit(ACTIONS.TAB_PERMISSIONS_UPDATE, {
+          tabId,
+          permissions: Object.fromEntries(entry.levels),
+        });
+      }
+    );
+
+    socket.on(
+      ACTIONS.TAB_PERMISSION_REVOKE,
+      ({
+        roomId,
+        tabId,
+        targetUser,
+      }: {
+        roomId: string;
+        tabId: string;
+        targetUser: string;
+      }) => {
+        const userName = userSocketMap.get(socket.id);
+        if (!userName) return;
+        if (!socket.rooms.has(roomId)) return;
+
+        const room = rooms.get(roomId);
+        if (!room || room.creator !== userName) return; // OWNER ONLY
+
+        if (!isValidTabId(tabId)) return;
+
+        const entry = room.tabPermissions.get(tabId);
+        if (!entry) return;
+
+        // Remove the user's tab-level override.
+        entry.levels.delete(targetUser);
+
+        // Clean up empty entries.
+        if (entry.levels.size === 0) {
+          room.tabPermissions.delete(tabId);
+        }
+
+        // If they held the per-tab editor slot, release it.
+        if (room.tabEditors.get(tabId) === targetUser) {
+          room.tabEditors.delete(tabId);
+        }
+
+        // Broadcast.
+        io.in(roomId).emit(ACTIONS.TAB_PERMISSIONS_UPDATE, {
+          tabId,
+          permissions: Object.fromEntries(entry.levels),
         });
       }
     );

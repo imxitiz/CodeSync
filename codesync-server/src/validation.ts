@@ -1,5 +1,7 @@
 // Pure validation & permission logic extracted from socket.ts for testability
 
+import type { RoomState } from "./roomManager.js";
+
 export type UserPermissions = {
   canEdit: boolean;
   canCreateTab: boolean;
@@ -29,6 +31,25 @@ export const OWNER_PERMISSIONS: UserPermissions = {
   canCreateTab: true,
   canDeleteTab: true,
   canRenameTab: true,
+};
+
+// ---------------------------------------------------------------------------
+// Tab-level permission types
+// ---------------------------------------------------------------------------
+
+/**
+ * Permission levels for a (user, tab) pair or room-wide default.
+ * Ordered by privilege: VIEWER < EDITOR < REQUESTED (pending).
+ *
+ * - VIEWER: can read code, cannot modify. Default for all joiners.
+ * - EDITOR: can read + write code on this tab (or room-wide).
+ * - REQUESTED: user has asked to become EDITOR; awaiting owner approval.
+ */
+export type TabPermissionLevel = "VIEWER" | "EDITOR" | "REQUESTED";
+
+export type TabPermissionEntry = {
+  /** Username → level override for this specific tab. */
+  levels: Map<string, TabPermissionLevel>;
 };
 
 export const sanitizeTabName = (name: unknown): string | null => {
@@ -120,3 +141,60 @@ export const canUserEdit = (
   }
   return currentEditor === "" || currentEditor === userName;
 };
+
+/**
+ * Resolve the effective permission level for a (user, tab) pair.
+ *
+ * Resolution order:
+ *   1. OWNER → always EDITOR on every tab.
+ *   2. Tab-level override → authoritative for that user on that tab.
+ *   3. Room-level fallback → check UserPermissions.canEdit + per-tab editor slot.
+ *   4. Default → VIEWER.
+ *
+ * Tab-level OVERRIDES the room-level. So a user can be:
+ *   - VIEWER room-wide but EDITOR on tab-X.
+ *   - EDITOR room-wide but VIEWER on tab-Y (owner restricted a specific tab).
+ */
+export function resolveTabPermission(
+  room: RoomState,
+  userName: string,
+  tabId: string
+): TabPermissionLevel {
+  // 1. Owner is always EDITOR.
+  if (room.creator === userName) {
+    return "EDITOR";
+  }
+
+  // 2. Tab-level override takes precedence.
+  const tabOverride = room.tabPermissions?.get(tabId);
+  if (tabOverride) {
+    const level = tabOverride.levels.get(userName);
+    if (level) {
+      return level;
+    }
+  }
+
+  // 3. Room-level fallback.
+  const roomPerms = room.permissions.get(userName);
+  if (roomPerms?.canEdit === true) {
+    // Room-level editor: respect per-tab editor slot model.
+    const tabSlotHolder = room.tabEditors?.get(tabId);
+    if (!tabSlotHolder || tabSlotHolder === userName) {
+      return "EDITOR";
+    }
+  }
+
+  // 4. Default.
+  return "VIEWER";
+}
+
+/**
+ * Convenience predicate: can this user write to this specific tab?
+ */
+export function canWriteTab(
+  room: RoomState,
+  userName: string,
+  tabId: string
+): boolean {
+  return resolveTabPermission(room, userName, tabId) === "EDITOR";
+}

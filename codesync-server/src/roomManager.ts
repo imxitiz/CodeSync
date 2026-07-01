@@ -11,6 +11,7 @@ import {
   DEFAULT_TAB_NAME,
   OWNER_PERMISSIONS,
   type TabData,
+  type TabPermissionEntry,
   type UserPermissions,
 } from "./validation.js";
 
@@ -33,6 +34,20 @@ export type RoomState = {
   permissions: Map<string, UserPermissions>;
   /** Current editor username ("" = none). */
   currentEditor: string;
+
+  // ── NEW ────────────────────────────────────────────────────
+  /**
+   * Tab-level permission overrides.
+   * Key: tabId → permission entry for that tab.
+   * If a tabId is missing here, the room-level `permissions` map is authoritative.
+   */
+  tabPermissions: Map<string, TabPermissionEntry>;
+  /**
+   * Per-tab editor slot: tabId → username.
+   * If a tabId is missing here, no one holds the editor slot for that tab.
+   * This allows multiple users to edit different tabs concurrently.
+   */
+  tabEditors: Map<string, string>;
 };
 
 export type JoinResult = {
@@ -64,6 +79,8 @@ export function createRoomState(roomId: string): RoomState {
     tabs: new Map([[DEFAULT_TAB_ID, { name: DEFAULT_TAB_NAME, code: "" }]]),
     permissions: new Map(),
     currentEditor: "",
+    tabPermissions: new Map(),   // ← NEW
+    tabEditors: new Map(),       // ← NEW
   };
 }
 
@@ -231,6 +248,13 @@ export function transferOwner(
     room.currentEditor = "";
   }
 
+  // Release per-tab editor slots held by the old owner.
+  for (const [tabId, holder] of room.tabEditors) {
+    if (holder === sender.username) {
+      room.tabEditors.delete(tabId);
+    }
+  }
+
   const freshToken = signReclaimToken(ownerSecret, {
     roomId: room.roomId,
     userName: newOwner,
@@ -258,6 +282,20 @@ export function disconnectClient(
     if (room.currentEditor === client.username) {
       room.currentEditor = "";
     }
+    // Release any per-tab editor slots held by this user.
+    for (const [tabId, holder] of room.tabEditors) {
+      if (holder === client.username) {
+        room.tabEditors.delete(tabId);
+      }
+    }
+    // Clear transient REQUESTED entries for this user.
+    // EDITOR grants persist (owner configuration); REQUESTED is ephemeral.
+    for (const [, entry] of room.tabPermissions) {
+      const level = entry.levels.get(client.username);
+      if (level === "REQUESTED") {
+        entry.levels.delete(client.username);
+      }
+    }
   }
 
   if (wasOwner) {
@@ -278,4 +316,6 @@ export function destroyRoomState(room: RoomState): void {
   room.tabs = new Map([[DEFAULT_TAB_ID, { name: DEFAULT_TAB_NAME, code: "" }]]);
   room.permissions = new Map();
   room.currentEditor = "";
+  room.tabPermissions = new Map();   // ← NEW
+  room.tabEditors = new Map();       // ← NEW
 }

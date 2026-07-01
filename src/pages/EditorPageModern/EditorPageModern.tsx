@@ -1,4 +1,4 @@
-import { Plus, X } from "lucide-react";
+import { Clock, Lock, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -22,6 +22,7 @@ import type {
   EditorSocketRef,
   EditorTab,
   FollowMode,
+  TabPermissionLevel,
   UserPermissions,
 } from "./types";
 import { useEditorRealtime } from "./useEditorRealtime";
@@ -91,6 +92,7 @@ export default function EditorPageModern() {
   const [showShortcuts, setShowShortcuts] = useState<boolean>(false);
   const [zen, setZen] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [wasViewer, setWasViewer] = useState(false);
 
   const handleCodeChange = useCallback(
     (code: string, tabId?: string) => {
@@ -111,12 +113,16 @@ export default function EditorPageModern() {
     emitTabCreate,
     emitTabRename,
     emitTabSwitch,
+    emitTabPermissionRequest,
+    emitTabPermissionGrant,
+    emitTabPermissionRevoke,
     emitTransferOwner,
     roomCreator,
     serverStatus,
     setCurrentEditor,
     socketReady,
     socketRef,
+    tabPermissions,
   } = useEditorRealtime({
     roomId: id,
     userName,
@@ -136,7 +142,23 @@ export default function EditorPageModern() {
   const myPermissions: UserPermissions =
     permissions[userName] || DEFAULT_PERMISSIONS;
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
-  const canEditCode = isOwner || myPermissions.canEdit;
+  // Tab-level permission derivation
+  const activeTabPermission: TabPermissionLevel = useMemo(() => {
+    if (isOwner) return "EDITOR";
+    const tabLevel = tabPermissions[activeTabId]?.[userName];
+    if (tabLevel) return tabLevel;
+    return myPermissions.canEdit ? "EDITOR" : "VIEWER";
+  }, [isOwner, tabPermissions, activeTabId, userName, myPermissions.canEdit]);
+
+  const canEditActiveTab = activeTabPermission === "EDITOR";
+
+  // Track previous permission state to detect grant transitions for flash effect
+  useEffect(() => {
+    if (wasViewer && canEditActiveTab) {
+      // Permission was just granted — flash will play via class toggle
+    }
+    setWasViewer(activeTabPermission === "VIEWER");
+  }, [activeTabPermission, canEditActiveTab, wasViewer]);
 
   const applyActiveTab = useCallback(
     (tabId: string) => {
@@ -263,7 +285,11 @@ export default function EditorPageModern() {
   const toggleEditable = (): void => {
     if (currentEditor === userName) {
       setCurrentEditor("");
-      emitCurrentEditor("");
+      socketRef.current?.emit(ACTIONS.SET_CURRENT_EDITOR, {
+        roomId: id,
+        currenteditor: "",
+        tabId: activeTabId,
+      });
       if (!isOwner) {
         setPermissions((prev) => ({
           ...prev,
@@ -273,12 +299,22 @@ export default function EditorPageModern() {
       }
       toast.success("Editor is now read-only");
     } else {
-      if (!isOwner && !myPermissions.canEdit) {
+      if (!isOwner && !canEditActiveTab) {
+        // If user doesn't have tab-level permission, request it
+        if (activeTabPermission === "VIEWER") {
+          emitTabPermissionRequest(activeTabId);
+          toast.success("Edit request sent!");
+          return;
+        }
         toast.error("You don't have permission to edit");
         return;
       }
       setCurrentEditor(userName);
-      emitCurrentEditor(userName);
+      socketRef.current?.emit(ACTIONS.SET_CURRENT_EDITOR, {
+        roomId: id,
+        currenteditor: userName,
+        tabId: activeTabId,
+      });
       if (!isOwner) {
         const editPerms = withEditorAccess(
           permissions[userName] || DEFAULT_PERMISSIONS,
@@ -460,6 +496,21 @@ export default function EditorPageModern() {
     }
   }, [location.state, id, navigate]);
 
+  // Compute per-tab permission levels for the current user (for lock icons)
+  const myTabLevels = useMemo(() => {
+    const result: Record<string, TabPermissionLevel> = {};
+    for (const tab of tabs) {
+      if (isOwner) {
+        result[tab.id] = "EDITOR";
+      } else {
+        result[tab.id] =
+          tabPermissions[tab.id]?.[userName] ??
+          (myPermissions.canEdit ? "EDITOR" : "VIEWER");
+      }
+    }
+    return result;
+  }, [tabs, isOwner, tabPermissions, userName, myPermissions.canEdit]);
+
   // Count users on each tab (for tab badges)
   const tabUserCounts = useMemo(() => {
     const counts: Record<string, string[]> = {};
@@ -506,14 +557,30 @@ export default function EditorPageModern() {
       <div className="h-full w-full overflow-hidden bg-background">
         {/* CodeMirror scroller rules */}
         <style>{`
-          /* Host container fills the available area */
+          /* Host container fills the available flex space */
           .editor-host {
-            position: absolute;
-            inset: 0;
-            height: 100%;
-            width: 100%;
+            flex: 1;
             min-height: 0;
             min-width: 0;
+            height: 100%;
+            width: 100%;
+            transition: opacity 0.15s ease;
+          }
+          /* Smooth transition when switching between editable/read-only */
+          .editor-host.read-only {
+            opacity: 0.95;
+          }
+          /* Flash effect when permission is granted */
+          @keyframes permission-granted-flash {
+            0% {
+              box-shadow: inset 0 0 0 2px var(--success);
+            }
+            100% {
+              box-shadow: inset 0 0 0 2px transparent;
+            }
+          }
+          .editor-host.permission-granted {
+            animation: permission-granted-flash 0.6s ease-out;
           }
           /* CodeMirror root must occupy full size */
           .editor-host .cm-editor {
@@ -562,7 +629,7 @@ export default function EditorPageModern() {
           {/* Top bar (hidden in Zen) */}
           {!zen && (
             <TopBar
-              canEdit={canEditCode}
+              canEdit={canEditActiveTab}
               clients={sortedClients}
               connectionMessage={connectionMessage}
               connectionStatus={serverStatus}
@@ -595,6 +662,8 @@ export default function EditorPageModern() {
               onToggleParticipants={() => setShowParticipants(true)}
               onToggleWrap={() => setWrapLines((v) => !v)}
               onToggleZen={() => setZen((v) => !v)}
+              activeTabPermission={activeTabPermission}
+              onRequestTabEdit={() => emitTabPermissionRequest(activeTabId)}
             />
           )}
 
@@ -611,6 +680,9 @@ export default function EditorPageModern() {
                       isActive
                         ? "border-t-2 border-t-primary bg-card font-medium text-foreground shadow-sm"
                         : "cursor-pointer text-muted-foreground hover:bg-accent/40 hover:text-foreground",
+                      myTabLevels[tab.id] === "VIEWER" && !isActive
+                        ? "bg-muted/30"
+                        : "",
                     ].join(" ")}
                     key={tab.id}
                     ref={(el) => {
@@ -652,6 +724,12 @@ export default function EditorPageModern() {
                         type="button"
                       >
                         {getFileIcon(tab.name)}
+                        {myTabLevels[tab.id] === "VIEWER" &&
+                          tabs.length > 1 && (
+                            <span title="Read-only on this tab">
+                              <Lock className="size-3 text-muted-foreground/60" />
+                            </span>
+                          )}
                         <span className="max-w-20 truncate">{tab.name}</span>
                         {(isOwner || myPermissions.canRenameTab) && (
                           <span
@@ -708,13 +786,48 @@ export default function EditorPageModern() {
           )}
 
           {/* Editor canvas (fills remaining height) */}
-          <section className="relative min-h-0 flex-1 overflow-hidden">
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {activeTabPermission === "VIEWER" && (
+              <div className="flex shrink-0 items-center gap-3 border-b border-border bg-muted/30 px-4 py-2 text-sm border-l-4 border-l-primary">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted">
+                  <Lock className="size-3 text-muted-foreground" />
+                </span>
+                <span className="text-muted-foreground">
+                  You have{" "}
+                  <span className="font-medium text-foreground">read-only</span>{" "}
+                  access to{" "}
+                  <span className="font-medium text-foreground">
+                    {activeTab?.name}
+                  </span>
+                </span>
+                <button
+                  className="ml-auto cursor-pointer rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                  onClick={() => emitTabPermissionRequest(activeTabId)}
+                  type="button"
+                >
+                  Request Edit Access
+                </button>
+              </div>
+            )}
+
+            {activeTabPermission === "REQUESTED" && (
+              <div className="flex shrink-0 items-center gap-3 border-b border-amber-500/20 bg-amber-500/5 px-4 py-2 text-sm border-l-4 border-l-amber-500">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
+                  <Clock className="size-3 text-amber-600 dark:text-amber-400" />
+                </span>
+                <span className="text-amber-700 dark:text-amber-300">
+                  Edit request <span className="font-medium">pending</span> for{" "}
+                  <span className="font-medium">{activeTab?.name}</span> —
+                  waiting for owner to approve
+                </span>
+              </div>
+            )}
             {activeTab?.code === "" && tabs.length === 1 && (
               <EmptyState
                 currentEditor={currentEditor}
                 participantCount={sortedClients.length}
                 isOwner={isOwner}
-                canEdit={canEditCode}
+                canEdit={canEditActiveTab}
               />
             )}
             {/* Exit Zen small control */}
@@ -733,14 +846,14 @@ export default function EditorPageModern() {
             {/* Editor wrapper takes full available space (keyed by tabId to remount) */}
             {activeTab && (
               <div
-                className={`editor-host h-full w-full ${wrapLines ? "wrap-on" : "no-wrap"}`}
+                className={`editor-host h-full w-full ${wrapLines ? "wrap-on" : "no-wrap"} ${!canEditActiveTab ? "read-only" : ""} ${wasViewer && canEditActiveTab ? "permission-granted" : ""}`}
               >
                 <EditorWrapper
                   key={activeTab.id}
                   activeTabId={activeTab.id}
                   currentEditor={currentEditor}
                   darkMode={isDark}
-                  editable={canEditCode}
+                  editable={canEditActiveTab}
                   fontSize={fontSize}
                   initialCode={activeTab.code}
                   onCodeChange={handleCodeChange}
@@ -783,6 +896,10 @@ export default function EditorPageModern() {
         }}
         userPermissions={permissions}
         onUpdatePermissions={handleUpdatePermissions}
+        tabs={tabs}
+        tabPermissions={tabPermissions}
+        emitTabPermissionGrant={emitTabPermissionGrant}
+        emitTabPermissionRevoke={emitTabPermissionRevoke}
       />
 
       <TransferOwnerDialog
