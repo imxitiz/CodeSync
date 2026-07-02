@@ -41,6 +41,7 @@ export const ACTIONS = {
   TAB_PERMISSION_GRANT: "tab-permission-grant",
   TAB_PERMISSION_REVOKE: "tab-permission-revoke",
   TAB_PERMISSIONS_UPDATE: "tab-permissions-update",
+  EDIT_REQUESTS_TOGGLE: "edit-requests-toggle",
 } as const;
 
 export type ActionsType = (typeof ACTIONS)[keyof typeof ACTIONS];

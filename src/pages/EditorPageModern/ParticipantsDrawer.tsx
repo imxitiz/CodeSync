@@ -50,6 +50,8 @@ type Props = {
     level: "EDITOR" | "VIEWER",
   ) => void;
   emitTabPermissionRevoke: (tabId: string, targetUser: string) => void;
+  allowEditRequests: boolean;
+  emitEditRequestsToggle: (enabled: boolean) => void;
 };
 
 export default function ParticipantsDrawer({
@@ -74,6 +76,8 @@ export default function ParticipantsDrawer({
   tabPermissions,
   emitTabPermissionGrant,
   emitTabPermissionRevoke,
+  allowEditRequests,
+  emitEditRequestsToggle,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -163,6 +167,32 @@ export default function ParticipantsDrawer({
             <X className="size-4" />
           </button>
         </header>
+
+        {/* Owner controls — allow edit requests toggle */}
+        {isOwner && (
+          <div className="flex items-center justify-between border-b border-sidebar-border px-4 py-2">
+            <span className="text-xs text-sidebar-foreground/70">
+              Allow edit requests
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={allowEditRequests}
+              onClick={() => emitEditRequestsToggle(!allowEditRequests)}
+              className={[
+                "relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full transition-colors",
+                allowEditRequests ? "bg-primary" : "bg-sidebar-foreground/20",
+              ].join(" ")}
+            >
+              <span
+                className={[
+                  "inline-block size-4 transform rounded-full bg-white shadow-sm transition-transform",
+                  allowEditRequests ? "translate-x-4" : "translate-x-0.5",
+                ].join(" ")}
+              />
+            </button>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
           {participants.map(({ socketId, username }) => {

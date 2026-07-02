@@ -48,6 +48,22 @@ export type RoomState = {
    * This allows multiple users to edit different tabs concurrently.
    */
   tabEditors: Map<string, string>;
+  /**
+   * Whether non-owner users are allowed to request edit access.
+   * Default: false (opt-in). Owner must explicitly enable.
+   */
+  allowEditRequests: boolean;
+  /**
+   * Cooldown tracking: tabId → username → expiry timestamp (ms).
+   * After 2 rejections, a user is blocked from requesting on that tab
+   * until the cooldown expires (default 5 minutes).
+   */
+  requestCooldowns: Map<string, Map<string, number>>;
+  /**
+   * Rejection counts: tabId → username → count.
+   * Tracks how many times a user's request was rejected on a tab.
+   */
+  requestRejections: Map<string, Map<string, number>>;
 };
 
 export type JoinResult = {
@@ -79,8 +95,11 @@ export function createRoomState(roomId: string): RoomState {
     tabs: new Map([[DEFAULT_TAB_ID, { name: DEFAULT_TAB_NAME, code: "" }]]),
     permissions: new Map(),
     currentEditor: "",
-    tabPermissions: new Map(),   // ← NEW
-    tabEditors: new Map(),       // ← NEW
+    tabPermissions: new Map(),
+    tabEditors: new Map(),
+    allowEditRequests: false,
+    requestCooldowns: new Map(),
+    requestRejections: new Map(),
   };
 }
 
@@ -316,6 +335,60 @@ export function destroyRoomState(room: RoomState): void {
   room.tabs = new Map([[DEFAULT_TAB_ID, { name: DEFAULT_TAB_NAME, code: "" }]]);
   room.permissions = new Map();
   room.currentEditor = "";
-  room.tabPermissions = new Map();   // ← NEW
-  room.tabEditors = new Map();       // ← NEW
+  room.tabPermissions = new Map();
+  room.tabEditors = new Map();
+  room.allowEditRequests = false;
+  room.requestCooldowns = new Map();
+  room.requestRejections = new Map();
+}
+
+/**
+ * Check if a user is in cooldown for a specific tab.
+ * Returns the remaining cooldown in ms, or 0 if not in cooldown.
+ */
+export function getCooldownRemaining(
+  room: RoomState,
+  tabId: string,
+  username: string,
+): number {
+  const tabCooldowns = room.requestCooldowns.get(tabId);
+  if (!tabCooldowns) return 0;
+  const expiry = tabCooldowns.get(username);
+  if (!expiry) return 0;
+  const remaining = expiry - Date.now();
+  return remaining > 0 ? remaining : 0;
+}
+
+/**
+ * Record a rejection for a user on a tab.
+ * After 2 rejections, impose a cooldown.
+ */
+export function recordRejection(
+  room: RoomState,
+  tabId: string,
+  username: string,
+): { cooldownMs: number } {
+  let tabRejections = room.requestRejections.get(tabId);
+  if (!tabRejections) {
+    tabRejections = new Map();
+    room.requestRejections.set(tabId, tabRejections);
+  }
+  const count = (tabRejections.get(username) ?? 0) + 1;
+  tabRejections.set(username, count);
+
+  // After 2 rejections, impose 5-minute cooldown
+  const COOLDOWN_THRESHOLD = 2;
+  const COOLDOWN_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+  if (count >= COOLDOWN_THRESHOLD) {
+    let tabCooldowns = room.requestCooldowns.get(tabId);
+    if (!tabCooldowns) {
+      tabCooldowns = new Map();
+      room.requestCooldowns.set(tabId, tabCooldowns);
+    }
+    tabCooldowns.set(username, Date.now() + COOLDOWN_DURATION_MS);
+    return { cooldownMs: COOLDOWN_DURATION_MS };
+  }
+
+  return { cooldownMs: 0 };
 }

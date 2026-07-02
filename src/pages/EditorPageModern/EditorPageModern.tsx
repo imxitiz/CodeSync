@@ -116,6 +116,7 @@ export default function EditorPageModern() {
     emitTabPermissionRequest,
     emitTabPermissionGrant,
     emitTabPermissionRevoke,
+    emitEditRequestsToggle,
     emitTransferOwner,
     roomCreator,
     serverStatus,
@@ -123,6 +124,8 @@ export default function EditorPageModern() {
     socketReady,
     socketRef,
     tabPermissions,
+    allowEditRequests,
+    cooldowns,
   } = useEditorRealtime({
     roomId: id,
     userName,
@@ -151,6 +154,26 @@ export default function EditorPageModern() {
   }, [isOwner, tabPermissions, activeTabId, userName, myPermissions.canEdit]);
 
   const canEditActiveTab = activeTabPermission === "EDITOR";
+
+  // Can this user request edit access on the active tab?
+  const cooldownRemaining = cooldowns[activeTabId] ?? 0;
+  const canRequestEdit =
+    !isOwner &&
+    activeTabPermission === "VIEWER" &&
+    allowEditRequests &&
+    cooldownRemaining <= 0;
+
+  // Pending request count (for owner)
+  const pendingRequestCount = useMemo(() => {
+    if (!isOwner) return 0;
+    let count = 0;
+    for (const entry of Object.values(tabPermissions)) {
+      for (const level of Object.values(entry)) {
+        if (level === "REQUESTED") count++;
+      }
+    }
+    return count;
+  }, [isOwner, tabPermissions]);
 
   // Track previous permission state to detect grant transitions for flash effect
   useEffect(() => {
@@ -664,6 +687,7 @@ export default function EditorPageModern() {
               onToggleZen={() => setZen((v) => !v)}
               activeTabPermission={activeTabPermission}
               onRequestTabEdit={() => emitTabPermissionRequest(activeTabId)}
+              pendingRequestCount={isOwner ? pendingRequestCount : 0}
             />
           )}
 
@@ -787,38 +811,45 @@ export default function EditorPageModern() {
 
           {/* Editor canvas (fills remaining height) */}
           <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {activeTabPermission === "VIEWER" && (
-              <div className="flex shrink-0 items-center gap-3 border-b border-border bg-muted/30 px-4 py-2 text-sm border-l-4 border-l-primary">
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted">
-                  <Lock className="size-3 text-muted-foreground" />
-                </span>
+            {/* Inline read-only indicator — small chip, not a full banner */}
+            {activeTabPermission === "VIEWER" &&
+              !canRequestEdit &&
+              cooldownRemaining <= 0 && (
+                <div className="flex shrink-0 items-center gap-2 border-b bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
+                  <Lock className="size-3" />
+                  <span>Read-only</span>
+                </div>
+              )}
+
+            {canRequestEdit && (
+              <div className="flex shrink-0 items-center gap-2 border-b bg-primary/5 px-3 py-1.5 text-xs">
+                <Lock className="size-3 text-primary" />
                 <span className="text-muted-foreground">
-                  You have{" "}
-                  <span className="font-medium text-foreground">read-only</span>{" "}
-                  access to{" "}
-                  <span className="font-medium text-foreground">
-                    {activeTab?.name}
-                  </span>
+                  You have read-only access
                 </span>
                 <button
-                  className="ml-auto cursor-pointer rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                  className="ml-auto cursor-pointer rounded bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   onClick={() => emitTabPermissionRequest(activeTabId)}
                   type="button"
                 >
-                  Request Edit Access
+                  Request Edit
                 </button>
               </div>
             )}
 
             {activeTabPermission === "REQUESTED" && (
-              <div className="flex shrink-0 items-center gap-3 border-b border-amber-500/20 bg-amber-500/5 px-4 py-2 text-sm border-l-4 border-l-amber-500">
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
-                  <Clock className="size-3 text-amber-600 dark:text-amber-400" />
-                </span>
-                <span className="text-amber-700 dark:text-amber-300">
-                  Edit request <span className="font-medium">pending</span> for{" "}
-                  <span className="font-medium">{activeTab?.name}</span> —
-                  waiting for owner to approve
+              <div className="flex shrink-0 items-center gap-2 border-b bg-amber-500/5 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400">
+                <Clock className="size-3" />
+                <span>Edit request pending</span>
+              </div>
+            )}
+
+            {cooldownRemaining > 0 && activeTabPermission === "VIEWER" && (
+              <div className="flex shrink-0 items-center gap-2 border-b bg-destructive/5 px-3 py-1.5 text-xs text-destructive">
+                <Clock className="size-3" />
+                <span>
+                  Request blocked — wait {Math.ceil(cooldownRemaining / 60000)}{" "}
+                  min
                 </span>
               </div>
             )}
@@ -900,6 +931,8 @@ export default function EditorPageModern() {
         tabPermissions={tabPermissions}
         emitTabPermissionGrant={emitTabPermissionGrant}
         emitTabPermissionRevoke={emitTabPermissionRevoke}
+        allowEditRequests={allowEditRequests}
+        emitEditRequestsToggle={emitEditRequestsToggle}
       />
 
       <TransferOwnerDialog

@@ -61,7 +61,9 @@ const writeCustomBackendUrl = (value: string): void => {
   }
   try {
     window.localStorage.setItem(CUSTOM_BACKEND_KEY, value);
-  } catch {}
+  } catch {
+    /* localStorage may be unavailable in SSR or when quota is exceeded */
+  }
 };
 
 const removeCustomBackendUrl = (): void => {
@@ -73,7 +75,9 @@ const removeCustomBackendUrl = (): void => {
   }
   try {
     window.localStorage.removeItem(CUSTOM_BACKEND_KEY);
-  } catch {}
+  } catch {
+    /* localStorage may be unavailable in SSR or when quota is exceeded */
+  }
 };
 
 /**

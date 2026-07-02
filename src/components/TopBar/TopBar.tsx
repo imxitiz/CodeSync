@@ -66,6 +66,7 @@ export type TopBarProps = {
   isOwner: boolean;
   activeTabPermission?: "VIEWER" | "EDITOR" | "REQUESTED";
   onRequestTabEdit?: () => void;
+  pendingRequestCount?: number;
 };
 
 export default function TopBar({
@@ -97,6 +98,7 @@ export default function TopBar({
   onGrantEdit,
   activeTabPermission,
   onRequestTabEdit,
+  pendingRequestCount = 0,
 }: TopBarProps) {
   const maxAvatars = 5;
   const visibleClients = clients.slice(0, maxAvatars);
@@ -233,13 +235,18 @@ export default function TopBar({
             )}
             <button
               aria-label={`${totalParticipants} participants. Open participants panel.`}
-              className="ms-1 cursor-pointer rounded-full border bg-background px-2 py-0.5 text-foreground text-xs hover:bg-accent"
+              className="ms-1 relative cursor-pointer rounded-full border bg-background px-2 py-0.5 text-foreground text-xs hover:bg-accent"
               onClick={onToggleParticipants}
               title="Open participants"
               type="button"
             >
               <Users className="mr-1 inline size-3" />
               {totalParticipants}
+              {pendingRequestCount > 0 && isOwner && (
+                <span className="-top-1.5 -right-1.5 absolute flex size-4 items-center justify-center rounded-full bg-destructive text-[9px] font-medium text-destructive-foreground">
+                  {pendingRequestCount}
+                </span>
+              )}
             </button>
           </div>
         </div>

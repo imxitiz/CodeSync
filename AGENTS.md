@@ -1,400 +1,386 @@
-# CodeSync — Real-time collaborative code editor
+# CodeSync — Agent Project Reference
 
-## TL;DR
-
-**Purpose**: Browser-based collaborative code editor with live sync via Socket.IO, themeable UI, and PWA support.
-
-**Top 3 commands**:
-```bash
-bun install                  # install deps
-bun run dev:front            # start Vite dev server (frontend only)
-bun run server               # start Express + Socket.IO backend (port 3000)
-```
-
-**Owner**: sachinthapa572 · **Repo**: `sachinthapa572/CodeSync` · **Branch**: `ts-conversion`
+> **This file is a CONTRACT between this project and every AI coding agent that enters it.**
+> It is NOT documentation — it is a SPECIFICATION for agent behavior.
+>
+> **⚠️ This file is a LIVING DOCUMENT.** After any major change (new feature, architecture change, dependency upgrade),
+> you MUST update this file to reflect reality. If the code and this file disagree, the code wins —
+> fix this file to match.
 
 ---
 
-## Quick Start
+## Table of Contents
 
-```bash
-# Install
-bun install
-
-# Frontend dev server (Vite, default :5173)
-bun run dev:front
-
-# Backend server (Express + Socket.IO, :3000)
-bun run server
-
-# Build (frontend SSG + backend compile)
-bun run build
-
-# Build frontend only (SSG)
-bun run build:frontend
-
-# Build backend only (tsc → dist/)
-bun run build:backend
-
-# Production start (build + serve)
-bun run dev
-
-# Type-check
-bun run type-check
-
-# Lint
-bun run lint
-
-# Format
-bun run format
-```
-
-**Env vars**: Copy `.env.example` → `.env`. Key vars:
-| Variable | Default | Purpose |
-|---|---|---|
-| `VITE_BACKEND_API_URL` | `http://localhost:3000` | Frontend → backend URL |
-| `CORS_ORIGIN` | `http://localhost:5173` | Allowed origins (comma-separated, `*` for all) |
+1. [Project Identity](#project-identity)
+2. [Tech Stack](#tech-stack)
+3. [Project Structure](#project-structure)
+4. [SWE Principles — The Layered Law](#swe-principles--the-layered-law)
+5. [Architecture Map](#architecture-map)
+6. [Commands](#commands)
+7. [Known Issues / Tech Debt](#known-issues--tech-debt)
+8. [Self-Maintenance Protocol](#self-maintenance-protocol)
 
 ---
 
-## Architecture
+## Project Identity
+
+**CodeSync** — Real-time collaborative code editor with WebSocket synchronization. Monorepo with React frontend (Vite + SSG) and Bun/Hono/Socket.IO backend.
+
+| Property | Value | Source |
+|----------|-------|--------|
+| Package name | `codesync-socketio` | `package.json` |
+| Version | `0.0.0` | `package.json` |
+| Type | Monorepo (Frontend + Backend) | `package.json` workspaces |
+| Frontend | React 19 + Vite 7 + Tailwind 4 | `package.json` |
+| Backend | Hono + Socket.IO on Bun | `codesync-server/package.json` |
+| Real-time | Socket.IO 4.8 | `codesync-server/src/socket.ts` |
+| Editor | CodeMirror 6 | `@uiw/react-codemirror` |
+| Deploy | Static (SSG) + Bun server | `vercel.json`, `wrangler.jsonc` |
+
+---
+
+## Tech Stack
+
+| Layer | Choice | Version | Notes |
+|-------|--------|---------|-------|
+| Runtime (Frontend) | Node.js | 20+ | Vite dev server |
+| Runtime (Backend) | Bun | 1.1+ | `bun --watch` for dev |
+| Language | TypeScript | 5.9 | Strict mode |
+| Frontend Framework | React | 19.2 | Concurrent features |
+| Build Tool | Vite | 7.3 | `vite-react-ssg` for SSG |
+| Styling | Tailwind CSS | 4.3 | Vite plugin |
+| Editor | CodeMirror 6 | 6.2 | `@uiw/react-codemirror` |
+| UI Components | Radix UI | 1.6 / 2.3 | Headless, accessible |
+| State | React Context + Zustand | — | `shared/` for types |
+| Real-time | Socket.IO | 4.8 | Client + Server |
+| HTTP Server | Hono | 4.6 | On `@hono/node-server` |
+| Lint/Format | Ultracite (Biome) | 7.8 | `ultracite check/fix` |
+| Type Check | TypeScript | 5.9 | `tsc --noEmit` |
+
+---
+
+## Project Structure
+
+> **⚠️ This structure was verified by filesystem scan on 2026-07-02.**
+> If you add/remove files, update this section.
+
+```
+CodeSync/
+├── codesync-server/                 # Backend workspace
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/
+│       ├── index.ts                 # Entry: Hono + Socket.IO setup
+│       ├── socket.ts                # Socket.IO event handlers (16KB)
+│       ├── roomManager.ts           # Room state, CRDT sync (16KB)
+│       ├── validation.ts            # Zod schemas for socket events
+│       ├── __tests__/               # Bun tests (empty)
+│       └── types.ts                 # Server-specific types
+├── src/                             # Frontend source
+│   ├── main.tsx                     # Entry point
+│   ├── App.tsx                      # Root component
+│   ├── components/                  # React components
+│   │   ├── editor/                  # CodeMirror wrapper, toolbar
+│   │   ├── ui/                      # Radix-based UI primitives
+│   │   └── layout/                  # Panels, resizable splits
+│   ├── hooks/                       # Custom React hooks
+│   │   ├── useSocket.ts             # Socket.IO client connection
+│   │   ├── useRoom.ts               # Room state management
+│   │   └── useEditor.ts             # Editor synchronization
+│   ├── context/                     # React Context providers
+│   │   ├── SocketContext.tsx
+│   │   └── RoomContext.tsx
+│   ├── pages/                       # Page components (SSG routes)
+│   │   ├── Home.tsx
+│   │   ├── Room.tsx
+│   │   └── Join.tsx
+│   ├── styles/                      # Global styles, Tailwind
+│   └── utils/                       # Helpers
+├── shared/                          # Shared types (Frontend ↔ Backend)
+│   ├── actions.ts                   # Socket event payloads
+│   ├── room.ts                      # Room, User, Cursor types
+│   └── editor.ts                    # Editor operation types
+├── agents/                          # Agent workflows (internal)
+├── docs/                            # Documentation
+├── public/                          # Static assets
+├── dist/                            # Build output (SSG)
+├── .env / .env.example              # Environment variables
+├── biome.jsonc                      # Biome/Ultracite config
+├── tsconfig.json                    # Frontend TS config
+├── vite.config.ts                   # Vite config (SSG + Tailwind)
+├── vercel.json                      # Vercel deploy config
+├── wrangler.jsonc                   # Cloudflare Pages config
+├── package.json                     # Root workspace
+└── AGENTS.md                        # This file
+```
+
+---
+
+## SWE Principles — The Layered Law
+
+**Every change MUST comply with these principles. No exceptions.**
+
+### 1. The Layered Architecture (Minimum 3 Abstraction Layers)
 
 ```
 ┌─────────────────────────────────────────────┐
-│  Browser (React SPA / PWA)                  │
-│  ┌──────────┐  ┌────────────┐  ┌─────────┐ │
-│  │ HomePage  │  │ EditorPage │  │ Themes  │ │
-│  └────┬─────┘  └─────┬──────┘  └────┬────┘ │
-│       │               │              │      │
-│       │        Socket.IO client      │      │
-│       └───────────┬──────────────────┘      │
-└───────────────────┼─────────────────────────┘
-                    │ WebSocket (port 3000)
-┌───────────────────┼─────────────────────────┐
-│  Express Server   │                         │
-│  ┌────────────────┴───────────┐             │
-│  │  Socket.IO (rooms, sync)   │             │
-│  ├────────────────────────────┤             │
-│  │  REST: /api/health, /info  │             │
-│  ├────────────────────────────┤             │
-│  │  Static file serving (dist)│             │
-│  └────────────────────────────┘             │
+│  Frontend Pages / Components                │  ← React components, user interaction
+├─────────────────────────────────────────────┤
+│  Frontend State / Hooks / Context           │  ← Socket connection, room sync, editor
+├─────────────────────────────────────────────┤
+│  Shared Types (contract)                    │  ← Zod schemas, TypeScript interfaces
+├─────────────────────────────────────────────┤
+│  Backend Socket Handlers                    │  ← Event processing, validation
+├─────────────────────────────────────────────┤
+│  Room Manager (Business Logic)              │  ← CRDT, presence, history, ownership
+├─────────────────────────────────────────────┤
+│  Transport (Socket.IO + Hono)               │  ← WebSocket server, HTTP health checks
 └─────────────────────────────────────────────┘
 ```
 
-**Flow**: User enters room ID + username → health check → Socket.IO connect → `JOIN` event → server broadcasts to room → CodeMirror syncs code via `CODE_CHANGE` events.
+- **Shared types are the CONTRACT.** `shared/actions.ts`, `shared/room.ts`, `shared/editor.ts` — both sides import these.
+- **Frontend hooks orchestrate.** `useSocket` → connection, `useRoom` → presence/sync, `useEditor` → operations.
+- **Backend validates FIRST.** `validation.ts` (Zod) runs before any roomManager logic.
+- **RoomManager is pure.** No Socket.IO imports — only takes operations, returns state changes.
+
+### 2. The Dependency Rule
+
+- Frontend → Shared Types ← Backend
+- Frontend hooks import Shared Types
+- Backend socket.ts imports Shared Types + validation.ts + roomManager.ts
+- **Backend NEVER imports frontend code.** Frontend NEVER imports backend code.
+- Validation runs at the boundary (socket.ts) before business logic.
+
+### 3. Zero Hardcoding
+
+- **Every** port, CORS origin, room limit, history size, timeout comes from environment.
+- `CODESYNC_OWNER_SECRET` — required in production, validated at startup (fail-secure).
+- `CORS_ORIGIN` — comma-separated, supports `*` for dev.
+- `PORT` — default 3000, auto-increments on collision.
+- If you find a magic number in `roomManager.ts` or `socket.ts`, extract to env/config.
+
+### 4. Type Safety
+
+- **Zod schemas for ALL socket events** — `validation.ts` defines `ClientToServerEvents`, `ServerToClientEvents`.
+- TypeScript strict mode enabled in both `tsconfig.json` files.
+- Shared types use `type` (not `interface`) for discriminated unions.
+- `socket.ts` uses `Server<ClientToServerEvents, ServerToClientEvents>` for full type safety.
+
+### 5. Separation of Concerns
+
+| Concern | Where | Files |
+|---------|-------|-------|
+| HTTP server setup | Backend entry | `codesync-server/src/index.ts` |
+| Socket event routing | Backend | `codesync-server/src/socket.ts` |
+| Room state / CRDT / Sync | Backend | `codesync-server/src/roomManager.ts` |
+| Event validation | Backend | `codesync-server/src/validation.ts` |
+| Socket connection | Frontend | `src/hooks/useSocket.ts` |
+| Room presence / sync | Frontend | `src/hooks/useRoom.ts` |
+| Editor operations | Frontend | `src/hooks/useEditor.ts` |
+| Editor component | Frontend | `src/components/editor/` |
+| Shared contract | Both | `shared/*.ts` |
+| UI primitives | Frontend | `src/components/ui/` |
+
+### 6. Resilience Patterns
+
+- **Owner reclaim tokens** — HMAC-signed tokens let original room owner reclaim rights after disconnect. `CODESYNC_OWNER_SECRET` required in production.
+- **Port collision handling** — Server auto-increments port up to +10 on `EADDRINUSE`.
+- **CORS with credentials** — Origin validation allows specific origins + localhost in dev. `credentials: true`.
+- **Fail-secure startup** — Missing `CODESYNC_OWNER_SECRET` in production → hard exit with instructions.
+- **Room cleanup** — Empty rooms auto-deleted after timeout (implemented in roomManager).
+
+### 7. The Change-Once Rule (DRY)
+
+Socket event types defined **once** in `shared/actions.ts` → used by:
+- Frontend: `useSocket.ts` emit/listen types
+- Backend: `validation.ts` Zod schemas
+- Backend: `socket.ts` handler signatures
+
+If you add a socket event, update `shared/actions.ts` only.
+
+### 8. YAGNI (You Aren't Gonna Need It)
+
+- No operational transform (OT) — using simple last-write-wins + cursors for MVP.
+- No persistence layer — rooms in memory only. Add Redis/DB when needed.
+- No authentication — rooms are public by ID. Add auth when required.
+- No conflict resolution UI — show remote cursors, let users coordinate.
 
 ---
 
-## Key Paths
+## Architecture Map
 
-| Path | Purpose |
-|---|---|
-| `server.ts` | Express + Socket.IO backend, CORS, room management |
-| `shared/actions.ts` | **Single source of truth** for Socket.IO event constants (DRY) |
-| `codesync-server/src/actions.ts` | Re-exports from `shared/actions.ts` for server convenience |
-| `src/utils/constants.ts` | Re-exports ACTIONS from `shared/actions.ts` + `BACKEND_API_URL` |
-| `src/utils/socket.ts` | Socket.IO client initialization |
-| `src/utils/healthCheck.ts` | Server health check before socket connect |
-| `src/utils/swDetection.ts` | Service worker cache detection utilities |
-| `src/pages/HomePageModern/` | Landing page — room creation/join |
-| `src/pages/EditorPageModern/` | Main editor page — toolbar, participants, CodeMirror |
-| `src/components/AppShell.tsx` | Shared layout shell (header + theme provider) |
-| `src/components/Editor.tsx` | CodeMirror editor integration |
-| `src/components/EditorWrapper.tsx` | Lazy-loaded CodeMirror with loading state |
-| `src/components/ClientModern.tsx` | Participant avatar component |
-| `src/components/ThemeSwitcher.tsx` | Theme selection toggle |
-| `src/components/ui/` | shadcn/ui primitives (button, card, input, select) |
-| `src/theme/ThemeProvider.tsx` | React context for theme state |
-| `src/theme/themes.ts` | Theme registry, token types, `applyTheme()` |
-| `src/theme/presets/` | Theme preset files (drop-in, auto-registered via Vite glob) |
-| `src/lib/utils.ts` | `cn()` utility (clsx + tailwind-merge) |
-| `vite.config.ts` | Vite config with React, Tailwind CSS v4, PWA plugins |
-| `biome.jsonc` | Biome linter/formatter config (extends ultracite) |
-| `components.json` | shadcn/ui config (new-york style, neutral base) |
-| `vercel.json` | Vercel deployment rewrites |
+### Socket Event Contract (`shared/actions.ts`)
 
----
-
-## Core Modules & Responsibilities
-
-### Socket Events (`shared/actions.ts` — Single Source of Truth)
-Both server and frontend import from `shared/actions.ts`. Do NOT duplicate.
 ```typescript
-const ACTIONS = {
-  JOIN: "join",           // Client → Server: join room
-  JOINED: "joined",       // Server → Client: room state + participants
-  CODE_CHANGE: "code-change",  // Bidirectional: code sync
-  SYNC_CODE: "sync-code",     // Server → specific client: initial sync
-  SET_CURRENT_EDITOR: "set_current_editor",  // Track active editor
-  GRANT_EDIT: "grant-edit",   // Room creator grants edit access
-  REVOKE_EDIT: "revoke-edit", // Room creator revokes edit access
-  DUPLICATE_USER: "duplicate-user",  // Reject duplicate usernames
-  DISCONNECTED: "disconnected",     // User left notification
-  // ...see shared/actions.ts for full list
-} as const;
+// Client → Server
+type ClientToServerEvents = {
+  'join-room': (payload: { roomId: string; userName: string }) => void;
+  'leave-room': (payload: { roomId: string }) => void;
+  'editor-operation': (payload: EditorOperation) => void;
+  'cursor-update': (payload: CursorPosition) => void;
+  'request-sync': (payload: { roomId: string }) => void;
+  'claim-ownership': (payload: { roomId: string; token: string }) => void;
+};
+
+// Server → Client
+type ServerToClientEvents = {
+  'room-state': (payload: RoomState) => void;
+  'user-joined': (payload: User) => void;
+  'user-left': (payload: { userId: string }) => void;
+  'editor-operation': (payload: EditorOperation & { userId: string }) => void;
+  'cursor-update': (payload: CursorPosition & { userId: string }) => void;
+  'sync-response': (payload: RoomState) => void;
+  'ownership-claimed': (payload: { userId: string }) => void;
+  'error': (payload: { code: string; message: string }) => void;
+};
 ```
 
-### Theme System (`src/theme/`)
-- **ThemeProvider**: React context managing active theme + mode (light/dark).
-- **themes.ts**: Loads preset files via `import.meta.glob("./presets/*.ts")`. Themes define OKLCH/HSL CSS custom properties for `light` and `dark` modes.
-- **Adding a theme**: Create `src/theme/presets/MyTheme.ts` exporting `default: ModernTheme`. Auto-registered.
+### Room Manager (`roomManager.ts`) — Core Operations
 
-### Editor (`src/components/Editor.tsx` + `EditorWrapper.tsx`)
-- CodeMirror 6 via `@uiw/react-codemirror` with JavaScript language support.
-- `EditorWrapper` lazy-loads the editor with `React.lazy` + `Suspense`.
-- Editor styling uses CSS variables from the active theme (not hardcoded colors).
+```typescript
+class RoomManager {
+  // Room lifecycle
+  createRoom(roomId: string): Room;
+  getRoom(roomId: string): Room | undefined;
+  deleteRoom(roomId: string): void;
 
-### Server (`server.ts`)
-- Express serves static `dist/` in production with SPA catch-all.
-- Socket.IO manages rooms: `userSocketMap` (socketId → username), `roomCreatorMap` (roomId → creator).
-- CORS: explicit origin list + regex wildcard for any localhost port in dev mode.
-- Room cleanup: delayed 500ms after last user disconnects.
+  // User presence
+  addUser(roomId: string, user: User): void;
+  removeUser(roomId: string, userId: string): void;
+  updateUserCursor(roomId: string, userId: string, cursor: CursorPosition): void;
 
----
+  // Editor synchronization
+  applyOperation(roomId: string, userId: string, op: EditorOperation): void;
+  requestSync(roomId: string, userId: string): RoomState;
 
-## Message / API Protocols
-
-### Socket.IO Events
-
-**JOIN** (client → server):
-```json
-{ "roomId": "abc-123", "userName": "alice" }
-```
-
-**JOINED** (server → all clients in room):
-```json
-{
-  "clients": [{ "socketId": "...", "username": "alice" }],
-  "username": "alice",
-  "socketId": "...",
-  "roomcreator": "alice"
+  // Ownership
+  generateOwnerToken(roomId: string, userId: string): string;
+  verifyOwnerToken(roomId: string, token: string): string | null; // returns userId
 }
 ```
 
-**CODE_CHANGE** (bidirectional):
-```json
-{ "roomId": "abc-123", "code": "console.log('hi')", "currenteditor": "alice" }
+### Frontend Data Flow
+
+```
+User types in CodeMirror
+    ↓
+useEditor captures change → converts to EditorOperation
+    ↓
+useSocket emits 'editor-operation'
+    ↓
+Server socket.ts validates (Zod) → roomManager.applyOperation()
+    ↓
+roomManager broadcasts to other users in room
+    ↓
+Other clients: useSocket receives 'editor-operation' → useEditor applies to CodeMirror
 ```
 
-### REST Endpoints
-
-| Method | Route | Response |
-|---|---|---|
-| GET | `/api/health` | `{ status: "ok", message, timestamp }` |
-| GET | `/api/info` | `{ name, version, status, timestamp }` |
-
 ---
 
-## Code Style & Conventions
+## Commands
 
-- **Language**: TypeScript strict mode (`strict: true`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`).
-- **Linter/Formatter**: Biome (extends `ultracite`). Run `bun run lint` / `bun run format`.
-- **Indent**: 2 spaces, LF line endings, 80-char line width.
-- **Imports**: Use `@/*` path alias for `src/*`. Prefer named exports for components.
-- **Naming**: PascalCase for components/types, camelCase for functions/variables, UPPER_SNAKE for constants.
-- **Styling**: Tailwind CSS v4 with CSS custom properties. Use theme tokens (`bg-primary`, `text-foreground`) — never hardcode hex colors. Prefer `cn()` from `@/lib/utils` for conditional classes.
-- **UI Components**: shadcn/ui (new-york style). Primitives live in `src/components/ui/`. Use `cursor-pointer` on interactive elements.
-- **Functions**: Keep under ~50 lines. Extract into separate modules when longer.
-- **No unused imports/variables**: Enforced as errors by Biome.
-
----
-
-## Configuration & Feature Flags
-
-| Config File | Purpose |
-|---|---|
-| `.env` / `.env.example` | Runtime env vars (`VITE_BACKEND_API_URL`, `CORS_ORIGIN`) |
-| `biome.jsonc` | Linter + formatter rules (extends ultracite) |
-| `tsconfig.json` | TypeScript strict config with path aliases |
-| `tsconfig.prod.json` | Production TS config (if different) |
-| `components.json` | shadcn/ui component generator config |
-| `vite.config.ts` | Vite plugins (React, Tailwind v4, PWA) |
-| `vercel.json` | Vercel deployment routing |
-
-**Feature toggles**: Currently none. When adding, use env vars prefixed with `VITE_FEATURE_` for frontend flags, or server-side env vars for backend flags.
-
----
-
-## Testing Strategy
-
-**Current state**: No test framework is configured yet.
-
-**Recommended setup**:
 ```bash
-bun add -d vitest @testing-library/react @testing-library/jest-dom jsdom
+# Install all dependencies (root + server)
+npm ci
+
+# Development: Frontend + Backend concurrently
+npm run dev
+
+# Development: Frontend only (Vite + SSG build)
+npm run dev:front
+
+# Development: Backend only (Bun watch mode)
+npm run dev:server
+
+# Production build (SSG)
+npm run build
+
+# Type checking (both workspaces)
+npm run type-check
+
+# Lint + Format (Ultracite/Biome)
+npm run check
+npm run fix
+
+# Preview production build
+npm run preview
+
+# Run backend tests
+cd codesync-server && bun test
+
+# Deploy to Vercel (frontend)
+vercel --prod
+
+# Deploy to Cloudflare Pages (frontend)
+wrangler pages deploy dist
 ```
 
-**Priority test targets** (when adding tests):
-1. **Socket event handling** — `server.ts` room join/leave/duplicate logic.
-2. **Health check** — `healthCheck.ts` success/timeout/failure paths.
-3. **Theme system** — `applyTheme()` sets correct CSS variables, preset loading.
-4. **Action constants** — `shared/actions.ts` is the single source; server/frontend re-export.
-5. **CORS logic** — `corsOrigin()` allows/blocks correct origins.
+### Environment Variables
 
-**Key commands** (once configured):
-```bash
-bun run test            # run all tests
-bun run test --watch    # watch mode
-bun run test --coverage # with coverage
-```
+| Variable | Default | Required | Purpose |
+|----------|---------|----------|---------|
+| `PORT` | `3000` | No | Backend HTTP/WebSocket port |
+| `NODE_ENV` | `development` | No | `production` enables strict checks |
+| `CORS_ORIGIN` | `http://localhost:5173,http://localhost:3000` | No | Comma-separated allowed origins |
+| `CODESYNC_OWNER_SECRET` | — | **Yes (prod)** | HMAC secret for owner reclaim tokens |
 
 ---
 
-## Troubleshooting — Top 8 Problems & Fixes
+## Known Issues / Tech Debt
 
-| # | Problem | Fix |
-|---|---|---|
-| 1 | CORS errors in browser | Check `CORS_ORIGIN` in `.env`. In dev, any localhost port is auto-allowed. In production, add your frontend URL. |
-| 2 | Socket won't connect | Ensure backend is running (`bun run server`). Check `VITE_BACKEND_API_URL` matches the actual server port. |
-| 3 | Vite port conflict | Vite auto-increments port (5173 → 5174). Dev CORS allows any localhost port. |
-| 4 | Stale service worker | Hard refresh (`Ctrl+Shift+R`) or clear site data. Check `swDetection.ts` utilities. |
-| 5 | Theme not applying | Verify preset file exports `default: ModernTheme` with `name`, `modes.light`, `modes.dark`, `defaultMode`. |
-| 6 | Build fails (SSG) | Run `bun run build:frontend` — uses `vite-react-ssg`. Check for server-only code in components. |
-| 7 | Type errors | Run `bun run type-check`. Strict mode is on — fix `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` issues. |
-| 8 | Duplicate user rejected | Server rejects same username in same room. Use a different username or refresh. |
-
----
-
-## Adding New Features — Step-by-Step
-
-1. **Create feature folder**: `src/features/<name>/` or extend existing page/component.
-2. **Add components**: Keep in `src/components/` or co-locate in the feature folder. Export via barrel `index.ts`.
-3. **Socket events**: Add new action to `shared/actions.ts` ONLY. Both server and frontend import from there — no duplication needed. Handle on both client and server.
-4. **Styling**: Use Tailwind + theme CSS variables. No hardcoded colors. Use `cn()` for conditional classes.
-5. **Environment config**: Add new env vars to both `.env.example` and document in this file's Configuration section.
-6. **Feature flag** (if applicable): Gate behind `VITE_FEATURE_<NAME>` env var.
-7. **Type safety**: Export types from a shared types file. TypeScript strict mode must pass.
-8. **Test**: Add tests for service/business logic. Mock Socket.IO and external I/O.
-9. **Lint/format**: Run `bun run lint && bun run type-check` before committing.
+- **🟡 No backend tests** — `codesync-server/src/__tests__/` exists but empty. Add Bun tests for `roomManager.ts`.
+- **🟡 No persistence** — Rooms lost on server restart. Plan: Redis adapter for Socket.IO + periodic snapshots.
+- **🟡 No authentication** — Anyone with room ID can join. Add JWT auth when needed.
+- **🟡 CRDT not implemented** — Using last-write-wins. Add Yjs or Automerge for true conflict-free editing.
+- **🟡 Single server instance** — No horizontal scaling. Socket.IO Redis adapter needed for multi-instance.
+- **🟡 Frontend test coverage** — No Vitest/React Testing Library setup. Add for critical hooks.
+- **🟡 `shared/` types not published** — Duplicated in both workspaces. Consider npm package or git submodule.
+- **🟡 Room cleanup timeout not configurable** — Hardcoded in `roomManager.ts`. Move to env.
+- **🟡 No rate limiting on socket events** — Malicious client could flood. Add per-socket rate limit.
+- **✅ Type-safe socket events** — Zod + TypeScript generics on both sides.
+- **✅ Owner reclaim tokens** — HMAC-signed, fail-secure in production.
+- **✅ Port auto-increment** — Handles `EADDRINUSE` gracefully.
+- **✅ CORS + credentials** — Proper origin validation with dev fallback.
 
 ---
 
-## Maintenance Guidelines
+## Self-Maintenance Protocol
 
-Update this file (`AGENTS.md`) when:
-- Adding/removing a **build command** or changing the package manager.
-- Changing **architecture** (new service, new server, monorepo split).
-- Adding/changing **env vars** or config file schemas.
-- Adding/changing **Socket.IO events** or REST API endpoints.
-- Changing **deployment** targets or CI pipelines.
+**This section is about keeping THIS FILE accurate. It's your responsibility as an agent working in this repo.**
 
----
+### When to Update This File
 
-## Self-Update Policy
+Update this AGENTS.md when:
 
-- Update `AGENTS.md` only for **significant** changes: architecture/service-boundary changes; package manager or CI/build command changes; config or feature flag schema changes; public API or persistence schema changes.
-- Do **not** update for small bug fixes, cosmetic refactors, or private non-behavior edits unless they change a verbatim instruction/command in this file.
-- When updating, **improve and merge** into existing content — do not replace human-written guidance without documented justification in the PR.
-- Do not include changelog entries or who/when metadata inside AGENTS.md.
+- [ ] New socket event added (update Architecture Map → Socket Event Contract)
+- [ ] RoomManager API changes (update Architecture Map → Room Manager)
+- [ ] Frontend hook API changes (update Separation of Concerns)
+- [ ] New environment variable added (update Commands → Environment Variables)
+- [ ] Shared types structure changes (update Architecture Map)
+- [ ] Tech debt items resolved (remove from list)
+- [ ] New tech debt discovered (add to list)
+- [ ] Deployment target changes (Vercel, Cloudflare, custom server)
 
----
+### How to Update This File
 
-## SWE Best Practices
-
-# !!BEST SWE PRACTICES FOR AI TO FOLLOW WHEN WORKING ON ANY PROJECT!!
-
-## Model Context Protocol (MCP)
-As an AI coding agent, you may have access to external tools via the Model Context Protocol (MCP). Use external tools only when they directly improve accuracy, verification, or understanding of a task—prioritizing efficiency, safety, and relevance. User instructions take precedence.
-
-## Code Style
-- Favor strict, type-safe code when the language supports it (TS `strict` mode, typed Python, Rust, etc.).
-- Use functional patterns (pure functions, immutability) where appropriate.
-- Atomic modules: limit functions/modules to ~50 lines. Refactor when longer.
-
-## Identity & Mantra
-You are an industrial-grade Software Architect & Systems Engineer. Code must be production-quality, maintainable, and scalable.
-**Mantra**: "Change ONCE — reflect EVERYWHERE."
-
-## Architectural Standards (Layered Law)
-Enforce a layered architecture with at least two abstraction layers between major components:
-1. Presentation / Trigger (UI, CLI, Cron) — dumb wrappers.
-2. Controller / Orchestrator — validate & route.
-3. Service Layer (business logic) — single source of truth for rules/transactions.
-4. Repository / Adapter — I/O, DB, API calls.
-5. Infrastructure / Config — env and connection settings.
-
-### Dependency Rule
-- Inner layers must not depend on outer layers. Use dependency injection; do not instantiate externals inside services.
-
-## Core Development Rules
-- Centralize constants/config in `/config`.
-- No hardcoded values (strings, URLs, timeouts).
-- Wrap common patterns (retry, logging, try/catch) in utilities.
-
-## Performance & Resilience
-- Async-first I/O.
-- Timeouts (default ≤ 5s), retries with exponential backoff, circuit-breakers for critical external calls.
-- Null-safety: guard inputs aggressively.
-
-## Customizability & Feature Flags
-- Assume tomorrow everything changes. Put changes behind feature flags.
-- Use adapter pattern for external systems.
-
-## Folder Structure (Feature-based)
-- Organize by feature. Each feature folder must export via an `index` barrel file.
-
-## Tooling Standards
-- Prefer Bun when present; then pnpm; then npm. Use language-native tooling (cargo, go, pipenv) per project.
-- TypeScript strict mode recommended for JS projects.
-
-## Testing
-- Focus tests on Service Layer. Use TDD for critical logic.
-- Tests must be fast and deterministic (mock external IO).
-
-## Mandatory Checklist (developer & agent)
-Before any commit:
-- Everything configurable? (no hardcoding)
-- ≥2 abstraction layers between producer and consumer
-- Dependencies injected
-- External calls have timeouts & retries
-- Business logic isolated in Service layer
-- Changing a feature should touch ≤3 files (architecture permitting)
-
-## Ultimate Rule
-If a change requires many manual edits, refactor until change is localized.
+1. **Read the current file first** (you're already here).
+2. Make targeted edits — don't rewrite sections unnecessarily.
+3. Keep the "verified by filesystem scan" date current.
+4. Keep the Socket Event Contract in sync with `shared/actions.ts`.
 
 ---
 
-## Editor & IDE Rules
+## Quick Reference
 
-- Do not modify `.editorconfig`, `.vscode/*`, `idea/*`, or other IDE workspace settings except when absolutely necessary. Editor files are personal and noisy — changes must be proposed in PR with justification and marked OPTIONAL.
-- If format/lint rules must change, prefer adding or updating a centralized formatter config (`biome.jsonc`, `tsconfig`) and a `pre-commit` hook rather than changing individual devs' IDE settings.
-- Agents should respect repo formatter settings. If running formatters, do so via CLI commands (e.g., `bun run format`), not by pushing IDE-specific settings.
-- If you must change editor settings, add a clear PR section titled "Editor settings change — rationale & rollback" and make the change opt-in.
-
----
-
-## Commit & PR Rules
-
-- Commit message for AGENTS.md edits: `AGENTS.md: <short summary>`
-- PR title: `docs(agents): update AGENTS.md — <short summary>`
-- PR body must include:
-  - Brief justification of AGENTS.md edits (1–3 lines)
-  - Quality checklist results (see below)
-  - Commands run & key test outputs
-- PRs should be small, focused, and reversible.
-
-### Quality Checklist
-
-- [ ] All required sections present
-- [ ] ≥3 runnable command examples (Bun)
-- [ ] Self-Update Policy present
-- [ ] SWE Best Practices copied
-- [ ] Editor rules present
-
----
-
-## How to Continue — Next Steps
-
-1. Add Vitest + testing-library setup
-2. Add CI pipeline (GitHub Actions)
-3. Extract socket event handlers to service layer
-4. Add room persistence (Redis/DB)
-5. Add multi-file/tab editor support
-6. Add syntax highlighting for more languages
-7. Add user authentication layer
-8. Add E2E tests (Playwright)
+| Task | Location |
+|------|----------|
+| Add socket event | 1. `shared/actions.ts` 2. `codesync-server/src/validation.ts` 3. `codesync-server/src/socket.ts` 4. `src/hooks/useSocket.ts` |
+| Add editor operation | 1. `shared/editor.ts` 2. `shared/actions.ts` 3. `roomManager.ts` 4. `useEditor.ts` |
+| Change CORS origins | `CORS_ORIGIN` env var (comma-separated) |
+| Set owner secret | `CODESYNC_OWNER_SECRET` env var (32-byte hex) |
+| Debug socket events | Browser DevTools → Network → WS → Frames |
+| View room state | `roomManager.rooms` (Map) in backend console |
+| Run type check | `npm run type-check` (both workspaces) |
 
 ---
 

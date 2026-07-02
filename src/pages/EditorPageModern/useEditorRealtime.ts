@@ -68,6 +68,28 @@ export const useEditorRealtime = ({
   );
   const [tabPermissions, setTabPermissions] = useState<TabPermissions>({});
   const [tabEditors, setTabEditors] = useState<TabEditors>({});
+  const [allowEditRequests, setAllowEditRequests] = useState(false);
+  const [cooldowns, setCooldowns] = useState<Record<string, number>>({}); // tabId -> remaining ms
+
+  // Cooldown countdown timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCooldowns((prev) => {
+        const next: Record<string, number> = {};
+        let changed = false;
+        for (const [tabId, remaining] of Object.entries(prev)) {
+          const newVal = remaining - 1000;
+          if (newVal > 0) {
+            next[tabId] = newVal;
+          } else {
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const socketRef = useRef<EditorSocket | null>(null);
   const currentEditorRef = useRef(currentEditor);
@@ -180,6 +202,16 @@ export const useEditorRealtime = ({
     [roomId],
   );
 
+  const emitEditRequestsToggle = useCallback(
+    (enabled: boolean) => {
+      socketRef.current?.emit(ACTIONS.EDIT_REQUESTS_TOGGLE, {
+        roomId,
+        enabled,
+      });
+    },
+    [roomId],
+  );
+
   useEffect(() => {
     document.title = `${roomId} - CodeSync`;
 
@@ -284,6 +316,7 @@ export const useEditorRealtime = ({
             permissions: syncPermissions,
             tabPermissions: syncTabPermissions,
             tabEditors: syncTabEditors,
+            allowEditRequests: syncAllowEditRequests,
           }: {
             tabs: EditorTab[];
             activeTabId: string;
@@ -291,6 +324,7 @@ export const useEditorRealtime = ({
             permissions: Record<string, UserPermissions>;
             tabPermissions: TabPermissions;
             tabEditors: TabEditors;
+            allowEditRequests: boolean;
           }) => {
             if (syncTabs?.length) {
               setTabs(syncTabs);
@@ -317,6 +351,9 @@ export const useEditorRealtime = ({
             if (syncTabEditors) {
               setTabEditors(syncTabEditors);
             }
+            if (typeof syncAllowEditRequests === "boolean") {
+              setAllowEditRequests(syncAllowEditRequests);
+            }
           },
         );
 
@@ -325,9 +362,11 @@ export const useEditorRealtime = ({
           ({
             tabId,
             permissions: tabPerms,
+            cooldownMs,
           }: {
             tabId: string;
             permissions: Record<string, TabPermissionLevel>;
+            cooldownMs?: number;
           }) => {
             setTabPermissions((prev) => {
               const prevLevel = prev[tabId]?.[userName];
@@ -346,11 +385,27 @@ export const useEditorRealtime = ({
                 }
               }
 
+              // Handle cooldown notification
+              if (cooldownMs && cooldownMs > 0) {
+                setCooldowns((prev) => ({ ...prev, [tabId]: cooldownMs }));
+                const minutes = Math.ceil(cooldownMs / 60000);
+                toast.error(
+                  `Request denied. You can't request again for ${minutes} min.`,
+                );
+              }
+
               return {
                 ...prev,
                 [tabId]: tabPerms,
               };
             });
+          },
+        );
+
+        socket.on(
+          ACTIONS.EDIT_REQUESTS_TOGGLE,
+          ({ enabled }: { enabled: boolean }) => {
+            setAllowEditRequests(enabled);
           },
         );
 
@@ -498,6 +553,7 @@ export const useEditorRealtime = ({
     emitTabPermissionRequest,
     emitTabPermissionRevoke,
     emitTransferOwner,
+    emitEditRequestsToggle,
     roomCreator,
     serverStatus,
     setCurrentEditor,
@@ -505,5 +561,7 @@ export const useEditorRealtime = ({
     socketRef,
     tabEditors,
     tabPermissions,
+    allowEditRequests,
+    cooldowns,
   };
 };

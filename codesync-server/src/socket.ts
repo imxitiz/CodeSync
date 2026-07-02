@@ -7,7 +7,9 @@ import {
   createRoomState,
   destroyRoomState,
   disconnectClient,
+  getCooldownRemaining,
   joinRoom,
+  recordRejection,
   transferOwner,
   type RoomState,
 } from "./roomManager.js";
@@ -178,6 +180,7 @@ export function setupSocket(
           ])
         ),
         tabEditors: Object.fromEntries(room.tabEditors),
+        allowEditRequests: room.allowEditRequests,
       });
 
       // Fresh reclaim token for the owner.
@@ -540,6 +543,16 @@ socket.on(
         if (room.creator === userName) return;
         if (canWriteTab(room, userName, tabId)) return;
 
+        // Check if requests are enabled for this room.
+        if (!room.allowEditRequests) return;
+
+        // Check cooldown.
+        const cooldownRemaining = getCooldownRemaining(room, tabId, userName);
+        if (cooldownRemaining > 0) {
+          // Silently reject — user is in cooldown.
+          return;
+        }
+
         // Set REQUESTED level.
         let entry = room.tabPermissions.get(tabId);
         if (!entry) {
@@ -587,6 +600,27 @@ socket.on(
         // Validate level.
         if (level !== "EDITOR" && level !== "VIEWER") return;
 
+        // Check if this is a rejection (owner setting VIEWER on a REQUESTED user).
+        const existingEntry = room.tabPermissions.get(tabId);
+        const wasRequested = existingEntry?.levels.get(targetUser) === "REQUESTED";
+        if (level === "VIEWER" && wasRequested) {
+          // This is a denial — record rejection.
+          const { cooldownMs } = recordRejection(room, tabId, targetUser);
+          if (cooldownMs > 0) {
+            // Notify the denied user about cooldown.
+            const targetSocket = room.clients.find(
+              (c) => c.username === targetUser,
+            );
+            if (targetSocket) {
+              io.to(targetSocket.socketId).emit(ACTIONS.TAB_PERMISSIONS_UPDATE, {
+                tabId,
+                permissions: Object.fromEntries(existingEntry?.levels ?? new Map()),
+                cooldownMs,
+              });
+            }
+          }
+        }
+
         // Set permission.
         let entry = room.tabPermissions.get(tabId);
         if (!entry) {
@@ -595,9 +629,12 @@ socket.on(
         }
         entry.levels.set(targetUser, level);
 
-        // If granting EDITOR, auto-assign the tab editor slot.
+        // If granting EDITOR, clear rejection history and auto-assign the tab editor slot.
         if (level === "EDITOR") {
           room.tabEditors.set(tabId, targetUser);
+          // Clear rejection count and cooldown on grant.
+          room.requestRejections.get(tabId)?.delete(targetUser);
+          room.requestCooldowns.get(tabId)?.delete(targetUser);
         }
 
         // Broadcast update.
@@ -649,6 +686,23 @@ socket.on(
           tabId,
           permissions: Object.fromEntries(entry.levels),
         });
+      }
+    );
+
+    socket.on(
+      ACTIONS.EDIT_REQUESTS_TOGGLE,
+      ({ roomId, enabled }: { roomId: string; enabled: boolean }) => {
+        const userName = userSocketMap.get(socket.id);
+        if (!userName) return;
+        if (!socket.rooms.has(roomId)) return;
+
+        const room = rooms.get(roomId);
+        if (!room || room.creator !== userName) return; // OWNER ONLY
+
+        room.allowEditRequests = enabled;
+
+        // Broadcast to all clients in the room.
+        io.in(roomId).emit(ACTIONS.EDIT_REQUESTS_TOGGLE, { enabled });
       }
     );
 

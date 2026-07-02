@@ -173,7 +173,9 @@ export function saveCustomThemes(customThemes: Record<string, Theme>): void {
       CUSTOM_THEMES_STORAGE_KEY,
       JSON.stringify(customThemes),
     );
-  } catch (_error) {}
+  } catch (_error) {
+    /* localStorage quota exceeded or unavailable — non-critical, themes remain in memory */
+  }
 }
 
 export function getAllThemes(): Record<string, Theme> {
@@ -215,7 +217,9 @@ export function setStoredThemeKey(key: string | null): void {
     } else {
       window.localStorage.setItem(THEME_STORAGE_KEY, key);
     }
-  } catch (_error) {}
+  } catch (_error) {
+    /* localStorage quota exceeded or unavailable — non-critical, theme key not persisted */
+  }
 }
 
 // Helpers for "System" mode
