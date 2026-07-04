@@ -123,6 +123,7 @@ export default function EditorPageModern() {
     setCurrentEditor,
     socketReady,
     socketRef,
+    tabEditors,
     tabPermissions,
     allowEditRequests,
     cooldowns,
@@ -325,8 +326,16 @@ export default function EditorPageModern() {
       if (!isOwner && !canEditActiveTab) {
         // If user doesn't have tab-level permission, request it
         if (activeTabPermission === "VIEWER") {
+          if (!allowEditRequests) {
+            toast.error("Edit requests are disabled by the owner");
+            return;
+          }
           emitTabPermissionRequest(activeTabId);
           toast.success("Edit request sent!");
+          return;
+        }
+        if (activeTabPermission === "REQUESTED") {
+          toast("Edit request pending...", { icon: "🕐" });
           return;
         }
         toast.error("You don't have permission to edit");
@@ -658,6 +667,8 @@ export default function EditorPageModern() {
               connectionStatus={serverStatus}
               copied={copied}
               currentEditor={currentEditor}
+              tabEditors={tabEditors}
+              activeTabId={activeTabId}
               followingUser={followingUser}
               fontSize={fontSize}
               isOwner={isOwner}
@@ -688,6 +699,7 @@ export default function EditorPageModern() {
               activeTabPermission={activeTabPermission}
               onRequestTabEdit={() => emitTabPermissionRequest(activeTabId)}
               pendingRequestCount={isOwner ? pendingRequestCount : 0}
+              allowEditRequests={allowEditRequests}
             />
           )}
 
@@ -814,7 +826,8 @@ export default function EditorPageModern() {
             {/* Inline read-only indicator — small chip, not a full banner */}
             {activeTabPermission === "VIEWER" &&
               !canRequestEdit &&
-              cooldownRemaining <= 0 && (
+              cooldownRemaining <= 0 &&
+              allowEditRequests && (
                 <div className="flex shrink-0 items-center gap-2 border-b bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
                   <Lock className="size-3" />
                   <span>Read-only</span>

@@ -116,23 +116,23 @@ export default function AppShell({
       </main>
 
       <Toaster
-         position="top-center"
-         toastOptions={{
-           className: "text-sm",
-           success: {
-             style: {
-               background: "var(--accent)",
-               color: "var(--accent-foreground)",
-             },
-           },
-           error: {
-             style: {
-               background: "var(--destructive)",
-               color: "var(--destructive-foreground)",
-             },
-           },
-         }}
-       />
+        position="top-center"
+        toastOptions={{
+          className: "text-sm",
+          success: {
+            style: {
+              background: "var(--accent)",
+              color: "var(--accent-foreground)",
+            },
+          },
+          error: {
+            style: {
+              background: "var(--destructive)",
+              color: "var(--destructive-foreground)",
+            },
+          },
+        }}
+      />
     </ThemeProvider>
   );
 }

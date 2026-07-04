@@ -20,6 +20,9 @@ export type UserPermissions = {
 
 export type TabPermissionLevel = "VIEWER" | "EDITOR" | "REQUESTED";
 
+// Level used in toggle - includes inherited (DEFAULT) state
+export type ToggleLevel = TabPermissionLevel | "DEFAULT";
+
 export type TabPermissions = {
   /** tabId → Record<username, level> */
   [tabId: string]: Record<string, TabPermissionLevel>;

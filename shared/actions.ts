@@ -42,6 +42,8 @@ export const ACTIONS = {
   TAB_PERMISSION_REVOKE: "tab-permission-revoke",
   TAB_PERMISSIONS_UPDATE: "tab-permissions-update",
   EDIT_REQUESTS_TOGGLE: "edit-requests-toggle",
+  /** Sent ONLY to room owner when a new edit request arrives. */
+  EDIT_REQUESTS_NOTIFICATION: "edit-requests-notification",
 } as const;
 
 export type ActionsType = (typeof ACTIONS)[keyof typeof ACTIONS];

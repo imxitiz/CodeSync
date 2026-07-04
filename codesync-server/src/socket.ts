@@ -4,16 +4,6 @@ import { Server as SocketServer } from "socket.io";
 import { ACTIONS } from "./actions.js";
 import { verifyReclaimToken } from "./reclaim.js";
 import {
-  createRoomState,
-  destroyRoomState,
-  disconnectClient,
-  getCooldownRemaining,
-  joinRoom,
-  recordRejection,
-  transferOwner,
-  type RoomState,
-} from "./roomManager.js";
-import {
   canWriteTab,
   isValidCode,
   isValidTabId,
@@ -23,6 +13,17 @@ import {
   type TabData,
   type UserPermissions,
 } from "./validation.js";
+import {
+  checkAndRecordRequest,
+  createRoomState,
+  destroyRoomState,
+  disconnectClient,
+  getCooldownRemaining,
+  joinRoom,
+  recordRejection,
+  transferOwner,
+  type RoomState,
+} from "./roomManager.js";
 
 const ROOM_CODE_TTL_MS = 8 * 60 * 60 * 1000;
 const ROOM_CLEANUP_DELAY_MS = 500;
@@ -544,12 +545,36 @@ socket.on(
         if (canWriteTab(room, userName, tabId)) return;
 
         // Check if requests are enabled for this room.
-        if (!room.allowEditRequests) return;
+        if (!room.allowEditRequests) {
+          // Send feedback to user explaining why request was rejected.
+          emitToSocket(socket.id, ACTIONS.TAB_PERMISSIONS_UPDATE, {
+            tabId,
+            reason: "requests_disabled",
+          });
+          return;
+        }
 
-        // Check cooldown.
+        // Check cooldown (rejection-based).
         const cooldownRemaining = getCooldownRemaining(room, tabId, userName);
         if (cooldownRemaining > 0) {
-          // Silently reject — user is in cooldown.
+          // Send feedback to user about cooldown.
+          emitToSocket(socket.id, ACTIONS.TAB_PERMISSIONS_UPDATE, {
+            tabId,
+            cooldownMs: cooldownRemaining,
+            reason: "cooldown",
+          });
+          return;
+        }
+
+        // Idempotency check: prevent duplicate requests within 60 seconds.
+        const idempotencyResult = checkAndRecordRequest(room, tabId, userName);
+        if (!idempotencyResult.allowed) {
+          // Send feedback to user about idempotency window.
+          emitToSocket(socket.id, ACTIONS.TAB_PERMISSIONS_UPDATE, {
+            tabId,
+            cooldownMs: idempotencyResult.remainingMs,
+            reason: "idempotency_window",
+          });
           return;
         }
 
@@ -566,6 +591,16 @@ socket.on(
           tabId,
           permissions: Object.fromEntries(entry.levels),
         });
+
+        // NEW: Send notification ONLY to owner for prominent UI handling.
+        const ownerSocket = room.clients.find((c) => c.username === room.creator);
+        if (ownerSocket) {
+          io.to(ownerSocket.socketId).emit(ACTIONS.EDIT_REQUESTS_NOTIFICATION, {
+            tabId,
+            requester: userName,
+            timestamp: Date.now(),
+          });
+        }
       }
     );
 

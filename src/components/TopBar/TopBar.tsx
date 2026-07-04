@@ -45,6 +45,8 @@ export type TopBarProps = {
   clients: TopBarClient[];
   roomCreator: string | null;
   currentEditor: string;
+  tabEditors: Record<string, string>;
+  activeTabId: string;
   permissions: Record<string, { canEdit: boolean }>;
   fontSize: number;
   wrapLines: boolean;
@@ -67,6 +69,7 @@ export type TopBarProps = {
   activeTabPermission?: "VIEWER" | "EDITOR" | "REQUESTED";
   onRequestTabEdit?: () => void;
   pendingRequestCount?: number;
+  allowEditRequests?: boolean;
 };
 
 export default function TopBar({
@@ -78,6 +81,8 @@ export default function TopBar({
   clients,
   roomCreator,
   currentEditor,
+  tabEditors,
+  activeTabId,
   permissions,
   wrapLines,
   zen,
@@ -99,6 +104,7 @@ export default function TopBar({
   activeTabPermission,
   onRequestTabEdit,
   pendingRequestCount = 0,
+  allowEditRequests = true,
 }: TopBarProps) {
   const maxAvatars = 5;
   const visibleClients = clients.slice(0, maxAvatars);
@@ -108,7 +114,7 @@ export default function TopBar({
   const truncatedId =
     roomId && roomId.length > 12 ? `${roomId.slice(0, 8)}…` : roomId;
 
-  const isCurrentEditor = currentEditor === userName;
+  const isCurrentEditor = tabEditors[activeTabId] === userName;
   const canTakeEdit = canEdit && currentEditor !== "";
   const showEditToggle =
     isCurrentEditor ||
@@ -321,7 +327,7 @@ export default function TopBar({
             </Tooltip>
 
             {showEditToggle &&
-              (activeTabPermission === "VIEWER" ? (
+              (activeTabPermission === "VIEWER" && allowEditRequests ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -355,7 +361,8 @@ export default function TopBar({
                   </TooltipTrigger>
                   <TooltipContent>Waiting for owner to approve</TooltipContent>
                 </Tooltip>
-              ) : (
+              ) : activeTabPermission === "VIEWER" &&
+                !allowEditRequests ? null : (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button

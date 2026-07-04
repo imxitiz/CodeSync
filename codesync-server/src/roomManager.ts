@@ -64,6 +64,11 @@ export type RoomState = {
    * Tracks how many times a user's request was rejected on a tab.
    */
   requestRejections: Map<string, Map<string, number>>;
+  /**
+   * Last request timestamp tracking for idempotency: tabId → username → timestamp (ms).
+   * Prevents duplicate requests within 60 seconds.
+   */
+  requestTimestamps: Map<string, Map<string, number>>;
 };
 
 export type JoinResult = {
@@ -100,6 +105,7 @@ export function createRoomState(roomId: string): RoomState {
     allowEditRequests: false,
     requestCooldowns: new Map(),
     requestRejections: new Map(),
+    requestTimestamps: new Map(),
   };
 }
 
@@ -124,7 +130,7 @@ export function joinRoom(
   userName: string,
   ownerSecret: string,
   reclaimToken: string | undefined,
-  now: number
+  now: number,
 ): JoinResult {
   const isOwnerKnown = room.clients.some((c) => c.username === room.creator);
   const existingClient = room.clients.find((c) => c.username === userName);
@@ -132,40 +138,39 @@ export function joinRoom(
   // ---- Duplicate handling ----
   // Also treat "username matches the disconnected owner" as a duplicate so an
   // attacker cannot squat on the owner's name while they're away.
-  const isDisconnectedOwnerName =
-    room.creator === userName && room.ownerHasDisconnected;
+  const isDisconnectedOwnerName = room.creator === userName && room.ownerHasDisconnected;
 
   if (existingClient || isDisconnectedOwnerName) {
     // If the joining user is the verified owner (has valid reclaim token),
     // kick the stale socket so the real owner can take over.
-    if (
-      typeof reclaimToken === "string" &&
-      reclaimToken.length > 0 &&
-      room.creator === userName
-    ) {
-      const verified = verifyReclaimToken(
-        ownerSecret,
-        reclaimToken,
-        room.roomId,
-        userName,
-        now
-      );
+    if (typeof reclaimToken === "string" && reclaimToken.length > 0 && room.creator === userName) {
+      const verified = verifyReclaimToken(ownerSecret, reclaimToken, room.roomId, userName, now);
       if (verified.valid) {
         // Remove the stale socket for this username.
-        room.clients = room.clients.filter(
-          (c) => c.socketId !== existingClient?.socketId
-        );
+        room.clients = room.clients.filter((c) => c.socketId !== existingClient?.socketId);
         if (existingClient) {
           room.permissions.delete(existingClient.username);
         }
         // Fall through to normal join below.
       } else {
         // Token invalid — treat as normal duplicate.
-        return { ok: false, reason: "duplicate-username", room, reclaimOk: undefined, freshToken: null };
+        return {
+          ok: false,
+          reason: "duplicate-username",
+          room,
+          reclaimOk: undefined,
+          freshToken: null,
+        };
       }
     } else {
       // Genuine duplicate (no token, or token doesn't match owner name).
-      return { ok: false, reason: "duplicate-username", room, reclaimOk: undefined, freshToken: null };
+      return {
+        ok: false,
+        reason: "duplicate-username",
+        room,
+        reclaimOk: undefined,
+        freshToken: null,
+      };
     }
   }
 
@@ -186,17 +191,8 @@ export function joinRoom(
     // No creator ever — first joiner becomes owner.
     // If a reclaim token was provided, verify it's for THIS room. A token
     // from another room should not grant ownership here.
-    if (
-      typeof reclaimToken === "string" &&
-      reclaimToken.length > 0
-    ) {
-      const verified = verifyReclaimToken(
-        ownerSecret,
-        reclaimToken,
-        room.roomId,
-        userName,
-        now
-      );
+    if (typeof reclaimToken === "string" && reclaimToken.length > 0) {
+      const verified = verifyReclaimToken(ownerSecret, reclaimToken, room.roomId, userName, now);
       if (!verified.valid) {
         // Token is for a different room or invalid — do NOT grant ownership.
         // The user joins as a normal participant.
@@ -240,7 +236,7 @@ export function transferOwner(
   oldOwnerSocketId: string,
   newOwner: string,
   ownerSecret: string,
-  now: number
+  now: number,
 ): TransferResult {
   // Verify the sender is the current owner.
   const sender = room.clients.find((c) => c.socketId === oldOwnerSocketId);
@@ -250,7 +246,7 @@ export function transferOwner(
 
   // Target must be in the room and not the sender.
   const target = room.clients.find(
-    (c) => c.username === newOwner && c.socketId !== oldOwnerSocketId
+    (c) => c.username === newOwner && c.socketId !== oldOwnerSocketId,
   );
   if (!target) {
     return { ok: false, reason: "target-not-in-room", room, freshToken: null };
@@ -290,7 +286,7 @@ export function transferOwner(
  */
 export function disconnectClient(
   room: RoomState,
-  socketId: string
+  socketId: string,
 ): { room: RoomState; wasOwner: boolean } {
   const client = room.clients.find((c) => c.socketId === socketId);
   const wasOwner = client?.username === room.creator;
@@ -307,6 +303,7 @@ export function disconnectClient(
         room.tabEditors.delete(tabId);
       }
     }
+
     // Clear transient REQUESTED entries for this user.
     // EDITOR grants persist (owner configuration); REQUESTED is ephemeral.
     for (const [, entry] of room.tabPermissions) {
@@ -315,13 +312,25 @@ export function disconnectClient(
         entry.levels.delete(client.username);
       }
     }
-  }
 
-  if (wasOwner) {
-    room.ownerHasDisconnected = true;
-  }
+    // Clear request timestamps for this user on disconnect.
+    for (const [, tabTimestamps] of room.requestTimestamps) {
+      tabTimestamps.delete(client.username);
+    }
+    // Clear rejection counts and cooldowns for this user on disconnect.
+    for (const [, rejections] of room.requestRejections) {
+      rejections.delete(client.username);
+    }
+    for (const [, cooldowns] of room.requestCooldowns) {
+      cooldowns.delete(client.username);
+    }
 
-  return { room, wasOwner };
+    if (wasOwner) {
+      room.ownerHasDisconnected = true;
+    }
+
+    return { room, wasOwner };
+  }
 }
 
 /**
@@ -340,17 +349,14 @@ export function destroyRoomState(room: RoomState): void {
   room.allowEditRequests = false;
   room.requestCooldowns = new Map();
   room.requestRejections = new Map();
+  room.requestTimestamps = new Map();
 }
 
 /**
  * Check if a user is in cooldown for a specific tab.
  * Returns the remaining cooldown in ms, or 0 if not in cooldown.
  */
-export function getCooldownRemaining(
-  room: RoomState,
-  tabId: string,
-  username: string,
-): number {
+export function getCooldownRemaining(room: RoomState, tabId: string, username: string): number {
   const tabCooldowns = room.requestCooldowns.get(tabId);
   if (!tabCooldowns) return 0;
   const expiry = tabCooldowns.get(username);
@@ -391,4 +397,35 @@ export function recordRejection(
   }
 
   return { cooldownMs: 0 };
+}
+
+/**
+ * Idempotency check for edit requests.
+ * Returns { allowed: true } if request is allowed, or { allowed: false, remainingMs: number } if blocked.
+ * Updates the timestamp on success.
+ */
+export function checkAndRecordRequest(
+  room: RoomState,
+  tabId: string,
+  username: string,
+): { allowed: boolean; remainingMs?: number } {
+  const now = Date.now();
+  const IDEMPOTENCY_WINDOW_MS = 60_000; // 60 seconds
+
+  let tabTimestamps = room.requestTimestamps.get(tabId);
+  if (!tabTimestamps) {
+    tabTimestamps = new Map();
+    room.requestTimestamps.set(tabId, tabTimestamps);
+  }
+
+  const lastRequest = tabTimestamps.get(username);
+  if (lastRequest !== undefined) {
+    const elapsed = now - lastRequest;
+    if (elapsed < IDEMPOTENCY_WINDOW_MS) {
+      return { allowed: false, remainingMs: IDEMPOTENCY_WINDOW_MS - elapsed };
+    }
+  }
+
+  tabTimestamps.set(username, now);
+  return { allowed: true };
 }

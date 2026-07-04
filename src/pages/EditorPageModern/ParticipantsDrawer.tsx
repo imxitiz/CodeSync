@@ -17,7 +17,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import OwnerRepresentation from "./representation-icon";
-import type { EditorTab, TabPermissions, UserPermissions } from "./types";
+import type {
+  EditorTab,
+  TabPermissions,
+  ToggleLevel,
+  UserPermissions,
+} from "./types";
 
 type Participant = {
   socketId: string;
@@ -539,10 +544,6 @@ function PermissionPanel({
           <div className="mt-2 space-y-1">
             {tabs.map((tab) => {
               const rawLevel = tabPermissions[tab.id]?.[username];
-              const level: "DEFAULT" | "EDITOR" | "VIEWER" =
-                rawLevel === "EDITOR" || rawLevel === "VIEWER"
-                  ? rawLevel
-                  : "DEFAULT";
               return (
                 <div
                   key={tab.id}
@@ -561,10 +562,11 @@ function PermissionPanel({
                     )}
                   </span>
                   <TabPermissionToggle
-                    level={level}
+                    level={rawLevel ?? "DEFAULT"}
                     inheritsLevel={
                       userPermissions[username]?.canEdit ? "EDITOR" : "VIEWER"
                     }
+                    isOwnerView={true}
                     onChange={(newLevel) => {
                       if (newLevel === "DEFAULT") {
                         emitTabPermissionRevoke(tab.id, username);
@@ -637,19 +639,64 @@ function TabPermissionToggle({
   level,
   inheritsLevel,
   onChange,
+  isOwnerView = false,
 }: {
-  level: "DEFAULT" | "EDITOR" | "VIEWER";
+  level: ToggleLevel;
   inheritsLevel: "EDITOR" | "VIEWER";
   onChange: (level: "DEFAULT" | "EDITOR" | "VIEWER") => void;
+  isOwnerView?: boolean;
 }) {
-  const effectiveLevel = level === "DEFAULT" ? inheritsLevel : level;
-  const isOverridden = level !== "DEFAULT";
+  const isRequested = level === "REQUESTED";
+
+  // Owner view: show explicit grant/deny controls when REQUESTED
+  if (isOwnerView && isRequested) {
+    return (
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onChange("EDITOR")}
+          className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors bg-success/15 text-success hover:bg-success/25"
+          title="Grant edit access"
+        >
+          <Pencil className="size-2.5" />
+          Grant
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("VIEWER")}
+          className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors bg-destructive/10 text-destructive hover:bg-destructive/20"
+          title="Deny request"
+        >
+          Deny
+        </button>
+      </div>
+    );
+  }
+
+  // Requester view: show read-only badge when REQUESTED
+  if (!isOwnerView && isRequested) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning cursor-not-allowed"
+        title="Request pending approval"
+      >
+        <Clock className="size-2.5" />
+        <span>pending</span>
+      </span>
+    );
+  }
+
+  // Normal toggle behavior for other states
+  const resolvedLevel = level ?? inheritsLevel;
+  const isOverridden = level !== undefined;
 
   const handleClick = () => {
     if (level === "DEFAULT") {
       onChange("EDITOR");
     } else if (level === "EDITOR") {
       onChange("VIEWER");
+    } else if (level === "VIEWER") {
+      onChange("EDITOR");
     } else {
       onChange("DEFAULT");
     }
@@ -661,19 +708,24 @@ function TabPermissionToggle({
       onClick={handleClick}
       className={[
         "inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
-        effectiveLevel === "EDITOR"
+        resolvedLevel === "EDITOR"
           ? "bg-success/15 text-success hover:bg-success/25"
           : "bg-muted text-muted-foreground hover:bg-muted/80",
         isOverridden ? "ring-1 ring-border" : "opacity-60",
       ].join(" ")}
-      title={`Click to cycle. Currently: ${effectiveLevel}${isOverridden ? " (overridden)" : " (inherits)"}`}
+      title={`Click to cycle. Currently: ${resolvedLevel}${isOverridden ? " (overridden)" : " (inherits)"}`}
     >
-      {effectiveLevel === "EDITOR" ? (
-        <Pencil className="size-2.5" />
+      {resolvedLevel === "EDITOR" ? (
+        <>
+          <Pencil className="size-2.5" />
+          <span>EDITOR</span>
+        </>
       ) : (
-        <Lock className="size-2.5" />
+        <>
+          <Lock className="size-2.5" />
+          <span>VIEWER</span>
+        </>
       )}
-      <span>{isOverridden ? effectiveLevel : `inherits ${inheritsLevel}`}</span>
     </button>
   );
 }

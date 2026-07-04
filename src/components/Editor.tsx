@@ -9,7 +9,6 @@ import { ACTIONS } from "../utils/constants";
 type IncomingCodeChange = {
   tabId?: string;
   code: string;
-  currenteditor?: string;
 };
 
 export type EditorProps = {
@@ -20,8 +19,6 @@ export type EditorProps = {
   initialCode: string;
   onCodeChange: (code: string, tabId: string) => void;
   editable: boolean;
-  currentEditor: string;
-  setCurrentEditor: (editor: string) => void;
   wrap?: boolean;
   darkMode?: boolean;
   fontSize?: number;
@@ -35,8 +32,6 @@ const Editor: React.FC<EditorProps> = ({
   initialCode,
   onCodeChange,
   editable,
-  currentEditor,
-  setCurrentEditor,
   wrap = false,
   darkMode = true,
   fontSize = 16,
@@ -44,7 +39,6 @@ const Editor: React.FC<EditorProps> = ({
   const [code, setCode] = useState<string>(initialCode);
   const activeTabIdRef = useRef(activeTabId);
   const codeRef = useRef(initialCode);
-  const currentEditorRef = useRef(currentEditor);
   const onCodeChangeRef = useRef(onCodeChange);
   const editorViewRef = useRef<EditorView | null>(null);
   const isInternalChange = useRef(false);
@@ -52,10 +46,6 @@ const Editor: React.FC<EditorProps> = ({
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
-
-  useEffect(() => {
-    currentEditorRef.current = currentEditor;
-  }, [currentEditor]);
 
   useEffect(() => {
     onCodeChangeRef.current = onCodeChange;

@@ -363,11 +363,31 @@ export const useEditorRealtime = ({
             tabId,
             permissions: tabPerms,
             cooldownMs,
+            reason,
           }: {
             tabId: string;
             permissions: Record<string, TabPermissionLevel>;
             cooldownMs?: number;
+            reason?: string;
           }) => {
+            // Handle feedback for rejected requests (cooldown/idempotency/requests_disabled)
+            if (reason && !tabPerms?.[userName]) {
+              if (reason === "requests_disabled") {
+                toast.error(
+                  "Edit requests are disabled for this room. Ask the owner to enable them.",
+                );
+              } else if (reason === "cooldown") {
+                const minutes = Math.ceil((cooldownMs ?? 0) / 60000);
+                toast.error(
+                  `Request blocked — in cooldown for ${minutes} min.`,
+                );
+              } else if (reason === "idempotency_window") {
+                const seconds = Math.ceil((cooldownMs ?? 0) / 1000);
+                toast.error(`Wait ${seconds}s before requesting again.`);
+              }
+              return;
+            }
+
             setTabPermissions((prev) => {
               const prevLevel = prev[tabId]?.[userName];
               const newLevel = tabPerms[userName];
@@ -409,6 +429,15 @@ export const useEditorRealtime = ({
           },
         );
 
+        socket.on(
+          ACTIONS.EDIT_REQUESTS_NOTIFICATION,
+          ({ requester }: { tabId: string; requester: string }) => {
+            toast(`New edit request from ${requester}`, {
+              icon: "🕐",
+            });
+          },
+        );
+
         socket.on(ACTIONS.DUPLICATE_USER, ({ username }) => {
           toast.error(
             `${username} is already in the ${roomId} room.\nPlease try another UserName!`,
@@ -416,7 +445,21 @@ export const useEditorRealtime = ({
           navigate("/", { state: { id: roomId } });
         });
 
-        socket.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
+        socket.on(ACTIONS.CODE_CHANGE, ({ tabId, code, currenteditor, tabEditors: newTabEditors }) => {
+         handleCodeChangeRef.current(code, tabId ?? "tab-main");
+         if (newTabEditors) {
+           setTabEditors(newTabEditors);
+         }
+         if (currenteditor !== undefined) {
+           setCurrentEditor(currenteditor);
+         }
+       });
+
+       socket.on(ACTIONS.TAB_CODE, ({ tabId, code }) => {
+         handleCodeChangeRef.current(code, tabId ?? "tab-main");
+       });
+
+       socket.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
           toast.success(`${username} left the room`);
           setClients((prev) =>
             prev.filter((client) => client.socketId !== socketId),
