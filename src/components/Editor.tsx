@@ -9,6 +9,7 @@ import { ACTIONS } from "../utils/constants";
 type IncomingCodeChange = {
   tabId?: string;
   code: string;
+  currenteditor?: string;
 };
 
 export type EditorProps = {
@@ -19,6 +20,8 @@ export type EditorProps = {
   initialCode: string;
   onCodeChange: (code: string, tabId: string) => void;
   editable: boolean;
+  currentEditor: string;
+  setCurrentEditor: React.Dispatch<React.SetStateAction<string>>;
   wrap?: boolean;
   darkMode?: boolean;
   fontSize?: number;
@@ -32,6 +35,8 @@ const Editor: React.FC<EditorProps> = ({
   initialCode,
   onCodeChange,
   editable,
+  currentEditor,
+  setCurrentEditor,
   wrap = false,
   darkMode = true,
   fontSize = 16,
@@ -148,7 +153,7 @@ const Editor: React.FC<EditorProps> = ({
       roomId,
       tabId: activeTabId,
       code: value,
-      currenteditor: currentEditorRef.current,
+      currentEditor: currentEditor,
     });
   };
 
