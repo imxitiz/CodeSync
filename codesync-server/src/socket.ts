@@ -10,8 +10,6 @@ import {
   MAX_TABS_PER_ROOM,
   normalizePermissions,
   sanitizeTabName,
-  type TabData,
-  type UserPermissions,
 } from "./validation.js";
 import {
   checkAndRecordRequest,
@@ -190,7 +188,7 @@ export function setupSocket(
           ok: true,
           token: result.freshToken,
         });
-      } else if (result.reclaimOk === false && result.reclaimToken) {
+      } else if (result.reclaimOk === false) {
         // Reclaim failed — tell the client.
         emitToSocket(socket.id, ACTIONS.RECLAIM_RESULT, {
           ok: false,

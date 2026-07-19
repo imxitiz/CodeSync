@@ -84,7 +84,8 @@ export default function EditorPageModern() {
   }, []);
 
   // Whether to show inline edit-request banners in the editor canvas (top bar handles this too)
-  const showInlineEditBanners = import.meta.env.VITE_SHOW_INLINE_EDIT_BANNERS === 'true';
+  const showInlineEditBanners =
+    import.meta.env.VITE_SHOW_INLINE_EDIT_BANNERS === "true";
 
   // UI state
   const [fontSize, setFontSize] = useState(16);
@@ -826,12 +827,14 @@ export default function EditorPageModern() {
 
           {/* Editor canvas (fills remaining height) */}
           <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {showInlineEditBanners && activeTabPermission === "VIEWER" && !allowEditRequests && (
-              <div className="flex shrink-0 items-center gap-2 border-b bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
-                <Lock className="size-3" />
-                <span>Read-only</span>
-              </div>
-            )}
+            {showInlineEditBanners &&
+              activeTabPermission === "VIEWER" &&
+              !allowEditRequests && (
+                <div className="flex shrink-0 items-center gap-2 border-b bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
+                  <Lock className="size-3" />
+                  <span>Read-only</span>
+                </div>
+              )}
 
             {showInlineEditBanners && canRequestEdit && (
               <div className="flex shrink-0 items-center gap-2 border-b bg-primary/5 px-3 py-1.5 text-xs">
@@ -856,15 +859,17 @@ export default function EditorPageModern() {
               </div>
             )}
 
-            {showInlineEditBanners && activeTabPermission === "VIEWER" && cooldownRemaining > 0 && (
-              <div className="flex shrink-0 items-center gap-2 border-b bg-destructive/5 px-3 py-1.5 text-xs text-destructive">
-                <Clock className="size-3" />
-                <span>
-                  Request blocked — wait {Math.ceil(cooldownRemaining / 60000)}{" "}
-                  min
-                </span>
-              </div>
-            )}
+            {showInlineEditBanners &&
+              activeTabPermission === "VIEWER" &&
+              cooldownRemaining > 0 && (
+                <div className="flex shrink-0 items-center gap-2 border-b bg-destructive/5 px-3 py-1.5 text-xs text-destructive">
+                  <Clock className="size-3" />
+                  <span>
+                    Request blocked — wait{" "}
+                    {Math.ceil(cooldownRemaining / 60000)} min
+                  </span>
+                </div>
+              )}
             {activeTab?.code === "" && tabs.length === 1 && (
               <EmptyState
                 currentEditor={currentEditor}

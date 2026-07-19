@@ -77,7 +77,6 @@ export type JoinResult = {
   room: RoomState;
   /** Null unless this join is reclaiming. */
   reclaimOk: boolean | undefined;
-  reclaimToken?: string;
   /** The TOKEN this joining client should persist for future reclaims (only if they are owner). */
   freshToken: string | null;
 };
@@ -328,9 +327,9 @@ export function disconnectClient(
     if (wasOwner) {
       room.ownerHasDisconnected = true;
     }
-
-    return { room, wasOwner };
   }
+
+  return { room, wasOwner };
 }
 
 /**

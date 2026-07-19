@@ -402,6 +402,8 @@ export const useEditorRealtime = ({
                   });
                 } else if (prevLevel === "EDITOR" && !newLevel) {
                   toast.error("Your edit access to this tab was revoked");
+                } else if (prevLevel === "REQUESTED" && newLevel === "VIEWER") {
+                  toast.error("Your edit request was declined");
                 }
               }
 
@@ -445,21 +447,24 @@ export const useEditorRealtime = ({
           navigate("/", { state: { id: roomId } });
         });
 
-        socket.on(ACTIONS.CODE_CHANGE, ({ tabId, code, currenteditor, tabEditors: newTabEditors }) => {
-         handleCodeChangeRef.current(code, tabId ?? "tab-main");
-         if (newTabEditors) {
-           setTabEditors(newTabEditors);
-         }
-         if (currenteditor !== undefined) {
-           setCurrentEditor(currenteditor);
-         }
-       });
+        socket.on(
+          ACTIONS.CODE_CHANGE,
+          ({ tabId, code, currenteditor, tabEditors: newTabEditors }) => {
+            handleCodeChangeRef.current(code, tabId ?? "tab-main");
+            if (newTabEditors) {
+              setTabEditors(newTabEditors);
+            }
+            if (currenteditor !== undefined) {
+              setCurrentEditor(currenteditor);
+            }
+          },
+        );
 
-       socket.on(ACTIONS.TAB_CODE, ({ tabId, code }) => {
-         handleCodeChangeRef.current(code, tabId ?? "tab-main");
-       });
+        socket.on(ACTIONS.TAB_CODE, ({ tabId, code }) => {
+          handleCodeChangeRef.current(code, tabId ?? "tab-main");
+        });
 
-       socket.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
+        socket.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
           toast.success(`${username} left the room`);
           setClients((prev) =>
             prev.filter((client) => client.socketId !== socketId),

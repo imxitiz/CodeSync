@@ -2,6 +2,7 @@
 
 import type { RoomState } from "./roomManager.js";
 
+
 export type UserPermissions = {
   canEdit: boolean;
   canCreateTab: boolean;
@@ -51,6 +52,7 @@ export type TabPermissionEntry = {
   /** Username → level override for this specific tab. */
   levels: Map<string, TabPermissionLevel>;
 };
+
 
 export const sanitizeTabName = (name: unknown): string | null => {
   if (typeof name !== "string") {
