@@ -10,14 +10,21 @@ import {
 import toast from "react-hot-toast";
 import type { NavigateFunction } from "react-router-dom";
 import { ACTIONS } from "@/utils/constants";
-import { saveRoom } from "@/utils/roomHistory";
+import { saveRoom, updateRoomToken } from "@/utils/roomHistory";
 import { initSocket } from "@/utils/socket";
-import { DEFAULT_TAB_ID } from "./permissions";
+import {
+  DEFAULT_PERMISSIONS,
+  DEFAULT_TAB_ID,
+  OWNER_PERMISSIONS,
+} from "./permissions";
 import type {
   Client,
   EditorServerStatus,
   EditorSocket,
   EditorTab,
+  TabEditors,
+  TabPermissionLevel,
+  TabPermissions,
   UserPermissions,
 } from "./types";
 
@@ -26,6 +33,7 @@ type UserActiveTab = { username: string; activeTabId: string };
 type UseEditorRealtimeOptions = {
   roomId: string | undefined;
   userName: string;
+  reclaimToken?: string;
   navigate: NavigateFunction;
   tabsRef: MutableRefObject<EditorTab[]>;
   handleCodeChange: (code: string, tabId: string) => void;
@@ -39,6 +47,7 @@ type UseEditorRealtimeOptions = {
 export const useEditorRealtime = ({
   roomId,
   userName,
+  reclaimToken,
   navigate,
   tabsRef,
   handleCodeChange,
@@ -57,6 +66,30 @@ export const useEditorRealtime = ({
   const [connectionMessage, setConnectionMessage] = useState(
     "Connecting to server...",
   );
+  const [tabPermissions, setTabPermissions] = useState<TabPermissions>({});
+  const [tabEditors, setTabEditors] = useState<TabEditors>({});
+  const [allowEditRequests, setAllowEditRequests] = useState(false);
+  const [cooldowns, setCooldowns] = useState<Record<string, number>>({}); // tabId -> remaining ms
+
+  // Cooldown countdown timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCooldowns((prev) => {
+        const next: Record<string, number> = {};
+        let changed = false;
+        for (const [tabId, remaining] of Object.entries(prev)) {
+          const newVal = remaining - 1000;
+          if (newVal > 0) {
+            next[tabId] = newVal;
+          } else {
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const socketRef = useRef<EditorSocket | null>(null);
   const currentEditorRef = useRef(currentEditor);
@@ -129,6 +162,56 @@ export const useEditorRealtime = ({
     [roomId],
   );
 
+  const emitTabPermissionRequest = useCallback(
+    (tabId: string) => {
+      socketRef.current?.emit(ACTIONS.TAB_PERMISSION_REQUEST, {
+        roomId,
+        tabId,
+      });
+    },
+    [roomId],
+  );
+
+  const emitTabPermissionGrant = useCallback(
+    (tabId: string, targetUser: string, level: "EDITOR" | "VIEWER") => {
+      socketRef.current?.emit(ACTIONS.TAB_PERMISSION_GRANT, {
+        roomId,
+        tabId,
+        targetUser,
+        level,
+      });
+    },
+    [roomId],
+  );
+
+  const emitTabPermissionRevoke = useCallback(
+    (tabId: string, targetUser: string) => {
+      socketRef.current?.emit(ACTIONS.TAB_PERMISSION_REVOKE, {
+        roomId,
+        tabId,
+        targetUser,
+      });
+    },
+    [roomId],
+  );
+
+  const emitTransferOwner = useCallback(
+    (newOwner: string) => {
+      socketRef.current?.emit(ACTIONS.TRANSFER_OWNER, { roomId, newOwner });
+    },
+    [roomId],
+  );
+
+  const emitEditRequestsToggle = useCallback(
+    (enabled: boolean) => {
+      socketRef.current?.emit(ACTIONS.EDIT_REQUESTS_TOGGLE, {
+        roomId,
+        enabled,
+      });
+    },
+    [roomId],
+  );
+
   useEffect(() => {
     document.title = `${roomId} - CodeSync`;
 
@@ -154,27 +237,64 @@ export const useEditorRealtime = ({
           setConnectionMessage("Connection lost - Reconnecting...");
         });
 
-        socket.emit(ACTIONS.JOIN, { roomId, userName });
+        socket.emit(ACTIONS.JOIN, { roomId, userName, reclaimToken });
         if (roomId) {
-          saveRoom(roomId, userName);
+          saveRoom(roomId, userName, reclaimToken);
         }
+
+        socket.on(
+          ACTIONS.RECLAIM_RESULT,
+          (result: { ok: boolean; token?: string | null; owner?: string }) => {
+            if (
+              result.ok &&
+              typeof result.token === "string" &&
+              result.token.length > 0 &&
+              roomId
+            ) {
+              // Server verified us as the true owner and issued a fresh token.
+              // Persist so we can reclaim again after another disconnect.
+              updateRoomToken(roomId, result.token);
+            }
+            // If `owner` is present, the room is telling everyone the true owner
+            // just returned — no extra client action needed beyond UI updates
+            // triggered by JOINED/JOIN events.
+          },
+        );
+
+        socket.on(
+          ACTIONS.OWNER_TRANSFERRED,
+          ({
+            oldOwner,
+            newOwner,
+            token,
+          }: {
+            oldOwner: string;
+            newOwner: string;
+            token?: string;
+          }) => {
+            setRoomCreator(newOwner);
+            setPermissions((prev) => ({
+              ...prev,
+              [newOwner]: { ...OWNER_PERMISSIONS },
+              [oldOwner]: { ...DEFAULT_PERMISSIONS },
+            }));
+            if (token && roomId) {
+              updateRoomToken(roomId, token);
+            }
+            if (oldOwner === userName) {
+              // We were just demoted — drop local edit state.
+              setCurrentEditor("");
+              setFollowingUser(null);
+            }
+            toast.success(`Ownership transferred to ${newOwner}`);
+          },
+        );
 
         socket.on(
           ACTIONS.JOINED,
           ({ clients: joinedClients, username, roomcreator }) => {
             setClients(joinedClients);
             setRoomCreator(roomcreator);
-            if (
-              username === userName &&
-              roomcreator === username &&
-              sessionStorage.getItem("admin") !== roomcreator &&
-              joinedClients.length !== 1
-            ) {
-              toast.error(
-                `${username} is already in the ${roomId} room.\nPlease try another UserName!`,
-              );
-              navigate("/", { state: { id: roomId } });
-            }
             if (
               roomCreatorRef.current === username ||
               joinedClients.length === 1
@@ -194,11 +314,17 @@ export const useEditorRealtime = ({
             activeTabId: syncActiveTabId,
             userActiveTabs: syncUserActiveTabs,
             permissions: syncPermissions,
+            tabPermissions: syncTabPermissions,
+            tabEditors: syncTabEditors,
+            allowEditRequests: syncAllowEditRequests,
           }: {
             tabs: EditorTab[];
             activeTabId: string;
             userActiveTabs: UserActiveTab[];
             permissions: Record<string, UserPermissions>;
+            tabPermissions: TabPermissions;
+            tabEditors: TabEditors;
+            allowEditRequests: boolean;
           }) => {
             if (syncTabs?.length) {
               setTabs(syncTabs);
@@ -219,6 +345,98 @@ export const useEditorRealtime = ({
             if (syncPermissions) {
               setPermissions(syncPermissions);
             }
+            if (syncTabPermissions) {
+              setTabPermissions(syncTabPermissions);
+            }
+            if (syncTabEditors) {
+              setTabEditors(syncTabEditors);
+            }
+            if (typeof syncAllowEditRequests === "boolean") {
+              setAllowEditRequests(syncAllowEditRequests);
+            }
+          },
+        );
+
+        socket.on(
+          ACTIONS.TAB_PERMISSIONS_UPDATE,
+          ({
+            tabId,
+            permissions: tabPerms,
+            cooldownMs,
+            reason,
+          }: {
+            tabId: string;
+            permissions: Record<string, TabPermissionLevel>;
+            cooldownMs?: number;
+            reason?: string;
+          }) => {
+            // Handle feedback for rejected requests (cooldown/idempotency/requests_disabled)
+            if (reason && !tabPerms?.[userName]) {
+              if (reason === "requests_disabled") {
+                toast.error(
+                  "Edit requests are disabled for this room. Ask the owner to enable them.",
+                );
+              } else if (reason === "cooldown") {
+                const minutes = Math.ceil((cooldownMs ?? 0) / 60000);
+                toast.error(
+                  `Request blocked — in cooldown for ${minutes} min.`,
+                );
+              } else if (reason === "idempotency_window") {
+                const seconds = Math.ceil((cooldownMs ?? 0) / 1000);
+                toast.error(`Wait ${seconds}s before requesting again.`);
+              }
+              return;
+            }
+
+            setTabPermissions((prev) => {
+              const prevLevel = prev[tabId]?.[userName];
+              const newLevel = tabPerms[userName];
+
+              // Detect changes for the current user and provide feedback
+              if (prevLevel !== newLevel) {
+                if (newLevel === "EDITOR" && prevLevel !== "EDITOR") {
+                  toast.success("You now have edit access to this tab! 🎉");
+                } else if (newLevel === "REQUESTED") {
+                  toast("Edit request sent — waiting for owner", {
+                    icon: "🕐",
+                  });
+                } else if (prevLevel === "EDITOR" && !newLevel) {
+                  toast.error("Your edit access to this tab was revoked");
+                } else if (prevLevel === "REQUESTED" && newLevel === "VIEWER") {
+                  toast.error("Your edit request was declined");
+                }
+              }
+
+              // Handle cooldown notification
+              if (cooldownMs && cooldownMs > 0) {
+                setCooldowns((prev) => ({ ...prev, [tabId]: cooldownMs }));
+                const minutes = Math.ceil(cooldownMs / 60000);
+                toast.error(
+                  `Request denied. You can't request again for ${minutes} min.`,
+                );
+              }
+
+              return {
+                ...prev,
+                [tabId]: tabPerms,
+              };
+            });
+          },
+        );
+
+        socket.on(
+          ACTIONS.EDIT_REQUESTS_TOGGLE,
+          ({ enabled }: { enabled: boolean }) => {
+            setAllowEditRequests(enabled);
+          },
+        );
+
+        socket.on(
+          ACTIONS.EDIT_REQUESTS_NOTIFICATION,
+          ({ requester }: { tabId: string; requester: string }) => {
+            toast(`New edit request from ${requester}`, {
+              icon: "🕐",
+            });
           },
         );
 
@@ -227,6 +445,23 @@ export const useEditorRealtime = ({
             `${username} is already in the ${roomId} room.\nPlease try another UserName!`,
           );
           navigate("/", { state: { id: roomId } });
+        });
+
+        socket.on(
+          ACTIONS.CODE_CHANGE,
+          ({ tabId, code, currenteditor, tabEditors: newTabEditors }) => {
+            handleCodeChangeRef.current(code, tabId ?? "tab-main");
+            if (newTabEditors) {
+              setTabEditors(newTabEditors);
+            }
+            if (currenteditor !== undefined) {
+              setCurrentEditor(currenteditor);
+            }
+          },
+        );
+
+        socket.on(ACTIONS.TAB_CODE, ({ tabId, code }) => {
+          handleCodeChangeRef.current(code, tabId ?? "tab-main");
         });
 
         socket.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
@@ -245,15 +480,21 @@ export const useEditorRealtime = ({
           });
         });
 
-        socket.on(ACTIONS.SET_CURRENT_EDITOR, ({ currenteditor }) => {
-          if (currenteditor === userName) {
-            toast.success("You are now the editor");
-          }
-          if (currenteditor === "" && userName === roomCreatorRef.current) {
-            toast.success(`${currentEditorRef.current} has released control`);
-          }
-          setCurrentEditor(currenteditor);
-        });
+        socket.on(
+          ACTIONS.SET_CURRENT_EDITOR,
+          ({ currenteditor, tabEditors: newTabEditors }) => {
+            if (newTabEditors) {
+              setTabEditors(newTabEditors);
+            }
+            if (currenteditor === userName) {
+              toast.success("You are now the editor");
+            }
+            if (currenteditor === "" && userName === roomCreatorRef.current) {
+              toast.success(`${currentEditorRef.current} has released control`);
+            }
+            setCurrentEditor(currenteditor);
+          },
+        );
 
         socket.on(ACTIONS.TAB_CREATE, ({ tabId, name }) => {
           setTabs((prev) =>
@@ -281,6 +522,17 @@ export const useEditorRealtime = ({
             }));
             socket.emit(ACTIONS.TAB_SWITCH, { roomId, tabId: nextTabId });
             return nextTabId;
+          });
+          // Clean up tab-level permissions for closed tab
+          setTabPermissions((prev) => {
+            const next = { ...prev };
+            delete next[tabId];
+            return next;
+          });
+          setTabEditors((prev) => {
+            const next = { ...prev };
+            delete next[tabId];
+            return next;
           });
         });
 
@@ -324,6 +576,7 @@ export const useEditorRealtime = ({
   }, [
     handleErrors,
     navigate,
+    reclaimToken,
     roomId,
     setActiveTabId,
     setFollowingUser,
@@ -344,10 +597,19 @@ export const useEditorRealtime = ({
     emitTabCreate,
     emitTabRename,
     emitTabSwitch,
+    emitTabPermissionGrant,
+    emitTabPermissionRequest,
+    emitTabPermissionRevoke,
+    emitTransferOwner,
+    emitEditRequestsToggle,
     roomCreator,
     serverStatus,
     setCurrentEditor,
     socketReady,
     socketRef,
+    tabEditors,
+    tabPermissions,
+    allowEditRequests,
+    cooldowns,
   };
 };

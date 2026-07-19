@@ -1,9 +1,11 @@
 import {
   Check,
+  Clock,
   Copy,
   Crown,
   Eye,
   EyeOff,
+  Lock,
   LogOut,
   MoreVertical,
   Pencil,
@@ -43,6 +45,8 @@ export type TopBarProps = {
   clients: TopBarClient[];
   roomCreator: string | null;
   currentEditor: string;
+  tabEditors: Record<string, string>;
+  activeTabId: string;
   permissions: Record<string, { canEdit: boolean }>;
   fontSize: number;
   wrapLines: boolean;
@@ -62,6 +66,10 @@ export type TopBarProps = {
   onGrantEdit: (username: string) => void;
   canEdit: boolean;
   isOwner: boolean;
+  activeTabPermission?: "VIEWER" | "EDITOR" | "REQUESTED";
+  onRequestTabEdit?: () => void;
+  pendingRequestCount?: number;
+  allowEditRequests?: boolean;
 };
 
 export default function TopBar({
@@ -73,6 +81,8 @@ export default function TopBar({
   clients,
   roomCreator,
   currentEditor,
+  tabEditors,
+  activeTabId,
   permissions,
   wrapLines,
   zen,
@@ -91,6 +101,10 @@ export default function TopBar({
   isOwner,
   onFollowUser,
   onGrantEdit,
+  activeTabPermission,
+  onRequestTabEdit,
+  pendingRequestCount = 0,
+  allowEditRequests = true,
 }: TopBarProps) {
   const maxAvatars = 5;
   const visibleClients = clients.slice(0, maxAvatars);
@@ -100,10 +114,14 @@ export default function TopBar({
   const truncatedId =
     roomId && roomId.length > 12 ? `${roomId.slice(0, 8)}…` : roomId;
 
-  const isCurrentEditor = currentEditor === userName;
+  const isCurrentEditor = tabEditors[activeTabId] === userName;
   const canTakeEdit = canEdit && currentEditor !== "";
   const showEditToggle =
-    isCurrentEditor || (isOwner && currentEditor !== "") || canTakeEdit;
+    isCurrentEditor ||
+    (isOwner && currentEditor !== "") ||
+    canTakeEdit ||
+    activeTabPermission === "VIEWER" ||
+    activeTabPermission === "REQUESTED";
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -223,13 +241,18 @@ export default function TopBar({
             )}
             <button
               aria-label={`${totalParticipants} participants. Open participants panel.`}
-              className="ms-1 cursor-pointer rounded-full border bg-background px-2 py-0.5 text-foreground text-xs hover:bg-accent"
+              className="ms-1 relative cursor-pointer rounded-full border bg-background px-2 py-0.5 text-foreground text-xs hover:bg-accent"
               onClick={onToggleParticipants}
               title="Open participants"
               type="button"
             >
               <Users className="mr-1 inline size-3" />
               {totalParticipants}
+              {pendingRequestCount > 0 && isOwner && (
+                <span className="-top-1.5 -right-1.5 absolute flex size-4 items-center justify-center rounded-full bg-destructive text-[9px] font-medium text-destructive-foreground">
+                  {pendingRequestCount}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -303,31 +326,67 @@ export default function TopBar({
               <TooltipContent>Copy code</TooltipContent>
             </Tooltip>
 
-            {showEditToggle && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    aria-label={
-                      isCurrentEditor
-                        ? "Release editing control"
-                        : "Take editing control"
-                    }
-                    onClick={onToggleEdit}
-                    size="icon"
-                    variant={isCurrentEditor ? "secondary" : "default"}
-                  >
-                    {isCurrentEditor ? (
-                      <Eye className="size-4" />
-                    ) : (
-                      <Pencil className="size-4" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isCurrentEditor ? "Release control" : "Take control"}
-                </TooltipContent>
-              </Tooltip>
-            )}
+            {showEditToggle &&
+              (activeTabPermission === "VIEWER" && allowEditRequests ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label="Request edit access for current tab"
+                      onClick={onRequestTabEdit}
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5"
+                    >
+                      <Lock className="size-3.5" />
+                      <span className="hidden text-xs sm:inline">Request</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Request edit access for this tab
+                  </TooltipContent>
+                </Tooltip>
+              ) : activeTabPermission === "REQUESTED" ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label="Edit request pending"
+                      disabled
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 opacity-60"
+                    >
+                      <Clock className="size-3.5" />
+                      <span className="hidden text-xs sm:inline">Pending</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Waiting for owner to approve</TooltipContent>
+                </Tooltip>
+              ) : activeTabPermission === "VIEWER" &&
+                !allowEditRequests ? null : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label={
+                        isCurrentEditor
+                          ? "Release editing control"
+                          : "Take editing control"
+                      }
+                      onClick={onToggleEdit}
+                      size="icon"
+                      variant={isCurrentEditor ? "secondary" : "default"}
+                    >
+                      {isCurrentEditor ? (
+                        <Eye className="size-4" />
+                      ) : (
+                        <Pencil className="size-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isCurrentEditor ? "Release control" : "Take control"}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
           </div>
 
           <Separator />

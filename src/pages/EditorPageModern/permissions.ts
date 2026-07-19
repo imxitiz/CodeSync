@@ -1,4 +1,4 @@
-import type { UserPermissions } from "./types";
+import type { TabPermissionLevel, UserPermissions } from "./types";
 
 export const DEFAULT_TAB_ID = "tab-main";
 export const DEFAULT_TAB_NAME = "main.js";
@@ -72,3 +72,13 @@ export const togglePermission = (
 export const canShowTabPermissionControls = (
   permissions: UserPermissions,
 ): boolean => permissions.canEdit;
+
+export const DEFAULT_TAB_PERMISSION_LEVEL: TabPermissionLevel = "VIEWER";
+
+/**
+ * Maps room-level boolean permissions to a TabPermissionLevel.
+ * Used for display and fallback logic.
+ */
+export const roomLevelToTabLevel = (
+  perms: UserPermissions,
+): TabPermissionLevel => (perms.canEdit ? "EDITOR" : "VIEWER");

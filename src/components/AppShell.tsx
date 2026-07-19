@@ -116,7 +116,7 @@ export default function AppShell({
       </main>
 
       <Toaster
-        position="top-right"
+        position="top-center"
         toastOptions={{
           className: "text-sm",
           success: {

@@ -1,32 +1,10 @@
-export const ACTIONS = {
-  JOIN: "join",
-  JOINED: "joined",
-  DISCONNECTED: "disconnected",
-  CODE_CHANGE: "code-change",
-  SYNC_CODE: "sync-code",
-  LEAVE: "leave",
-  USER_JOINED: "user-joined",
-  USER_LEFT: "user-left",
-  CHANGE_EDITOR: "change-editor",
-  EDITOR_CHANGED: "editor-changed",
-  GRANT_EDIT: "grant-edit",
-  EDIT_GRANTED: "edit-granted",
-  REVOKE_EDIT: "revoke-edit",
-  EDIT_REVOKED: "edit-revoked",
-  SET_CURRENT_EDITOR: "set_current_editor",
-  DUPLICATE_USER: "duplicate-user",
-  TAB_CREATE: "tab-create",
-  TAB_CLOSE: "tab-close",
-  TAB_RENAME: "tab-rename",
-  TAB_SWITCH: "tab-switch",
-  TAB_SYNC: "tab-sync",
-  TAB_CODE_REQUEST: "tab-code-request",
-  TAB_CODE: "tab-code",
-  PERMISSIONS_UPDATE: "permissions-update",
-  DESTROY_ROOM: "destroy-room",
-} as const;
+/**
+ * Re-export shared Socket.IO action constants — SINGLE SOURCE OF TRUTH.
+ * DO NOT add actions here — add them in shared/actions.ts instead.
+ */
 
-export type ACTIONS = (typeof ACTIONS)[keyof typeof ACTIONS];
+export type { ActionsType } from "../../shared/actions.js";
+export { ACTIONS } from "../../shared/actions.js";
 
 export const BACKEND_API_URL: string =
   import.meta.env.VITE_BACKEND_API_URL || "http://localhost:3000";
@@ -83,7 +61,9 @@ const writeCustomBackendUrl = (value: string): void => {
   }
   try {
     window.localStorage.setItem(CUSTOM_BACKEND_KEY, value);
-  } catch {}
+  } catch {
+    /* localStorage may be unavailable in SSR or when quota is exceeded */
+  }
 };
 
 const removeCustomBackendUrl = (): void => {
@@ -95,7 +75,9 @@ const removeCustomBackendUrl = (): void => {
   }
   try {
     window.localStorage.removeItem(CUSTOM_BACKEND_KEY);
-  } catch {}
+  } catch {
+    /* localStorage may be unavailable in SSR or when quota is exceeded */
+  }
 };
 
 /**

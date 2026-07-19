@@ -55,6 +55,9 @@ export default function HomePageModern() {
   const [customBackendInput, setCustomBackendInput] = useState<string>("");
   const [recentRooms, setRecentRooms] = useState<RecentRoom[]>([]);
   const [isHistoryEnabled, setIsHistoryEnabled] = useState(false);
+  const [selectedReclaimToken, setSelectedReclaimToken] = useState<
+    string | undefined
+  >(undefined);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -99,6 +102,8 @@ export default function HomePageModern() {
   const handleSelectRecentRoom = (room: RecentRoom) => {
     setRoomId(room.roomId);
     setUserName(room.userName);
+    // Keep the token in component state so the join flow can attach it.
+    setSelectedReclaimToken(room.reclaimToken);
   };
 
   const handleRemoveRecentRoom = (targetRoomId: string) => {
@@ -214,6 +219,7 @@ export default function HomePageModern() {
           state: {
             userName: finalUserName,
             serverHealthy: true,
+            reclaimToken: selectedReclaimToken,
           },
         });
       } else {

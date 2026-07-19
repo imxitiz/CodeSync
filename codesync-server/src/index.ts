@@ -2,6 +2,7 @@ import type { Server } from "node:http";
 import { createAdaptorServer } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { randomBytes } from "node:crypto";
 import { setupSocket } from "./socket.js";
 
 const TRAILING_SLASH_REGEX = /\/$/;
@@ -41,6 +42,35 @@ const isAllowedOrigin = (origin: string | undefined): boolean => {
   }
   return allowedOrigins.has(normalize(origin));
 };
+
+// ---------------------------------------------------------------------------
+// Owner-reclaim secret
+// ---------------------------------------------------------------------------
+// Used to sign HMAC tokens that let the original room owner reclaim creator
+// rights after an accidental disconnect. MUST be set in production so tokens
+// survive server restarts. If unset, a random secret is generated and the
+// server will fail to start (fail-secure — we do NOT silently allow unverified
+// reclaims).
+// ---------------------------------------------------------------------------
+let OWNER_SECRET: string | undefined = process.env.CODESYNC_OWNER_SECRET;
+if (!OWNER_SECRET) {
+  if (process.env.NODE_ENV === "production") {
+    console.error(
+      "[codesync] FATAL: CODESYNC_OWNER_SECRET env var is required in production.\n" +
+        "Generate one:  node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+    );
+    process.exit(1);
+  }
+  // Dev only — ephemeral, logged so the developer knows it's temporary.
+  const devSecret = randomBytes(32).toString("hex");
+  console.warn(
+    `[codesync] WARNING: CODESYNC_OWNER_SECRET not set — using ephemeral dev secret.\n` +
+      `Tokens will NOT survive server restarts. Set it for persistent dev:\n` +
+      `  export CODESYNC_OWNER_SECRET=${devSecret}`
+  );
+  process.env.CODESYNC_OWNER_SECRET = devSecret;
+  OWNER_SECRET = devSecret;
+}
 
 const app = new Hono();
 
@@ -96,29 +126,33 @@ const httpServer = createAdaptorServer({
 
 // Attach Socket.IO FIRST — this registers its 'listening' event listener
 // which calls engine.io's init() to create the ws.WebSocketServer.
-setupSocket(httpServer, isAllowedOrigin);
+setupSocket(httpServer, isAllowedOrigin, OWNER_SECRET);
 
 // Now start listening — the 'listening' event fires, engine.io's init() runs,
 // the ws.WebSocketServer is created, and WebSocket upgrades work.
 
 // Try to find an available port by incrementing if the current one is in use
 const startServer = (port: number, maxPort = port + 10): void => {
-  httpServer.once("error", (err: NodeJS.ErrnoException) => {
+  const errorHandler = (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") {
       console.log(`Port ${port} is in use, trying ${port + 1}...`);
       if (port + 1 > maxPort) {
         console.error(`No available port found up to ${maxPort}, giving up.`);
         process.exit(1);
       }
-      httpServer.removeAllListeners("error");
       startServer(port + 1, maxPort);
     } else {
-      console.error("Server error:", err);
+      console.error("Server startup error:", err);
       process.exit(1);
     }
-  });
+  };
+
+  httpServer.once("error", errorHandler);
 
   httpServer.listen(port, "0.0.0.0", () => {
+    // Remove the startup error listener so unrelated runtime errors after the
+    // server is listening don't abruptly terminate the process.
+    httpServer.off("error", errorHandler);
     console.log(`Server is running on http://0.0.0.0:${port}`);
   });
 };

@@ -26,3 +26,49 @@ dist-ssr
 dev-dist/
 .vite-react-ssg-temp/
 *.bak
+
+# Environment files — secrets must NEVER be committed
+.env
+.env.local
+.env.*.local
+codesync-server/.env
+codesync-server/.env.local
+
+# ─── AI Agent artifacts (Hermes / Copilot / Codex / Kilo etc.) ───
+# Agent working dirs, debug logs, and decay-tag sidecars leak into repos
+# when coding agents run inside them. Exclude proactively.
+.hermes/
+.hermes2/
+.copilotmd
+*.copilotmd
+*.decaytag.json
+*.opid.json
+.skillcat-registry.json
+REFACTORING_PLAN.md
+AGENT_*.md
+agent-*.log
+
+# >>> HERMES AI-AGENT-ARTIFACT BLOCK v2 (idempotent) >>>
+# Excludes AI coding-agent working dirs/logs from every repo so agents
+# (Hermes, Copilot, Codex, Kilo, OpenClaude) cannot leak runtime artifacts into git.
+# Added by project-explorer. Safe to keep. Patterns are framework-agnostic.
+.hermes/
+.hermes2/
+.copilotmd
+*.copilotmd
+*.decaytag.json
+*.opid.json
+.skillcat-registry.json
+REFACTORING_PLAN.md
+AGENT_*.md
+agent-*.log
+.lazycommit.json
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+# AI-agent generated doc-spam (lazycommit/harbor/etc. drop these into repos)
+*CRITICAL_ISSUES*.md
+*MASTER_TODO*.md
+*MINOR_TODO*.md
+*completion*.md
+*completion-email*.md
+# <<< HERMES AI-AGENT-ARTIFACT BLOCK <<<

@@ -1,7 +1,28 @@
-import { Eye, Pencil, X } from "lucide-react";
-import { useEffect, useId, useRef } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Eye,
+  FolderLock,
+  Lock,
+  Pencil,
+  Shield,
+  X,
+} from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import Avatar from "react-avatar";
-import type { UserPermissions } from "./types";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import OwnerRepresentation from "./representation-icon";
+import type {
+  EditorTab,
+  TabPermissions,
+  ToggleLevel,
+  UserPermissions,
+} from "./types";
 
 type Participant = {
   socketId: string;
@@ -16,6 +37,7 @@ type Props = {
   participants: Participant[];
   currentUser: string;
   currentEditor: string;
+  roomCreator: string | null;
   isOwner: boolean;
   followingUser: string | null;
   onFollow: (username: string) => void;
@@ -25,6 +47,16 @@ type Props = {
   getActiveTabName: (username: string) => string | undefined;
   userPermissions: Record<string, UserPermissions>;
   onUpdatePermissions: (username: string, perms: UserPermissions) => void;
+  tabs: EditorTab[];
+  tabPermissions: TabPermissions;
+  emitTabPermissionGrant: (
+    tabId: string,
+    targetUser: string,
+    level: "EDITOR" | "VIEWER",
+  ) => void;
+  emitTabPermissionRevoke: (tabId: string, targetUser: string) => void;
+  allowEditRequests: boolean;
+  emitEditRequestsToggle: (enabled: boolean) => void;
 };
 
 export default function ParticipantsDrawer({
@@ -35,6 +67,7 @@ export default function ParticipantsDrawer({
   participants,
   currentUser,
   currentEditor,
+  roomCreator,
   isOwner,
   followingUser,
   onFollow,
@@ -44,6 +77,12 @@ export default function ParticipantsDrawer({
   getActiveTabName,
   userPermissions,
   onUpdatePermissions,
+  tabs,
+  tabPermissions,
+  emitTabPermissionGrant,
+  emitTabPermissionRevoke,
+  allowEditRequests,
+  emitEditRequestsToggle,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -81,22 +120,52 @@ export default function ParticipantsDrawer({
       )}
       <aside
         className={[
-          "absolute inset-y-0 right-0 flex w-[85vw] max-w-sm flex-col border-l bg-card shadow-xl transition-transform duration-200 sm:w-72",
+          "absolute inset-y-0 right-0 flex h-full flex-col border-l bg-sidebar shadow-xl transition-transform duration-200",
           open ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
         role="dialog"
         aria-label="Participants"
         aria-labelledby={titleId}
         aria-modal="true"
+        style={{ width: "360px", minWidth: "280px", maxWidth: "480px" }}
       >
-        <header className="flex shrink-0 items-center justify-between border-b px-4 py-3">
-          <h2 id={titleId} className="font-semibold text-foreground text-sm">
+        {/* Resize handle — left edge of the drawer */}
+        <div
+          onMouseDown={(e) => {
+            const aside = e.currentTarget.closest("aside");
+            if (!aside) return;
+            const startX = e.clientX;
+            const startWidth = aside.offsetWidth;
+
+            const onMouseMove = (ev: MouseEvent) => {
+              const delta = startX - ev.clientX;
+              const newWidth = Math.min(480, Math.max(280, startWidth + delta));
+              aside.style.width = `${newWidth}px`;
+            };
+
+            const onMouseUp = () => {
+              document.removeEventListener("mousemove", onMouseMove);
+              document.removeEventListener("mouseup", onMouseUp);
+            };
+
+            document.addEventListener("mousemove", onMouseMove);
+            document.addEventListener("mouseup", onMouseUp);
+          }}
+          className="absolute top-0 bottom-0 -left-1.5 z-10 w-3 cursor-ew-resize rounded-sm transition-colors hover:bg-primary/20"
+          title="Drag to resize"
+        />
+
+        <header className="flex shrink-0 items-center justify-between border-b border-sidebar px-4 py-3">
+          <h2
+            id={titleId}
+            className="font-semibold text-sidebar-foreground text-sm"
+          >
             Participants ({participants.length})
           </h2>
           <button
             ref={closeRef}
             aria-label="Close participants drawer"
-            className="inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             type="button"
             onClick={onClose}
           >
@@ -104,10 +173,39 @@ export default function ParticipantsDrawer({
           </button>
         </header>
 
+        {/* Owner controls — allow edit requests toggle */}
+        {isOwner && (
+          <div className="flex items-center justify-between border-b border-sidebar-border px-4 py-2">
+            <span className="text-xs text-sidebar-foreground/70">
+              Allow edit requests
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={allowEditRequests}
+              onClick={() => emitEditRequestsToggle(!allowEditRequests)}
+              className={[
+                "relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full transition-colors",
+                allowEditRequests ? "bg-primary" : "bg-sidebar-foreground/20",
+              ].join(" ")}
+            >
+              <span
+                className={[
+                  "inline-block size-4 transform rounded-full bg-white shadow-sm transition-transform",
+                  allowEditRequests ? "translate-x-4" : "translate-x-0.5",
+                ].join(" ")}
+              />
+            </button>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
           {participants.map(({ socketId, username }) => {
             const isMe = username === currentUser;
             const isEditor = username === currentEditor;
+            const hasPendingRequest = Object.values(tabPermissions).some(
+              (entry) => entry?.[username] === "REQUESTED",
+            );
             return (
               <div key={socketId}>
                 <div className="flex items-center gap-2">
@@ -136,37 +234,34 @@ export default function ParticipantsDrawer({
                   >
                     <div
                       className={[
-                        "group flex items-center justify-between rounded-md border px-3 py-2 text-card-foreground shadow-xs transition-colors",
+                        "group flex items-center justify-between rounded-md border px-3 py-2 text-sidebar-foreground shadow-xs transition-colors",
                         isMe
-                          ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
-                          : "border-border bg-card/60",
+                          ? "border-sidebar-primary/50 bg-sidebar-primary/10 ring-1 ring-sidebar-primary/30"
+                          : "border-sidebar-border bg-sidebar-accent/50",
                         isOwner && !isMe
-                          ? "hover:bg-accent/50"
-                          : "hover:bg-accent/40",
+                          ? "hover:bg-sidebar-accent/70"
+                          : "hover:bg-sidebar-accent/60",
                       ].join(" ")}
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="relative">
                           <AvatarPreset name={username} />
-                          {isEditor && (
-                            <span
-                              className="-left-1 -bottom-1 pointer-events-none absolute inline-flex size-4 items-center justify-center rounded-full bg-success text-success-foreground shadow-sm ring-1 ring-border"
-                              title="Editor"
-                            >
-                              <Pencil className="size-3.5 p-[1px]" />
-                            </span>
-                          )}
+                          <OwnerRepresentation
+                            roomCreator={roomCreator}
+                            username={username}
+                            isEditor={isEditor}
+                          />
                         </div>
                         <div className="min-w-0">
                           <p className="truncate font-medium text-sm">
                             {username}
                             {isMe && (
-                              <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 font-medium text-primary text-xs">
+                              <span className="ml-1.5 rounded-full bg-sidebar-primary/15 px-1.5 py-0.5 font-medium text-sidebar-primary text-xs">
                                 You
                               </span>
                             )}
                           </p>
-                          <p className="truncate text-muted-foreground text-xs">
+                          <p className="truncate text-sidebar-foreground/70 text-xs">
                             {isMe
                               ? "You"
                               : isEditor
@@ -175,6 +270,12 @@ export default function ParticipantsDrawer({
                             {getActiveTabName(username)
                               ? ` · ${getActiveTabName(username)}`
                               : ""}
+                            {hasPendingRequest && (
+                              <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1 py-0.5 text-[9px] text-warning-foreground">
+                                <Clock className="size-2" />
+                                pending
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -189,9 +290,9 @@ export default function ParticipantsDrawer({
                             : `Follow ${username}`
                         }
                         className={[
-                          "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                          "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                           followingUser === username
-                            ? "bg-primary/15 text-primary"
+                            ? "bg-sidebar-primary/15 text-sidebar-primary"
                             : "",
                         ].join(" ")}
                         type="button"
@@ -205,10 +306,10 @@ export default function ParticipantsDrawer({
                         aria-label={`Manage permissions for ${username}`}
                         aria-pressed={openPermDialog === username}
                         className={[
-                          "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring",
+                          "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                           openPermDialog === username
-                            ? "bg-primary/15 text-primary"
-                            : "text-muted-foreground hover:text-foreground",
+                            ? "bg-sidebar-primary/15 text-sidebar-primary"
+                            : "text-sidebar-foreground/70 hover:text-sidebar-foreground",
                         ].join(" ")}
                         type="button"
                         onClick={() => handleTogglePerm(username)}
@@ -224,126 +325,24 @@ export default function ParticipantsDrawer({
                   </div>
                 </div>
                 {isOwner && !isMe && openPermDialog === username && (
-                  <div className="mt-1 ml-2 rounded-md border bg-background/50 p-3">
-                    <p className="mb-2 font-medium text-xs">
-                      Permissions for {username}
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <PermToggle
-                        label="Can Edit Code"
-                        checked={userPermissions[username]?.canEdit ?? false}
-                        onChange={() =>
-                          onUpdatePermissions(username, {
-                            ...(userPermissions[username] ?? {
-                              canEdit: false,
-                              canCreateTab: false,
-                              canDeleteTab: false,
-                              canRenameTab: false,
-                            }),
-                            canEdit: !(
-                              userPermissions[username]?.canEdit ?? false
-                            ),
-                          })
-                        }
-                      />
-                      <PermToggle
-                        label="Can Create Tabs"
-                        checked={
-                          userPermissions[username]?.canCreateTab ?? false
-                        }
-                        onChange={() =>
-                          onUpdatePermissions(username, {
-                            ...(userPermissions[username] ?? {
-                              canEdit: false,
-                              canCreateTab: false,
-                              canDeleteTab: false,
-                              canRenameTab: false,
-                            }),
-                            canCreateTab: !(
-                              userPermissions[username]?.canCreateTab ?? false
-                            ),
-                          })
-                        }
-                      />
-                      <PermToggle
-                        label="Can Delete Tabs"
-                        checked={
-                          userPermissions[username]?.canDeleteTab ?? false
-                        }
-                        onChange={() =>
-                          onUpdatePermissions(username, {
-                            ...(userPermissions[username] ?? {
-                              canEdit: false,
-                              canCreateTab: false,
-                              canDeleteTab: false,
-                              canRenameTab: false,
-                            }),
-                            canDeleteTab: !(
-                              userPermissions[username]?.canDeleteTab ?? false
-                            ),
-                          })
-                        }
-                      />
-                      <PermToggle
-                        label="Can Rename Tabs"
-                        checked={
-                          userPermissions[username]?.canRenameTab ?? false
-                        }
-                        onChange={() =>
-                          onUpdatePermissions(username, {
-                            ...(userPermissions[username] ?? {
-                              canEdit: false,
-                              canCreateTab: false,
-                              canDeleteTab: false,
-                              canRenameTab: false,
-                            }),
-                            canRenameTab: !(
-                              userPermissions[username]?.canRenameTab ?? false
-                            ),
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        type="button"
-                        className="inline-flex cursor-pointer items-center rounded-md border bg-background px-2 py-1 text-xs transition-colors hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={() =>
-                          onUpdatePermissions(username, {
-                            canEdit: true,
-                            canCreateTab: true,
-                            canDeleteTab: true,
-                            canRenameTab: true,
-                          })
-                        }
-                      >
-                        Grant All
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex cursor-pointer items-center rounded-md border bg-destructive/10 px-2 py-1 text-xs text-destructive transition-colors hover:bg-destructive/20 focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={() =>
-                          onUpdatePermissions(username, {
-                            canEdit: false,
-                            canCreateTab: false,
-                            canDeleteTab: false,
-                            canRenameTab: false,
-                          })
-                        }
-                      >
-                        Revoke All
-                      </button>
-                    </div>
-                  </div>
+                  <PermissionPanel
+                    username={username}
+                    userPermissions={userPermissions}
+                    onUpdatePermissions={onUpdatePermissions}
+                    tabs={tabs}
+                    tabPermissions={tabPermissions}
+                    emitTabPermissionGrant={emitTabPermissionGrant}
+                    emitTabPermissionRevoke={emitTabPermissionRevoke}
+                  />
                 )}
               </div>
             );
           })}
         </div>
 
-        <footer className="flex shrink-0 items-center justify-between gap-2 border-t px-4 py-3">
+        <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-sidebar-border px-4 py-3">
           <button
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 font-medium text-xs transition-colors hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border bg-sidebar-accent px-3 py-1.5 font-medium text-xs text-sidebar-foreground transition-colors hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             onClick={onCopyInvite}
             type="button"
             aria-label="Copy invite link"
@@ -351,7 +350,7 @@ export default function ParticipantsDrawer({
             Copy Invite Link
           </button>
           <button
-            className="inline-flex cursor-pointer items-center rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground text-xs transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex cursor-pointer items-center rounded-md bg-sidebar-primary px-3 py-1.5 font-medium text-sidebar-primary-foreground text-xs transition-colors hover:bg-sidebar-primary/90 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             onClick={onDone}
             type="button"
             aria-label="Done"
@@ -360,6 +359,252 @@ export default function ParticipantsDrawer({
           </button>
         </footer>
       </aside>
+    </div>
+  );
+}
+
+function PermissionPanel({
+  username,
+  userPermissions,
+  onUpdatePermissions,
+  tabs,
+  tabPermissions,
+  emitTabPermissionGrant,
+  emitTabPermissionRevoke,
+}: {
+  username: string;
+  userPermissions: Record<string, UserPermissions>;
+  onUpdatePermissions: (username: string, perms: UserPermissions) => void;
+  tabs: EditorTab[];
+  tabPermissions: TabPermissions;
+  emitTabPermissionGrant: (
+    tabId: string,
+    targetUser: string,
+    level: "EDITOR" | "VIEWER",
+  ) => void;
+  emitTabPermissionRevoke: (tabId: string, targetUser: string) => void;
+}) {
+  const [roomPermsOpen, setRoomPermsOpen] = useState(true);
+  const [tabPermsOpen, setTabPermsOpen] = useState(false);
+
+  const overriddenCount = tabs.filter(
+    (t) => tabPermissions[t.id]?.[username],
+  ).length;
+
+  return (
+    <div className="mt-1 ml-2 rounded-md border border-sidebar-border bg-sidebar-accent/50 p-3">
+      {/* Room-level permissions — collapsible */}
+      <Collapsible open={roomPermsOpen} onOpenChange={setRoomPermsOpen}>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs transition-colors hover:bg-sidebar-accent/70"
+          >
+            {roomPermsOpen ? (
+              <ChevronDown className="size-3 text-sidebar-foreground/50" />
+            ) : (
+              <ChevronRight className="size-3 text-sidebar-foreground/50" />
+            )}
+            <Shield className="size-3 text-sidebar-foreground/60" />
+            <span className="font-medium text-sidebar-foreground/80">
+              Room Permissions
+            </span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+            <PermToggle
+              label="Can Edit Code"
+              checked={userPermissions[username]?.canEdit ?? false}
+              onChange={() =>
+                onUpdatePermissions(username, {
+                  ...(userPermissions[username] ?? {
+                    canEdit: false,
+                    canCreateTab: false,
+                    canDeleteTab: false,
+                    canRenameTab: false,
+                  }),
+                  canEdit: !(userPermissions[username]?.canEdit ?? false),
+                })
+              }
+            />
+            <PermToggle
+              label="Can Create Tabs"
+              checked={userPermissions[username]?.canCreateTab ?? false}
+              onChange={() =>
+                onUpdatePermissions(username, {
+                  ...(userPermissions[username] ?? {
+                    canEdit: false,
+                    canCreateTab: false,
+                    canDeleteTab: false,
+                    canRenameTab: false,
+                  }),
+                  canCreateTab: !(
+                    userPermissions[username]?.canCreateTab ?? false
+                  ),
+                })
+              }
+            />
+            <PermToggle
+              label="Can Delete Tabs"
+              checked={userPermissions[username]?.canDeleteTab ?? false}
+              onChange={() =>
+                onUpdatePermissions(username, {
+                  ...(userPermissions[username] ?? {
+                    canEdit: false,
+                    canCreateTab: false,
+                    canDeleteTab: false,
+                    canRenameTab: false,
+                  }),
+                  canDeleteTab: !(
+                    userPermissions[username]?.canDeleteTab ?? false
+                  ),
+                })
+              }
+            />
+            <PermToggle
+              label="Can Rename Tabs"
+              checked={userPermissions[username]?.canRenameTab ?? false}
+              onChange={() =>
+                onUpdatePermissions(username, {
+                  ...(userPermissions[username] ?? {
+                    canEdit: false,
+                    canCreateTab: false,
+                    canDeleteTab: false,
+                    canRenameTab: false,
+                  }),
+                  canRenameTab: !(
+                    userPermissions[username]?.canRenameTab ?? false
+                  ),
+                })
+              }
+            />
+          </div>
+          <div className="mt-2 flex gap-1.5">
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center rounded-md border border-sidebar-border bg-sidebar-accent px-2 py-1 text-xs transition-colors hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+              onClick={() =>
+                onUpdatePermissions(username, {
+                  canEdit: true,
+                  canCreateTab: true,
+                  canDeleteTab: true,
+                  canRenameTab: true,
+                })
+              }
+            >
+              Grant All
+            </button>
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center rounded-md border border-sidebar-border bg-destructive/10 px-2 py-1 text-xs text-destructive transition-colors hover:bg-destructive/20 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+              onClick={() =>
+                onUpdatePermissions(username, {
+                  canEdit: false,
+                  canCreateTab: false,
+                  canDeleteTab: false,
+                  canRenameTab: false,
+                })
+              }
+            >
+              Revoke All
+            </button>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Tab-level permissions — collapsible */}
+      <Collapsible
+        open={tabPermsOpen}
+        onOpenChange={setTabPermsOpen}
+        className="mt-2 border-t border-sidebar-border pt-2"
+      >
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs transition-colors hover:bg-sidebar-accent/70"
+          >
+            {tabPermsOpen ? (
+              <ChevronDown className="size-3 text-sidebar-foreground/50" />
+            ) : (
+              <ChevronRight className="size-3 text-sidebar-foreground/50" />
+            )}
+            <FolderLock className="size-3 text-sidebar-foreground/60" />
+            <span className="font-medium text-sidebar-foreground/80">
+              Per-tab Access
+            </span>
+            {overriddenCount > 0 && (
+              <span className="ml-auto rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary">
+                {overriddenCount}/{tabs.length}
+              </span>
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="mt-2 space-y-1">
+            {tabs.map((tab) => {
+              const rawLevel = tabPermissions[tab.id]?.[username];
+              return (
+                <div
+                  key={tab.id}
+                  className="flex items-center justify-between gap-2 rounded px-2 py-1 text-xs"
+                >
+                  <span
+                    className="truncate text-sidebar-foreground/70"
+                    title={tab.name}
+                  >
+                    {tab.name}
+                    {rawLevel === "REQUESTED" && (
+                      <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1 py-0.5 text-[9px] text-warning-foreground">
+                        <Clock className="size-2" />
+                        requested
+                      </span>
+                    )}
+                  </span>
+                  <TabPermissionToggle
+                    level={rawLevel ?? "DEFAULT"}
+                    inheritsLevel={
+                      userPermissions[username]?.canEdit ? "EDITOR" : "VIEWER"
+                    }
+                    isOwnerView={true}
+                    onChange={(newLevel) => {
+                      if (newLevel === "DEFAULT") {
+                        emitTabPermissionRevoke(tab.id, username);
+                      } else {
+                        emitTabPermissionGrant(tab.id, username, newLevel);
+                      }
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex gap-1.5">
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center rounded-md border border-sidebar-border bg-sidebar-accent px-2 py-1 text-xs transition-colors hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+              onClick={() => {
+                for (const tab of tabs) {
+                  emitTabPermissionGrant(tab.id, username, "EDITOR");
+                }
+              }}
+            >
+              Grant All Tabs
+            </button>
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center rounded-md border border-sidebar-border bg-destructive/10 px-2 py-1 text-xs text-destructive transition-colors hover:bg-destructive/20 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+              onClick={() => {
+                for (const tab of tabs) {
+                  emitTabPermissionRevoke(tab.id, username);
+                }
+              }}
+            >
+              Revoke All Tabs
+            </button>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
@@ -387,5 +632,100 @@ function PermToggle({
       />
       <span>{label}</span>
     </label>
+  );
+}
+
+function TabPermissionToggle({
+  level,
+  inheritsLevel,
+  onChange,
+  isOwnerView = false,
+}: {
+  level: ToggleLevel;
+  inheritsLevel: "EDITOR" | "VIEWER";
+  onChange: (level: "DEFAULT" | "EDITOR" | "VIEWER") => void;
+  isOwnerView?: boolean;
+}) {
+  const isRequested = level === "REQUESTED";
+
+  // Owner view: show explicit grant/deny controls when REQUESTED
+  if (isOwnerView && isRequested) {
+    return (
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onChange("EDITOR")}
+          className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors bg-success/15 text-success hover:bg-success/25"
+          title="Grant edit access"
+        >
+          <Pencil className="size-2.5" />
+          Grant
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("VIEWER")}
+          className="inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors bg-destructive/10 text-destructive hover:bg-destructive/20"
+          title="Deny request"
+        >
+          Deny
+        </button>
+      </div>
+    );
+  }
+
+  // Requester view: show read-only badge when REQUESTED
+  if (!isOwnerView && isRequested) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning cursor-not-allowed"
+        title="Request pending approval"
+      >
+        <Clock className="size-2.5" />
+        <span>pending</span>
+      </span>
+    );
+  }
+
+  // Normal toggle behavior for other states
+  const resolvedLevel = level ?? inheritsLevel;
+  const isOverridden = level !== undefined;
+
+  const handleClick = () => {
+    if (level === "DEFAULT") {
+      onChange("EDITOR");
+    } else if (level === "EDITOR") {
+      onChange("VIEWER");
+    } else if (level === "VIEWER") {
+      onChange("EDITOR");
+    } else {
+      onChange("DEFAULT");
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className={[
+        "inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+        resolvedLevel === "EDITOR"
+          ? "bg-success/15 text-success hover:bg-success/25"
+          : "bg-muted text-muted-foreground hover:bg-muted/80",
+        isOverridden ? "ring-1 ring-border" : "opacity-60",
+      ].join(" ")}
+      title={`Click to cycle. Currently: ${resolvedLevel}${isOverridden ? " (overridden)" : " (inherits)"}`}
+    >
+      {resolvedLevel === "EDITOR" ? (
+        <>
+          <Pencil className="size-2.5" />
+          <span>EDITOR</span>
+        </>
+      ) : (
+        <>
+          <Lock className="size-2.5" />
+          <span>VIEWER</span>
+        </>
+      )}
+    </button>
   );
 }
